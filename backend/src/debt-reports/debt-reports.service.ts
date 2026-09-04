@@ -48,7 +48,8 @@ export class DebtReportsService {
           @TuKyID = :fromKyId,
           @DenKyID = :toKyId,
           @PageSize = :limit,
-          @PageNum = :page`,
+          @PageNum = :page,
+          @QuocGiaID = :quocGiaId`,
         {
           replacements: {
             username: username ?? null,
@@ -1201,6 +1202,7 @@ export class DebtReportsService {
     toDate?: string,
     page: number = 1,
     limit: number = 200,
+    quocGiaId?: number,
   ): Promise<{ data: any[]; total: number; page: number; limit: number }> {
     try {
       // Parse dates
@@ -1235,6 +1237,8 @@ export class DebtReportsService {
             denNgay,
             limit,
             page,
+            // NULL = không lọc tuyến; SP hiểu NULL là bỏ qua điều kiện này.
+            quocGiaId: quocGiaId ?? null,
           },
         },
       );

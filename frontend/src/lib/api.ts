@@ -1118,6 +1118,8 @@ export interface DebtManagementQuery {
   toDate?: string;
   page?: number;
   limit?: number;
+  /** Lọc theo tuyến. Chuỗi rỗng nghĩa là không lọc (xem getDebtManagementList). */
+  quocGiaId?: number | string;
 }
 
 export interface DebtManagementItem {
@@ -1153,7 +1155,14 @@ export interface DebtManagementResponse {
 export const getDebtManagementList = async (
   params: DebtManagementQuery,
 ): Promise<DebtManagementResponse> => {
-  const response = await apiClient.get('/debt-reports/management/list', { params });
+  // Bỏ quocGiaId khi để trống: DTO ép kiểu số nên chuỗi rỗng thành NaN và
+  // request bị chặn ở tầng xác thực. Không gửi = không lọc theo tuyến.
+  const { quocGiaId, ...rest } = params;
+  const query =
+    quocGiaId === '' || quocGiaId === undefined || quocGiaId === null
+      ? rest
+      : { ...rest, quocGiaId: Number(quocGiaId) };
+  const response = await apiClient.get('/debt-reports/management/list', { params: query });
   return response.data;
 };
 
@@ -2121,6 +2130,135 @@ export const getDashboardOutputDetail = async (
   if (quocGiaId) params.append('quocGiaId', String(quocGiaId));
   const response = await apiClient.get(`/dashboard/output-detail?${params}`);
   return response.data;
+};
+
+/* ------------------------------------------------------------------ Bài viết */
+
+export interface ArticleListItem {
+  Id: number;
+  Title: string;
+  Slug: string;
+  Excerpt: string | null;
+  Thumbnail: string | null;
+  Author: string | null;
+  ArticleType: string;
+  Published: boolean;
+  PublishedAt: string | null;
+  MetaTitle: string | null;
+  MetaDescription: string | null;
+  FocusKeyword: string | null;
+  Noindex: boolean;
+  ViewCount: number;
+  CreatedAt: string;
+  CreatedBy: string | null;
+  UpdatedAt: string | null;
+  UpdatedBy: string | null;
+}
+
+export interface SeoCheck {
+  key: string;
+  label: string;
+  status: 'good' | 'warning' | 'error';
+  message: string;
+}
+
+export interface SeoResult {
+  score: number;
+  checks: SeoCheck[];
+}
+
+export interface ArticleDetail extends ArticleListItem {
+  Content: string;
+  CanonicalUrl: string | null;
+  OgTitle: string | null;
+  OgDescription: string | null;
+  OgImage: string | null;
+  seo: SeoResult;
+}
+
+export interface ArticlePayload {
+  title: string;
+  content: string;
+  slug?: string;
+  excerpt?: string;
+  thumbnail?: string;
+  author?: string;
+  articleType?: string;
+  published?: boolean;
+  metaTitle?: string;
+  metaDescription?: string;
+  focusKeyword?: string;
+  canonicalUrl?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  noindex?: boolean;
+}
+
+export interface ArticleListResponse {
+  data: ArticleListItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export const getArticles = async (params: {
+  q?: string;
+  articleType?: string;
+  published?: number;
+  page?: number;
+  limit?: number;
+}): Promise<ArticleListResponse> => {
+  const response = await apiClient.get('/articles', { params });
+  return response.data;
+};
+
+export const getArticle = async (id: number): Promise<ArticleDetail> => {
+  const response = await apiClient.get(`/articles/${id}`);
+  return response.data;
+};
+
+export const createArticle = async (payload: ArticlePayload): Promise<ArticleDetail> => {
+  const response = await apiClient.post('/articles', payload);
+  return response.data;
+};
+
+export const updateArticle = async (
+  id: number,
+  payload: Partial<ArticlePayload>,
+): Promise<ArticleDetail> => {
+  const response = await apiClient.put(`/articles/${id}`, payload);
+  return response.data;
+};
+
+export const deleteArticle = async (id: number): Promise<{ success: boolean }> => {
+  const response = await apiClient.delete(`/articles/${id}`);
+  return response.data;
+};
+
+/** Chấm điểm SEO cho bài đang soạn, chưa cần lưu */
+export const previewArticleSeo = async (
+  payload: ArticlePayload,
+): Promise<{ slug: string; seo: SeoResult }> => {
+  const response = await apiClient.post('/articles/seo-preview', payload);
+  return response.data;
+};
+
+/**
+ * Tải ảnh lên cho bài viết (ảnh đại diện hoặc ảnh chèn trong nội dung).
+ *
+ * Dùng lại endpoint chung `/upload/image` mà các module khác đã dùng — trả về
+ * đường dẫn dạng `/imgLink/YYYYMM/<uuid>.<ext>`. Next.js đã có sẵn luật chuyển
+ * `/imgLink/*` sang backend nên đường dẫn này hiển thị được ngay ở cả trang
+ * quản trị lẫn trang công khai, không cần cấu hình thêm.
+ */
+export const uploadArticleImage = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await apiClient.post<{ linkHinh: string }>('/upload/image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data.linkHinh;
 };
 
 export default apiClient;

@@ -108,6 +108,8 @@ export default function DebtManagementPage() {
     bankAccount: '',
     fromDate: '',
     toDate: '',
+    // Lọc theo tuyến; chuỗi rỗng = không lọc, khớp cách các bộ lọc khác đang làm.
+    quocGiaId: '' as string,
   });
 
   // Form state for adding/editing debt inline on the page
@@ -379,7 +381,14 @@ export default function DebtManagementPage() {
     }
   };
 
+  /**
+   * Người dùng tự gõ Nội dung thì ngừng tự điền, để khỏi ghi đè chữ họ vừa viết.
+   */
+  const [noiDungTuGo, setNoiDungTuGo] = useState(false);
+
+
   const handleNoiDungInputChange = (value: string) => {
+    setNoiDungTuGo(value.trim() !== '');
     setNewDebt((prev) => ({ ...prev, noiDung: value }));
     setShowNoiDungDropdown(true);
     setActiveNoiDungIndex(0);
@@ -480,6 +489,23 @@ export default function DebtManagementPage() {
     queryFn: () => getBatchesByUsername(newDebt.username),
     enabled: !!newDebt.username,
   });
+
+  /**
+   * Nội dung = Tuyến + Lô hàng.
+   *
+   * CSKH không phải gõ tay: chọn Tuyến và Lô hàng xong là nội dung tự hiện.
+   * Vẫn sửa đè được — gõ vào ô là hệ thống thôi tự điền.
+   */
+  useEffect(() => {
+    if (noiDungTuGo) return;
+    const tenTuyen = countries?.find((c) => c.QuocGiaID === newDebt.quocGiaId)?.TenQuocGia ?? '';
+    const goiY = [tenTuyen, newDebt.loHangText]
+      .map((x) => (x || '').trim())
+      .filter(Boolean)
+      .join(' - ');
+    setNewDebt((prev) => (prev.noiDung === goiY ? prev : { ...prev, noiDung: goiY }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newDebt.quocGiaId, newDebt.loHangText, countries, noiDungTuGo]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -883,19 +909,22 @@ export default function DebtManagementPage() {
                 </div>
               </div>
 
-              {newDebt.username && (
+              {/* Luôn hiện, chỉ khoá khi chưa chọn User — trước đây ẩn hẳn nên
+                  người dùng tưởng hệ thống không có trường này. */}
+              {(
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-slate-700">Lô hàng</label>
                   <div className="relative">
                     <select
                       value={newDebt.loHangId || ''}
+                      disabled={!newDebt.username}
                       onChange={(e) => {
                         const selected = batches?.find((b: BatchItem) => b.LoHang_ID === Number(e.target.value));
                         setNewDebt({ ...newDebt, loHangId: e.target.value ? Number(e.target.value) : undefined, loHangText: selected?.TenLoHang || '' });
                       }}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all bg-white cursor-pointer appearance-none"
                     >
-                      <option value="">--Chọn lô hàng--</option>
+                      <option value="">{newDebt.username ? '--Chọn lô hàng--' : '--Chọn User trước--'}</option>
                       {batches?.map((batch: BatchItem) => (
                         <option key={batch.LoHang_ID} value={batch.LoHang_ID}>
                           {batch.TenLoHang}
@@ -1101,6 +1130,21 @@ export default function DebtManagementPage() {
                   <option value="-1">Tất cả loại phát sinh</option>
                   <option value="1,2,3,4,5,6,7">Phí mua hàng và phát sinh khác</option>
                   <option value="8">Cân Kg</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Tuyến</label>
+                <select
+                  value={filters.quocGiaId}
+                  onChange={(e) => handleFilterChange('quocGiaId', e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 outline-none transition-all bg-white"
+                >
+                  <option value="">Tất cả tuyến</option>
+                  {countries?.map((c) => (
+                    <option key={c.QuocGiaID} value={c.QuocGiaID}>
+                      {c.TenQuocGia}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

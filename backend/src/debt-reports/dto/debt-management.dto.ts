@@ -19,6 +19,12 @@ export class QueryDebtManagementDto {
   @IsString()
   loaiPhatSinh?: string;
 
+  /** Lọc theo tuyến (tbQuocGia.QuocGiaID). Bỏ trống = không lọc. */
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  quocGiaId?: number;
+
   @IsOptional()
   @IsString()
   bankAccount?: string;

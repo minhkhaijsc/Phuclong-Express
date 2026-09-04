@@ -306,6 +306,7 @@ export class DebtReportsController {
       query.toDate,
       query.page,
       query.limit,
+      query.quocGiaId,
     );
   }
 
