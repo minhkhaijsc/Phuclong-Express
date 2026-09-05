@@ -56,6 +56,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
     { label: 'CÁCH HOẠT ĐỘNG', href: '/#how-it-works' },
     { label: 'VỀ CHÚNG TÔI', href: '/#about' },
     { label: 'TỶ GIÁ', href: '/ty-gia' },
+    { label: 'TIN TỨC', href: '/tin-tuc' },
   ];
 
   const authNavItems: NavItem[] = [
@@ -83,6 +84,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         { label: 'BẢNG CÂN ĐỐI CÔNG NỢ', href: '/bao-cao-cong-no' },
       ],
     },
+    { label: 'TIN TỨC', href: '/tin-tuc' },
     { label: 'HỎI ĐÁP', href: '/hoi-dap' },
   ];
 
@@ -377,6 +379,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
                   { label: 'Thông tin lô hàng', href: '/thong-tin-lo-hang' },
                   { label: 'Tỷ giá', href: '/ty-gia' },
                   { label: 'Báo cáo công nợ', href: '/bao-cao-cong-no' },
+                  { label: 'Tin tức', href: '/tin-tuc' },
                   { label: 'Hỏi đáp', href: '/hoi-dap' },
                 ].map((item) => (
                   <li key={item.href}>

@@ -909,32 +909,36 @@ export default function DebtManagementPage() {
                 </div>
               </div>
 
-              {/* Luôn hiện, chỉ khoá khi chưa chọn User — trước đây ẩn hẳn nên
-                  người dùng tưởng hệ thống không có trường này. */}
-              {(
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-slate-700">Lô hàng</label>
-                  <div className="relative">
-                    <select
-                      value={newDebt.loHangId || ''}
-                      disabled={!newDebt.username}
-                      onChange={(e) => {
-                        const selected = batches?.find((b: BatchItem) => b.LoHang_ID === Number(e.target.value));
-                        setNewDebt({ ...newDebt, loHangId: e.target.value ? Number(e.target.value) : undefined, loHangText: selected?.TenLoHang || '' });
-                      }}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all bg-white cursor-pointer appearance-none"
-                    >
-                      <option value="">{newDebt.username ? '--Chọn lô hàng--' : '--Chọn User trước--'}</option>
-                      {batches?.map((batch: BatchItem) => (
-                        <option key={batch.LoHang_ID} value={batch.LoHang_ID}>
-                          {batch.TenLoHang}
-                        </option>
-                      ))}
-                    </select>
-                    <FiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                  </div>
-                </div>
-              )}
+              {/* Lô hàng: vừa chọn được từ danh sách, vừa gõ tay được.
+                  Nhiều khách chưa có lô hàng nào trong hệ thống nên danh sách rỗng —
+                  trước đây gặp vậy là bế tắc, không nhập nổi. Gõ trùng tên trong danh
+                  sách thì tự gắn luôn mã lô; gõ tên tự do thì chỉ lưu phần chữ. */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-700">Lô hàng</label>
+                <input
+                  list="danh-sach-lo-hang"
+                  value={newDebt.loHangText}
+                  onChange={(e) => {
+                    const text = e.target.value;
+                    const khop = batches?.find((b: BatchItem) => b.TenLoHang === text);
+                    setNewDebt({ ...newDebt, loHangText: text, loHangId: khop?.LoHang_ID });
+                  }}
+                  placeholder={
+                    newDebt.username
+                      ? batches?.length
+                        ? 'Chọn hoặc gõ tên lô hàng'
+                        : 'Khách chưa có lô hàng — gõ tên vào đây'
+                      : 'Chọn User trước, hoặc gõ tên lô hàng'
+                  }
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all"
+                  autoComplete="off"
+                />
+                <datalist id="danh-sach-lo-hang">
+                  {batches?.map((batch: BatchItem) => (
+                    <option key={batch.LoHang_ID} value={batch.TenLoHang} />
+                  ))}
+                </datalist>
+              </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-700">Tiền Nợ (DR)</label>

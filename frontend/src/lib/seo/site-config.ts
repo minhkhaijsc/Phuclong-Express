@@ -89,5 +89,6 @@ export const PUBLIC_ROUTES: ReadonlyArray<{
   { path: '/', priority: 1.0, changeFrequency: 'weekly' },
   { path: '/dat-hang', priority: 0.9, changeFrequency: 'weekly' },
   { path: '/ty-gia', priority: 0.8, changeFrequency: 'daily' },
+  { path: '/tin-tuc', priority: 0.8, changeFrequency: 'daily' },
   { path: '/hoi-dap', priority: 0.7, changeFrequency: 'weekly' },
 ];

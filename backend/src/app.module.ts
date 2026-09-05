@@ -26,6 +26,7 @@ import { PurchasedItemsModule } from './purchased-items/purchased-items.module';
 import { ShippersModule } from './shippers/shippers.module';
 import { QnaModule } from './qna/qna.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ArticlesModule } from './articles/articles.module';
 import { CommonModule } from './common/common.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 
@@ -60,6 +61,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     ShippersModule,
     QnaModule,
     NotificationsModule,
+    ArticlesModule,
     DashboardModule,
   ],
   controllers: [AppController],

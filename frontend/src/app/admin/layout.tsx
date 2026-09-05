@@ -136,6 +136,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { href: '/', label: 'Trang chủ' },
         { href: '/admin/info', label: 'Thông tin' },
         { href: '/admin/qna', label: 'Thắc mắc' },
+        { href: '/admin/articles', label: 'Bài viết' },
         { href: '/admin/websites', label: 'Cập nhật các trang web hay' },
       ],
     },

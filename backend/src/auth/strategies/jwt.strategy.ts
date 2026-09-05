@@ -42,7 +42,31 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: payload.sub,
       username: payload.username,
       email: user.get('Email'),
-      roles: user.get('roles'),
+      roles: await this.getRoles(payload.sub),
     };
+  }
+
+  /**
+   * Doc vai trò từ AspNetUserRoles.
+   *
+   * Trước đây chỗ này lấy `user.get('roles')`, nhưng 'roles' không phải cột
+   * khai báo trong User.init() nên luôn ra undefined — mọi kiểm tra phân quyền
+   * dựa vào req.user.roles đều bị vô hiệu. Vai trò chỉ có trong bảng nối.
+   */
+  private async getRoles(userId: string): Promise<string[]> {
+    try {
+      const rows = (await this.sequelize.query(
+        `SELECT r.Name
+         FROM   dbo.AspNetUserRoles ur
+         JOIN   dbo.AspNetRoles r ON ur.RoleId = r.Id
+         WHERE  ur.UserId = :userId`,
+        { replacements: { userId }, type: 'SELECT' as const },
+      )) as any[];
+      return (rows || []).map((row: any) => row.Name);
+    } catch (error: any) {
+      // Không đọc được vai trò thì coi như không có quyền gì, hơn là mở toang.
+      console.error('[JWT] Không đọc được vai trò:', error.message);
+      return [];
+    }
   }
 }

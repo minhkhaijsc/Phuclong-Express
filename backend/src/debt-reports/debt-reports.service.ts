@@ -1357,9 +1357,11 @@ export class DebtReportsService {
       if (dto.bankAccount && dto.cr !== undefined && dto.cr !== 0) {
         ghiChu = ghiChu + (ghiChu ? ' - ' : '') + 'Báo chuyển khoản - ' + dto.bankAccount;
       }
-      // 2. Append lô hàng name if loHangId is set
-      if (dto.loHangId && dto.loHangText) {
-        ghiChu = ghiChu + ' - Lô hàng: ' + dto.loHangText;
+      // 2. Ghi tên lô hàng vào ghi chú.
+      //    Chỉ cần có TÊN là ghi, không đòi phải có mã lô: khách mới chưa có lô hàng
+      //    nào trong hệ thống thì kế toán gõ tay tên lô, thông tin đó vẫn phải giữ lại.
+      if (dto.loHangText && dto.loHangText.trim()) {
+        ghiChu = ghiChu + ' - Lô hàng: ' + dto.loHangText.trim();
       }
       // Sản lượng (kg): chỉ lưu khi loại phát sinh là "Cân Kg" (8), ngược lại NULL
       const sanLuong = dto.loaiPhatSinh === 8 ? (dto.sanLuong ?? null) : null;
