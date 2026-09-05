@@ -98,6 +98,33 @@ export default function DebtManagementPage() {
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
   };
 
+  /**
+   * Hôm nay dạng yyyy-MM-dd — đúng dạng ô <input type="date"> yêu cầu.
+   * Lấy theo giờ địa phương chứ không dùng toISOString(): buổi tối ở Việt Nam
+   * thì giờ UTC đã sang ngày hôm trước, lô hàng sẽ lệch một ngày.
+   */
+  const homNayISO = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  /** yyyy-MM-dd -> dd/MM/yyyy, để ghép vào Nội dung cho người đọc. */
+  const ngayVN = (iso: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso || '').trim());
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : iso || '';
+  };
+
+  /**
+   * Ngày của một lô hàng, dạng yyyy-MM-dd.
+   * Cắt thẳng phần ngày trong chuỗi máy chủ trả về, KHÔNG đưa qua new Date():
+   * "2026-09-05T00:00:00.000Z" đổi sang giờ Việt Nam sẽ thành 05/09 hay 04/09
+   * tuỳ máy, mà ở đây chỉ cần đúng con số ngày đã lưu.
+   */
+  const ngayCuaLo = (b: { NgayLoHang?: string }) => {
+    const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(b?.NgayLoHang ?? ''));
+    return m ? m[1] : '';
+  };
+
   // Filter state
   const [filters, setFilters] = useState({
     page: 1,
@@ -123,7 +150,7 @@ export default function DebtManagementPage() {
     cr: 0,
     ghiChu: '',
     loHangId: undefined as number | undefined,
-    loHangText: '' as string,
+    loHangText: homNayISO() as string,
     loaiPhatSinh: 2,
     bankAccount: '' as string,
     sanLuongInput: '', // Chuỗi nhập sản lượng (kg), nhiều số cách nhau bằng dấu cách. Chỉ dùng khi loaiPhatSinh === 8
@@ -175,7 +202,7 @@ export default function DebtManagementPage() {
       cr: 0,
       ghiChu: '',
       loHangId: undefined,
-      loHangText: '',
+      loHangText: homNayISO(),
       loaiPhatSinh: 2,
       bankAccount: '',
       sanLuongInput: '',
@@ -183,6 +210,9 @@ export default function DebtManagementPage() {
     });
     setUsernameInput('');
     setEditingId(null);
+    // Cho phép Nội dung tự điền trở lại: nếu vừa sửa một dòng cũ xong mới thêm
+    // dòng mới, cờ này còn bật thì ô Nội dung nằm im, CSKH lại phải gõ tay.
+    setNoiDungTuGo(false);
     setErrorMessage(null);
   };
 
@@ -491,15 +521,16 @@ export default function DebtManagementPage() {
   });
 
   /**
-   * Nội dung = Tuyến + Lô hàng.
+   * Nội dung = Tuyến + ngày lô hàng (dd/MM/yyyy).
    *
-   * CSKH không phải gõ tay: chọn Tuyến và Lô hàng xong là nội dung tự hiện.
-   * Vẫn sửa đè được — gõ vào ô là hệ thống thôi tự điền.
+   * CSKH không phải gõ tay: chọn Tuyến và ngày lô xong là nội dung tự hiện.
+   * Vẫn sửa đè được — gõ vào ô là hệ thống thôi tự điền. Xoá trắng ô Nội dung
+   * thì nó tự điền trở lại.
    */
   useEffect(() => {
     if (noiDungTuGo) return;
     const tenTuyen = countries?.find((c) => c.QuocGiaID === newDebt.quocGiaId)?.TenQuocGia ?? '';
-    const goiY = [tenTuyen, newDebt.loHangText]
+    const goiY = [tenTuyen, ngayVN(newDebt.loHangText)]
       .map((x) => (x || '').trim())
       .filter(Boolean)
       .join(' - ');
@@ -909,35 +940,22 @@ export default function DebtManagementPage() {
                 </div>
               </div>
 
-              {/* Lô hàng: vừa chọn được từ danh sách, vừa gõ tay được.
-                  Nhiều khách chưa có lô hàng nào trong hệ thống nên danh sách rỗng —
-                  trước đây gặp vậy là bế tắc, không nhập nổi. Gõ trùng tên trong danh
-                  sách thì tự gắn luôn mã lô; gõ tên tự do thì chỉ lưu phần chữ. */}
+              {/* Lô hàng = NGÀY. Bên vận hành gọi lô theo ngày chứ không theo tên, nên
+                  ô này là lịch chọn ngày, mặc định hôm nay, khác ngày thì CSKH tự chọn.
+                  Nếu ngày chọn trùng ngày một lô có thật của khách thì gắn luôn mã lô,
+                  giữ được liên kết trong CSDL; không trùng thì chỉ lưu ngày. */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-700">Lô hàng</label>
                 <input
-                  list="danh-sach-lo-hang"
+                  type="date"
                   value={newDebt.loHangText}
                   onChange={(e) => {
-                    const text = e.target.value;
-                    const khop = batches?.find((b: BatchItem) => b.TenLoHang === text);
-                    setNewDebt({ ...newDebt, loHangText: text, loHangId: khop?.LoHang_ID });
+                    const ngay = e.target.value;
+                    const khop = batches?.find((b: BatchItem) => ngayCuaLo(b) === ngay);
+                    setNewDebt({ ...newDebt, loHangText: ngay, loHangId: khop?.LoHang_ID });
                   }}
-                  placeholder={
-                    newDebt.username
-                      ? batches?.length
-                        ? 'Chọn hoặc gõ tên lô hàng'
-                        : 'Khách chưa có lô hàng — gõ tên vào đây'
-                      : 'Chọn User trước, hoặc gõ tên lô hàng'
-                  }
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all"
-                  autoComplete="off"
                 />
-                <datalist id="danh-sach-lo-hang">
-                  {batches?.map((batch: BatchItem) => (
-                    <option key={batch.LoHang_ID} value={batch.TenLoHang} />
-                  ))}
-                </datalist>
               </div>
 
               <div className="space-y-1">
@@ -1272,6 +1290,7 @@ export default function DebtManagementPage() {
                                 cr: item.CR || 0,
                                 ghiChu: item.GhiChu || '',
                                 loHangId: item.LoHangID,
+                                // Không suy ngược được ngày lô từ dòng đã lưu, để trống.
                                 loHangText: '',
                                 loaiPhatSinh: item.LoaiPhatSinh ?? 2,
                                 bankAccount: '',
@@ -1279,6 +1298,11 @@ export default function DebtManagementPage() {
                                 quocGiaId: item.QuocGiaID ?? undefined,
                               });
                               setUsernameInput(item.UserName || '');
+                              // Giữ nguyên Nội dung đã lưu. Thiếu dòng này thì hiệu ứng
+                              // tự điền coi như người dùng chưa gõ gì và ghi đè nội dung
+                              // cũ bằng mỗi tên tuyến — mở ra xem thôi cũng mất dữ liệu.
+                              // Muốn nó tự điền lại thì xoá trắng ô Nội dung.
+                              setNoiDungTuGo(true);
                               setErrorMessage(null);
                             }}
                             className="p-1.5 text-[#14264b] hover:bg-[#14264b]/5 rounded-lg transition-colors cursor-pointer"
