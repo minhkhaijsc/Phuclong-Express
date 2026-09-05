@@ -371,13 +371,16 @@ export default function DebtManagementPage() {
     setActiveUsernameIndex(0);
 
     if (!value || value !== newDebt.username) {
-      setNewDebt((prev) => ({ ...prev, username: '', loHangId: undefined, loHangText: '' }));
+      // Giữ nguyên ngày lô hàng khi đổi User: ngày là chung cho mọi khách, bắt
+      // CSKH chọn lại mỗi lần đổi khách chỉ tổ mất công. Chỉ bỏ mã lô vì mã lô
+      // là của riêng từng khách — hiệu ứng bên dưới tự tìm lại theo khách mới.
+      setNewDebt((prev) => ({ ...prev, username: '', loHangId: undefined }));
     }
   };
 
   const handleUsernameSelect = (value: string) => {
     setUsernameInput(value);
-    setNewDebt((prev) => ({ ...prev, username: value, loHangId: undefined, loHangText: '' }));
+    setNewDebt((prev) => ({ ...prev, username: value, loHangId: undefined }));
     setShowUsernameDropdown(false);
     setActiveUsernameIndex(0);
     setErrorMessage(null);
@@ -519,6 +522,22 @@ export default function DebtManagementPage() {
     queryFn: () => getBatchesByUsername(newDebt.username),
     enabled: !!newDebt.username,
   });
+
+  /**
+   * Đổi User xong thì tìm lại mã lô theo ngày đang chọn.
+   *
+   * Ngày lô giữ nguyên khi đổi khách, nhưng mã lô (LoHang_ID) là của riêng từng
+   * khách nên phải dò lại trong danh sách lô của khách mới. Khách mới có lô đúng
+   * ngày đó thì gắn, không có thì thôi — vẫn lưu được, chỉ là không kèm mã lô.
+   */
+  useEffect(() => {
+    if (!newDebt.loHangText) return;
+    const khop = batches?.find((b: BatchItem) => ngayCuaLo(b) === newDebt.loHangText);
+    setNewDebt((prev) =>
+      prev.loHangId === khop?.LoHang_ID ? prev : { ...prev, loHangId: khop?.LoHang_ID },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batches, newDebt.loHangText]);
 
   /**
    * Nội dung = Tuyến + ngày lô hàng (dd/MM/yyyy).
