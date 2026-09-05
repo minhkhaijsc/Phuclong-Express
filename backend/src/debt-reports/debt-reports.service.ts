@@ -48,8 +48,7 @@ export class DebtReportsService {
           @TuKyID = :fromKyId,
           @DenKyID = :toKyId,
           @PageSize = :limit,
-          @PageNum = :page,
-          @QuocGiaID = :quocGiaId`,
+          @PageNum = :page`,
         {
           replacements: {
             username: username ?? null,
@@ -1226,7 +1225,8 @@ export class DebtReportsService {
           @TuNgay = :tuNgay,
           @DenNgay = :denNgay,
           @PageSize = :limit,
-          @PageNum = :page`,
+          @PageNum = :page,
+          @QuocGiaID = :quocGiaId`,
         {
           replacements: {
             username: username || '',
