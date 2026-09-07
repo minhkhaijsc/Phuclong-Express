@@ -542,17 +542,21 @@ export default function DebtManagementPage() {
   /**
    * Nội dung = Tuyến + ngày lô hàng (dd/MM/yyyy).
    *
-   * CSKH không phải gõ tay: chọn Tuyến và ngày lô xong là nội dung tự hiện.
+   * Chỉ tự điền khi đã chọn ĐỦ cả Tuyến lẫn ngày lô. Thiếu một trong hai thì để
+   * trống, vì nhiều phát sinh (ck công nợ...) không dính lô hàng nào cả.
    * Vẫn sửa đè được — gõ vào ô là hệ thống thôi tự điền. Xoá trắng ô Nội dung
    * thì nó tự điền trở lại.
    */
   useEffect(() => {
     if (noiDungTuGo) return;
-    const tenTuyen = countries?.find((c) => c.QuocGiaID === newDebt.quocGiaId)?.TenQuocGia ?? '';
-    const goiY = [tenTuyen, ngayVN(newDebt.loHangText)]
-      .map((x) => (x || '').trim())
-      .filter(Boolean)
-      .join(' - ');
+    const tenTuyen = (countries?.find((c) => c.QuocGiaID === newDebt.quocGiaId)?.TenQuocGia ?? '').trim();
+    const ngayLo = ngayVN(newDebt.loHangText).trim();
+
+    // Chỉ điền khi CÓ ĐỦ CẢ HAI. Ô Lô hàng mặc định là hôm nay, nên nếu chỉ cần
+    // một trong hai là điền thì mở form ra đã thấy sẵn ngày trong ô Nội dung —
+    // trong khi phần lớn phát sinh (ví dụ "ck công nợ") chẳng liên quan lô hàng
+    // nào. Chưa chọn Tuyến thì để trống, CSKH tự gõ.
+    const goiY = tenTuyen && ngayLo ? `${tenTuyen} - ${ngayLo}` : '';
     setNewDebt((prev) => (prev.noiDung === goiY ? prev : { ...prev, noiDung: goiY }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newDebt.quocGiaId, newDebt.loHangText, countries, noiDungTuGo]);
