@@ -567,10 +567,12 @@ export default function DebtManagementPage() {
     // một trong hai là điền thì mở form ra đã thấy sẵn ngày trong ô Nội dung —
     // trong khi phần lớn phát sinh (ví dụ "ck công nợ") chẳng liên quan lô hàng
     // nào. Chưa chọn Tuyến thì để trống, CSKH tự gõ.
-    const goiY = tenTuyen && ngayLo ? `${tenTuyen} - ${ngayLo}` : '';
+    // Chỉ loại "Cân Kg" mới ghép Nội dung từ Tuyến + ngày lô. Loại khác thì hai
+    // ô đó còn không hiện, nên để trống cho CSKH tự gõ.
+    const goiY = newDebt.loaiPhatSinh === 8 && tenTuyen && ngayLo ? `${tenTuyen} - ${ngayLo}` : '';
     setNewDebt((prev) => (prev.noiDung === goiY ? prev : { ...prev, noiDung: goiY }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newDebt.quocGiaId, newDebt.loHangText, countries, noiDungTuGo]);
+  }, [newDebt.quocGiaId, newDebt.loHangText, newDebt.loaiPhatSinh, countries, noiDungTuGo]);
 
   // Create mutation
   const createMutation = useMutation({
@@ -896,7 +898,19 @@ export default function DebtManagementPage() {
                     value={newDebt.loaiPhatSinh}
                     onChange={(e) => {
                       const value = Number(e.target.value);
-                      setNewDebt({ ...newDebt, loaiPhatSinh: value, cr: value === 8 ? 0 : newDebt.cr });
+                      // Không phải "Cân Kg" thì dọn sạch Tuyến + Lô hàng: hai ô đó
+                      // ẩn đi, mà còn giá trị thì vẫn bị gửi lên và nối "Lô hàng:
+                      // <ngày>" vào Ghi chú — đúng thứ vận hành báo là thừa.
+                      const laCanKg = value === 8;
+                      setNewDebt({
+                        ...newDebt,
+                        loaiPhatSinh: value,
+                        cr: laCanKg ? 0 : newDebt.cr,
+                        quocGiaId: laCanKg ? newDebt.quocGiaId : undefined,
+                        loHangText: laCanKg ? newDebt.loHangText || homNayISO() : '',
+                        loHangId: laCanKg ? newDebt.loHangId : undefined,
+                        sanLuongInput: laCanKg ? newDebt.sanLuongInput : '',
+                      });
                     }}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all bg-white cursor-pointer appearance-none"
                   >
@@ -953,9 +967,16 @@ export default function DebtManagementPage() {
                 </div>
               </div>
 
+              {/* Tuyến và Lô hàng CHỈ hiện với loại phát sinh "Cân Kg".
+                  Vận hành: "nếu chọn Cân Kg thì mới phải nhập tuyến và lô hàng,
+                  chọn phát sinh khác thì sẽ biến mất, không cần điền 2 cái ấy".
+                  Trước đây luôn hiện, mà ô Lô hàng mặc định hôm nay nên mọi phát
+                  sinh — kể cả "ck công nợ" — đều bị nối thêm "Lô hàng: <ngày>"
+                  vào Ghi chú, chẳng liên quan gì. */}
+              {newDebt.loaiPhatSinh === 8 && (
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-700">
-                  Tuyến {newDebt.loaiPhatSinh === 8 && <span className="text-red-500">*</span>}
+                  Tuyến <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <select
@@ -974,10 +995,12 @@ export default function DebtManagementPage() {
                 </div>
               </div>
 
-              {/* Lô hàng = NGÀY. Bên vận hành gọi lô theo ngày chứ không theo tên, nên
+              )}
+
+              {/* Lô hàng = NGÀY. Vận hành gọi lô theo ngày chứ không theo tên, nên
                   ô này là lịch chọn ngày, mặc định hôm nay, khác ngày thì CSKH tự chọn.
-                  Nếu ngày chọn trùng ngày một lô có thật của khách thì gắn luôn mã lô,
-                  giữ được liên kết trong CSDL; không trùng thì chỉ lưu ngày. */}
+                  Ngày trùng ngày một lô có thật của khách thì gắn luôn mã lô. */}
+              {newDebt.loaiPhatSinh === 8 && (
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-700">Lô hàng</label>
                 <input
@@ -991,6 +1014,7 @@ export default function DebtManagementPage() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all"
                 />
               </div>
+              )}
 
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-700">Tiền Nợ (DR)</label>

@@ -1357,10 +1357,14 @@ export class DebtReportsService {
       if (dto.bankAccount && dto.cr !== undefined && dto.cr !== 0) {
         ghiChu = ghiChu + (ghiChu ? ' - ' : '') + 'Báo chuyển khoản - ' + dto.bankAccount;
       }
-      // 2. Ghi tên lô hàng vào ghi chú.
-      //    Chỉ cần có TÊN là ghi, không đòi phải có mã lô: khách mới chưa có lô hàng
-      //    nào trong hệ thống thì kế toán gõ tay tên lô, thông tin đó vẫn phải giữ lại.
-      if (dto.loHangText && dto.loHangText.trim()) {
+      // 2. Ghi lô hàng vào ghi chú — CHỈ với loại phát sinh "Cân Kg" (8).
+      //    Lô hàng chỉ có nghĩa với loại này; các loại khác (ck công nợ, phát
+      //    sinh khác...) chẳng dính lô nào. Trước đây ghi bất kể loại, mà ô Lô
+      //    hàng bên web mặc định là hôm nay, nên mọi dòng đều bị nối thêm
+      //    "Lô hàng: <ngày hôm nay>" vào Ghi chú — vận hành báo là thừa.
+      //    Web đã dọn giá trị trước khi gửi; chốt thêm ở đây để client nào gửi
+      //    thừa cũng không làm bẩn ghi chú.
+      if (dto.loaiPhatSinh === 8 && dto.loHangText && dto.loHangText.trim()) {
         ghiChu = ghiChu + ' - Lô hàng: ' + dto.loHangText.trim();
       }
       // Sản lượng (kg): chỉ lưu khi loại phát sinh là "Cân Kg" (8), ngược lại NULL
