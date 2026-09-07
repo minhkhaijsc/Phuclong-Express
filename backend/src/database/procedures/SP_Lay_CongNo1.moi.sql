@@ -1,32 +1,4 @@
-/*
-  SP_Lay_CongNo1 — bản viết lại.
-
-  Hai thay đổi so với bản gốc (giữ ở SP_Lay_CongNo1.goc.sql):
-
-  1. THÊM bộ lọc theo tuyến: tham số @QuocGiaID, có giá trị mặc định NULL nên
-     mọi chỗ gọi cũ không phải sửa gì.
-
-  2. BỎ SQL động. Bản gốc dựng câu lệnh bằng cách nối chuỗi thẳng từ tham số:
-         SET @Sql = @Sql + ' AND username = ''' + @username + ''''
-     Ai gửi được @username chứa dấu nháy đơn là chèn được lệnh SQL tuỳ ý. Nay
-     mọi điều kiện nằm thẳng trong câu lệnh với tham số thật, không còn nối chuỗi.
-
-  Giữ NGUYÊN hợp đồng trả về, vì tầng gọi phụ thuộc vào nó:
-     - tập kết quả 1: đúng một dòng, cột TOTALROW
-     - tập kết quả 2: các dòng dữ liệu
-  (service đọc data[0].TOTALROW rồi data.slice(1)).
-
-  Ghi chú kỹ thuật:
-   - Máy chủ là SQL Server 2014 nên KHÔNG có STRING_SPLIT. Danh sách loại phát
-     sinh ("1,2,3") lọc bằng mẹo LIKE trên chuỗi đã bọc dấu phẩy — vẫn là tham
-     số, không nối chuỗi.
-   - OFFSET/FETCH thay cho con trỏ SCROLL: cùng kết quả, ít tốn tài nguyên hơn,
-     và không phải mở/đóng con trỏ toàn cục.
-   - OPTION (RECOMPILE): các điều kiện dạng "(@x = '' OR cot = @x)" rất dễ dính
-     kế hoạch thực thi sai do tham số của lần chạy đầu. RECOMPILE buộc dựng lại
-     kế hoạch theo đúng bộ lọc mỗi lần gọi.
-*/
-ALTER PROCEDURE [dbo].[SP_Lay_CongNo1]
+CREATE PROCEDURE [dbo].[SP_Lay_CongNo1]
 	@username nvarchar(100)
 	,@status int
 	,@LoaiPhatSinh nvarchar(50)
@@ -36,6 +8,8 @@ ALTER PROCEDURE [dbo].[SP_Lay_CongNo1]
 	,@TuNgay nvarchar(15)
 	,@DenNgay nvarchar(15)
 	,@QuocGiaID int = NULL
+	,@LoHang nvarchar(30) = NULL
+	,@OrderNumber nvarchar(100) = NULL
 AS
 BEGIN
 	SET NOCOUNT ON;
@@ -48,6 +22,11 @@ BEGIN
 
 	DECLARE @tim  nvarchar(260) = '%' + @nd + '%';
 	DECLARE @loai nvarchar(60)  = ',' + @lp + ',';
+
+	-- Lô hàng nằm trong ghi chú dạng "Lô hàng: yyyy-MM-dd" (bảng tbLoHang rỗng,
+	-- CONGNO.LoHangID không dòng nào có giá trị), nên lọc bằng chuỗi đó.
+	DECLARE @lh nvarchar(60)   = N'%Lô hàng: ' + ISNULL(@LoHang, '') + N'%';
+	DECLARE @onum nvarchar(110) = '%' + ISNULL(@OrderNumber, '') + '%';
 
 	CREATE TABLE #Loc(CongNo_ID int PRIMARY KEY);
 
@@ -63,6 +42,12 @@ BEGIN
 	  AND (@tn = ''   OR NgayGhiNo >= @tn)
 	  AND (@dn = ''   OR NgayGhiNo <= @dn)
 	  AND (@QuocGiaID IS NULL OR QuocGiaID = @QuocGiaID)
+	  AND (@LoHang IS NULL OR @LoHang = '' OR GhiChu LIKE @lh)
+	  -- Order number nam o Don_Hang, noi qua DonHang_ID. Dung EXISTS thay vi JOIN
+	  -- de khong nhan doi dong khi mot cong no tro toi nhieu don.
+	  AND (@OrderNumber IS NULL OR @OrderNumber = '' OR EXISTS (
+	        SELECT 1 FROM Don_Hang DH2
+	        WHERE DH2.ID = CONGNO.DonHang_ID AND DH2.ordernumber LIKE @onum))
 	OPTION (RECOMPILE);
 
 	-- Tập kết quả 1: tổng số dòng thoả bộ lọc (bản gốc trả @@CURSOR_ROWS)

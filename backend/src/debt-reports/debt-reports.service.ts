@@ -1202,6 +1202,8 @@ export class DebtReportsService {
     page: number = 1,
     limit: number = 200,
     quocGiaId?: number,
+    loHang?: string,
+    orderNumber?: string,
   ): Promise<{ data: any[]; total: number; page: number; limit: number }> {
     try {
       // Parse dates
@@ -1226,7 +1228,9 @@ export class DebtReportsService {
           @DenNgay = :denNgay,
           @PageSize = :limit,
           @PageNum = :page,
-          @QuocGiaID = :quocGiaId`,
+          @QuocGiaID = :quocGiaId,
+          @LoHang = :loHang,
+          @OrderNumber = :orderNumber`,
         {
           replacements: {
             username: username || '',
@@ -1237,6 +1241,11 @@ export class DebtReportsService {
             denNgay,
             limit,
             page,
+            // Lô hàng nằm trong ghi chú dạng "Lô hàng: yyyy-MM-dd" — bảng tbLoHang
+            // rỗng và CONGNO.LoHangID không dòng nào có giá trị, nên SP so chuỗi
+            // đó chứ không join theo mã lô.
+            loHang: loHang || null,
+            orderNumber: orderNumber || null,
             // NULL = không lọc tuyến; SP hiểu NULL là bỏ qua điều kiện này.
             quocGiaId: quocGiaId ?? null,
           },

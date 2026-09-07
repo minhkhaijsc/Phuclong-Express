@@ -307,6 +307,8 @@ export class DebtReportsController {
       query.page,
       query.limit,
       query.quocGiaId,
+      query.loHang,
+      query.orderNumber,
     );
   }
 

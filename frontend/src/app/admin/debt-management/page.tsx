@@ -138,6 +138,9 @@ export default function DebtManagementPage() {
     toDate: '',
     // Lọc theo tuyến; chuỗi rỗng = không lọc, khớp cách các bộ lọc khác đang làm.
     quocGiaId: '' as string,
+    // Lô hàng lưu trong ghi chú dạng "Lô hàng: yyyy-MM-dd" nên lọc bằng NGÀY.
+    loHang: '' as string,
+    orderNumber: '' as string,
   });
 
   // Form state for adding/editing debt inline on the page
@@ -1198,6 +1201,30 @@ export default function DebtManagementPage() {
                   onChange={(e) => handleFilterChange('toDate', e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all"
                   placeholder="dd/mm/yyyy"
+                />
+              </div>
+              {/* Lô hàng: lưu trong ghi chú dạng "Lô hàng: yyyy-MM-dd" nên lọc bằng
+                  NGÀY, khớp đúng ô nhập bên trên. Bỏ trống = không lọc. */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                  <FiCalendar className="w-3.5 h-3.5" />
+                  Lô hàng
+                </label>
+                <input
+                  type="date"
+                  value={filters.loHang}
+                  onChange={(e) => handleFilterChange('loHang', e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Order number</label>
+                <input
+                  type="text"
+                  value={filters.orderNumber}
+                  onChange={(e) => handleFilterChange('orderNumber', e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all"
+                  placeholder="Nhập một phần cũng được"
                 />
               </div>
               <div className="space-y-1.5">

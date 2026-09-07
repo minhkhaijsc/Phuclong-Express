@@ -25,6 +25,16 @@ export class QueryDebtManagementDto {
   @Type(() => Number)
   quocGiaId?: number;
 
+  /** Lọc theo lô hàng — là NGÀY dạng yyyy-MM-dd. Bỏ trống = không lọc. */
+  @IsOptional()
+  @IsString()
+  loHang?: string;
+
+  /** Lọc theo order number của đơn hàng. Khớp một phần. */
+  @IsOptional()
+  @IsString()
+  orderNumber?: string;
+
   @IsOptional()
   @IsString()
   bankAccount?: string;

@@ -1120,6 +1120,10 @@ export interface DebtManagementQuery {
   limit?: number;
   /** Lọc theo tuyến. Chuỗi rỗng nghĩa là không lọc (xem getDebtManagementList). */
   quocGiaId?: number | string;
+  /** Lọc theo lô hàng — là NGÀY dạng yyyy-MM-dd. */
+  loHang?: string;
+  /** Lọc theo order number của đơn, khớp một phần. */
+  orderNumber?: string;
 }
 
 export interface DebtManagementItem {
