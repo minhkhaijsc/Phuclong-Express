@@ -2498,10 +2498,24 @@ export class OrdersService {
    * Converted from EditOrder.aspx.cs - LoadDataQuocGia()
    * Uses: dBConnect.LayDanhSachQuocGia() -> SP_Lay_QuocGia
    */
-  async getQuocGia(): Promise<{ QuocGiaID: number; TenQuocGia: string; PhiShipVeVN: number }[]> {
+  /**
+   * Danh sách tuyến cho ô chọn.
+   *
+   * Mặc định BỎ những tuyến đã đánh dấu ẩn (`tbQuocGia.DaAn = 1`) — vận hành
+   * xin bỏ Đức/Pháp/Úc/Bồ Đào Nha khỏi danh sách nhập liệu. Ẩn chứ không xoá:
+   * vẫn còn dòng công nợ thật tháng 7–8 trỏ tới Pháp và Bồ Đào Nha, xoá là
+   * những dòng đó mất tên tuyến trong báo cáo. Bật lại chỉ là đổi một bit.
+   *
+   * `tatCa = true` thì trả về đủ, kể cả tuyến đã ẩn — dùng cho Ô LỌC, để còn
+   * lọc ra được những đơn/công nợ cũ thuộc tuyến đã ngừng.
+   */
+  async getQuocGia(tatCa = false): Promise<{ QuocGiaID: number; TenQuocGia: string; PhiShipVeVN: number }[]> {
     try {
       const [data] = await this.sequelize.query(`
-        SELECT QuocGiaID, TenQuocGia, PhiShipVeVN FROM dbo.tbQuocGia ORDER BY TenQuocGia
+        SELECT QuocGiaID, TenQuocGia, PhiShipVeVN
+        FROM dbo.tbQuocGia
+        ${tatCa ? '' : 'WHERE ISNULL(DaAn, 0) = 0'}
+        ORDER BY TenQuocGia
       `);
       return data as any;
     } catch (error) {

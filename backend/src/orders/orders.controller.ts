@@ -86,8 +86,11 @@ export class OrdersController {
    * Get list of countries (QuocGia) for dropdown
    */
   @Get('countries')
-  async getQuocGia(): Promise<{ QuocGiaID: number; TenQuocGia: string; PhiShipVeVN: number }[]> {
-    return this.ordersService.getQuocGia();
+  async getQuocGia(
+    @Query('all') all?: string,
+  ): Promise<{ QuocGiaID: number; TenQuocGia: string; PhiShipVeVN: number }[]> {
+    // ?all=1 -> lấy cả tuyến đã ẩn, dùng cho ô lọc để còn tra được dữ liệu cũ.
+    return this.ordersService.getQuocGia(all === '1' || all === 'true');
   }
 
   /**

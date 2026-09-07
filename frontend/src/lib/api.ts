@@ -1590,6 +1590,13 @@ export const getTyGia = async (): Promise<TyGiaItem[]> => {
 /**
  * Get countries (alias for getQuocGia)
  */
+/**
+ * Danh sách tuyến.
+ *
+ * `tatCa = true` lấy cả tuyến đã ngừng dùng — chỉ dùng cho Ô LỌC, để còn tra
+ * được đơn/công nợ cũ thuộc tuyến đó. Ô NHẬP LIỆU thì để mặc định, không hiện
+ * tuyến đã ngừng ra cho CSKH chọn nhầm.
+ */
 export const getCountries = async () => {
   const response = await apiClient.get<{ QuocGiaID: number; TenQuocGia: string; PhiShipVeVN?: number }[]>('/orders/countries');
   return response.data;
@@ -1660,6 +1667,22 @@ export const getUserStatusCounts = async (username: string, hangKhoan = -1): Pro
  */
 export const getQuocGia = async () => {
   const response = await apiClient.get<{ QuocGiaID: number; TenQuocGia: string; PhiShipVeVN?: number }[]>('/orders/countries');
+  return response.data;
+};
+
+/**
+ * Danh sách tuyến ĐỦ, kể cả tuyến đã ngừng dùng.
+ *
+ * Tách hẳn thành hàm riêng thay vì thêm tham số vào `getQuocGia`: nhiều nơi
+ * truyền thẳng `getQuocGia` làm `queryFn` cho react-query, mà react-query tự
+ * nhét tham số ngữ cảnh vào — thêm tham số là vỡ một loạt màn không liên quan.
+ *
+ * Chỉ dùng cho Ô LỌC, để còn tra ra được đơn/công nợ cũ thuộc tuyến đã ngừng.
+ */
+export const getQuocGiaTatCa = async () => {
+  const response = await apiClient.get<{ QuocGiaID: number; TenQuocGia: string; PhiShipVeVN?: number }[]>(
+    '/orders/countries?all=1',
+  );
   return response.data;
 };
 

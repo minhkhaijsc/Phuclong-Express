@@ -14,6 +14,7 @@ import {
   getBankAccounts,
   getBatchesByUsername,
   getQuocGia,
+  getQuocGiaTatCa,
   createDebt,
   updateDebt,
   deleteDebt,
@@ -510,10 +511,20 @@ export default function DebtManagementPage() {
     queryFn: getBankAccounts,
   });
 
-  // Fetch countries (Tuyến) for dropdown
+  /**
+   * Hai danh sách tuyến, cố ý khác nhau:
+   *  - `countries`    dùng cho ô NHẬP: bỏ tuyến đã ngừng, CSKH không chọn nhầm.
+   *  - `countriesLoc` dùng cho ô LỌC: đủ cả tuyến đã ngừng, để còn tra ra được
+   *                   công nợ cũ thuộc tuyến đó (Pháp, Bồ Đào Nha vẫn còn dòng
+   *                   thật tháng 7–8).
+   */
   const { data: countries } = useQuery({
     queryKey: ['quoc-gia'],
     queryFn: getQuocGia,
+  });
+  const { data: countriesLoc } = useQuery({
+    queryKey: ['quoc-gia', 'tat-ca'],
+    queryFn: getQuocGiaTatCa,
   });
 
   // Fetch batches when username changes
@@ -1185,7 +1196,9 @@ export default function DebtManagementPage() {
                   className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 outline-none transition-all bg-white"
                 >
                   <option value="">Tất cả tuyến</option>
-                  {countries?.map((c) => (
+                  {/* Ô LỌC dùng danh sách đủ, kể cả tuyến đã ngừng — không thì
+                      công nợ cũ của Pháp / Bồ Đào Nha lọc không ra. */}
+                  {countriesLoc?.map((c) => (
                     <option key={c.QuocGiaID} value={c.QuocGiaID}>
                       {c.TenQuocGia}
                     </option>
