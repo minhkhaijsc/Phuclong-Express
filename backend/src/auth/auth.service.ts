@@ -132,7 +132,11 @@ export class AuthService {
     });
 
     if (existingUsername) {
-      throw new ConflictException('Username already exists');
+      // Nói rõ trùng cái gì và trùng với ai: báo "Username already exists" thì
+      // người nhập không biết phải đổi trường nào.
+      throw new ConflictException(
+        `Tên đăng nhập "${registerDto.username}" đã có người dùng. Hãy chọn tên khác.`,
+      );
     }
 
     // Check if email exists
@@ -141,7 +145,10 @@ export class AuthService {
     });
 
     if (existingEmail) {
-      throw new ConflictException('Email already exists');
+      throw new ConflictException(
+        `Email "${registerDto.email}" đã dùng cho tài khoản "${existingEmail.UserName}". ` +
+          `Mỗi email chỉ gắn được một tài khoản.`,
+      );
     }
 
     // Hash password

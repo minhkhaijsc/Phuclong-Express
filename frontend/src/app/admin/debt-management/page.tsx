@@ -641,23 +641,44 @@ export default function DebtManagementPage() {
   const getLoaiPhatSinhLabel = (item: DebtManagementItem): string =>
     item.LoaiPhatSinhText || (item.LoaiPhatSinh != null ? loaiPhatSinhMap[item.LoaiPhatSinh] || '' : '');
 
+  /**
+   * Tách lô hàng ra khỏi Ghi chú khi xuất file.
+   *
+   * `TenLoHang` lấy từ bảng `tbLoHang`, mà bảng đó RỖNG và `CONGNO.LoHangID`
+   * null ở mọi dòng — nên cột "Lô hàng" trong file xuất luôn trắng, còn giá trị
+   * thật thì nằm lẫn trong Ghi chú dạng "- Lô hàng: 2026-09-08". Vận hành mở
+   * file ra thấy lô hàng "nhảy sang cột ghi chú" chính là chuyện này.
+   *
+   * Lấy ra bỏ vào đúng cột, và bỏ đoạn đó khỏi Ghi chú cho khỏi lặp hai nơi.
+   */
+  const tachLoHang = (ghiChu?: string | null, tenLoHang?: string | null) => {
+    const goc = (ghiChu ?? '').trim();
+    if (tenLoHang) return { lo: tenLoHang, ghiChu: goc };
+    const m = goc.match(/-?\s*L[ôo]\s*h[àa]ng\s*:\s*([^\r\n,;]+)/i);
+    if (!m) return { lo: '', ghiChu: goc };
+    const conLai = goc.replace(m[0], '').replace(/^\s*[-,;]\s*/, '').replace(/\s*[-,;]\s*$/, '').trim();
+    return { lo: m[1].trim(), ghiChu: conLai };
+  };
+
   const buildExcelRows = (items: DebtManagementItem[]) => {
     const headers = [
       'CongNo_ID', 'User Name', 'Order number', 'Tuyến', 'Lô hàng', 'Nội Dung', 'Ngày phát sinh',
       'Phát sinh nợ', 'Phát sinh có', 'Ghi Chú', 'Loại phát sinh', 'Sản lượng (kg)',
       'Trạng thái', 'Người tạo', 'Người cập nhật cuối', 'Ngày cập nhật cuối',
     ];
-    const rows = items.map((item) => [
+    const rows = items.map((item) => {
+      const { lo, ghiChu } = tachLoHang(item.GhiChu, item.TenLoHang);
+      return [
       item.CongNo_ID,
       item.UserName || '',
       item.OrderNumber || '',
       item.Tuyen || '',
-      item.TenLoHang || '',
+      lo,
       item.NoiDung || '',
       item.NgayGhiNo ? new Date(item.NgayGhiNo).toLocaleDateString('vi-VN') : '',
       item.DR ?? 0,
       item.CR ?? 0,
-      item.GhiChu || '',
+      ghiChu,
       getLoaiPhatSinhLabel(item),
       // Số thô (không format) để Excel SUM được; rỗng nếu không phải Cân Kg
       item.LoaiPhatSinh === 8 && item.SanLuong != null ? item.SanLuong : '',
@@ -665,7 +686,8 @@ export default function DebtManagementPage() {
       item.NguoiTao || '',
       item.NguoiCapNhatCuoi || '',
       item.NgayCapNhatCuoi ? new Date(item.NgayCapNhatCuoi).toLocaleDateString('vi-VN') : '',
-    ]);
+      ];
+    });
     return [headers, ...rows];
   };
 

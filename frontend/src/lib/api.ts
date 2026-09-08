@@ -65,6 +65,18 @@ const createApiClient = (): AxiosInstance => {
       // Debug log
       console.log('[API Error]', { status, message, error: error.message });
 
+      // Đưa câu báo lỗi CỦA MÁY CHỦ lên `error.message`.
+      //
+      // Mặc định axios chỉ để "Request failed with status code 409", mà mọi màn
+      // đều hiện `err.message` — người dùng đọc xong không biết sai chỗ nào, mà
+      // người sửa cũng không biết bắt đầu từ đâu. Sửa ở đây một lần thì tất cả
+      // các màn cùng hiện đúng lý do. NestJS trả `message` dạng mảng khi lỗi
+      // kiểm tra dữ liệu, nên gộp lại.
+      const cauMayChu = error.response?.data?.message;
+      if (cauMayChu) {
+        error.message = Array.isArray(cauMayChu) ? cauMayChu.join('. ') : String(cauMayChu);
+      }
+
       // Check for any auth-related error and redirect to login
       if (
         status === 401 ||
