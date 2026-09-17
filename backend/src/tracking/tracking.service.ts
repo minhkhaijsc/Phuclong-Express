@@ -19,6 +19,7 @@ import {
   type RefData,
 } from './tracking-import.helper';
 import { SystemLogsService } from '../system-logs/system-logs.service';
+import { AnhTrackingService } from './anh-tracking.service';
 
 /**
  * Tracking Service
@@ -47,6 +48,7 @@ export class TrackingService {
   constructor(
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private readonly systemLogsService: SystemLogsService,
+    private readonly anhTrackingService: AnhTrackingService,
   ) {}
 
   /**
@@ -115,6 +117,15 @@ export class TrackingService {
       const totalItem = resultsAny[0]?.TOTALROW || 0;
       const data = resultsAny.slice(1) || [];
 
+      // Số ảnh hàng của từng dòng — một lệnh cho cả trang. Lỗi thì danh sách
+      // vẫn phải hiện, chỉ thiếu biểu tượng ảnh.
+      try {
+        const soAnh = await this.anhTrackingService.demAnh(data.map((d: any) => Number(d.TrackingID)));
+        for (const d of data) d.SoAnh = soAnh.get(Number(d.TrackingID)) ?? 0;
+      } catch (e) {
+        console.error('Error counting tracking photos:', (e as any)?.message);
+      }
+
       return {
         data,
         total: totalItem,
@@ -176,13 +187,22 @@ export class TrackingService {
         ORDER BY NgayTao DESC
       `);
 
-      if (!history || !Array.isArray(history) || history.length === 0) {
+      // Ảnh hàng kho đã up. Có ảnh mà chưa có dòng tình trạng nào thì vẫn
+      // cho khách thấy ảnh, không báo "không tìm thấy".
+      const anh = await this.anhTrackingService
+        .layAnh(trackingId)
+        .then((ds) => ds.map((a) => a.LinkHinh))
+        .catch(() => [] as string[]);
+
+      const coLichSu = Array.isArray(history) && history.length > 0;
+      if (!coLichSu && anh.length === 0) {
         return { found: false, message: 'Không tìm thấy dữ liệu' };
       }
 
       return {
         found: true,
-        history: history
+        history: coLichSu ? history : [],
+        anh,
       };
     } catch (error) {
       console.error('Error in searchByCode:', error.message);
@@ -609,19 +629,21 @@ export class TrackingService {
    * Matches: SuaTracking.cs -> LoadDataChiTietTracking -> SP_Lay_DanhSachChiTietTrackingByID(@TrackingID)
    */
   async findDetails(id: number): Promise<any> {
-    const [tracking, chiTiet, history] = await Promise.all([
+    const [tracking, chiTiet, history, anh] = await Promise.all([
       this.findOne(id),
       this.sequelize.query(
         `EXEC dbo.SP_Lay_DanhSachChiTietTrackingByID @TrackingID = :id`,
         { replacements: { id }, type: QueryTypes.SELECT },
       ),
       this.findHistory(id),
+      this.anhTrackingService.layAnh(id).catch(() => []),
     ]);
 
     return {
       ...tracking,
       chiTietTracking: chiTiet || [],
       lichSuTracking: history,
+      anhTracking: anh,
     };
   }
 

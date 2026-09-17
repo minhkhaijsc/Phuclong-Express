@@ -9,6 +9,7 @@ import 'swiper/css';
 import 'swiper/css/effect-fade';
 import { FiSearch, FiTruck, FiPackage, FiShield, FiChevronLeft, FiChevronRight, FiLink } from 'react-icons/fi';
 import { searchTracking } from '@/lib/api';
+import { KhungXemAnh } from '@/app/components/tracking/xem-anh-tracking';
 import type { Swiper as SwiperType } from 'swiper';
 
 interface TrackingHistoryItem {
@@ -22,6 +23,7 @@ interface TrackingResultState {
   status: 'pending' | 'found' | 'not_found' | 'error';
   message?: string;
   history?: TrackingHistoryItem[];
+  anh?: string[];
 }
 
 // Brand colors: #14264b (navy) + #eb7325 (orange)
@@ -46,6 +48,7 @@ export default function HeroSection() {
   const [trackingResult, setTrackingResult] = useState<TrackingResultState | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const swiperRef = useRef<SwiperType | null>(null);
+  const [xemAnh, setXemAnh] = useState<number | null>(null);
 
   const slides = [
     { src: '/image1/slide-1.jpg', alt: 'Slide 1' },
@@ -63,10 +66,11 @@ export default function HeroSection() {
 
     try {
       const result = await searchTracking(trackingCode.trim());
-      if (result.found && result.history && result.history.length > 0) {
+      if (result.found && ((result.history?.length ?? 0) > 0 || (result.anh?.length ?? 0) > 0)) {
         setTrackingResult({
           status: 'found',
-          history: result.history,
+          history: result.history ?? [],
+          anh: result.anh ?? [],
         });
       } else {
         setTrackingResult({
@@ -88,8 +92,11 @@ export default function HeroSection() {
     return date.toLocaleDateString('vi-VN') + ' ' + date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Điện thoại cao theo nội dung; chỉ màn lớn mới cố định 90vh. Cố định trên
+  // điện thoại thì khung tra cứu bị cắt đáy (mất kết quả + ảnh hàng) và thanh
+  // chuyển slide đè lên nút Tìm kiếm.
   return (
-    <section className="relative h-[90vh] min-h-[620px] overflow-hidden">
+    <section className="relative min-h-[620px] overflow-hidden lg:h-[90vh]">
 
       {/* Slider */}
       <div className="absolute inset-0">
@@ -132,7 +139,7 @@ export default function HeroSection() {
       </div>
 
       {/* Content */}
-      <div className="relative z-20 h-full flex items-center">
+      <div className="relative z-20 flex min-h-[620px] items-center pt-10 pb-24 lg:h-full lg:py-0">
         <div className="container mx-auto px-6 md:px-12 flex flex-col lg:flex-row items-center justify-between gap-10">
 
           {/* Left: Headline */}
@@ -240,6 +247,28 @@ export default function HeroSection() {
                     {trackingResult.message}
                   </div>
                 )}
+                {trackingResult.status === 'found' && (trackingResult.anh?.length ?? 0) > 0 && (
+                  <div className="mb-2">
+                    <p className="mb-1.5 text-xs font-medium" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                      Ảnh hàng ({trackingResult.anh!.length}) — bấm để xem lớn
+                    </p>
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {trackingResult.anh!.map((src, idx) => (
+                        <button
+                          key={src}
+                          type="button"
+                          onClick={() => setXemAnh(idx)}
+                          className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg cursor-zoom-in"
+                          style={{ border: '1px solid rgba(255,255,255,0.25)' }}
+                          aria-label={`Xem ảnh hàng ${idx + 1}`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={src} alt="" className="h-full w-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {trackingResult.status === 'found' && trackingResult.history && (
                   <div className="space-y-2">
                     {trackingResult.history.map((item, idx) => (
@@ -309,6 +338,13 @@ export default function HeroSection() {
         </button>
       </div>
 
+      {xemAnh !== null && trackingResult?.anh?.length ? (
+        <KhungXemAnh
+          anh={trackingResult.anh.map((src) => ({ src, ten: trackingCode.trim() }))}
+          viTri={xemAnh}
+          onDong={() => setXemAnh(null)}
+        />
+      ) : null}
     </section>
   );
 }

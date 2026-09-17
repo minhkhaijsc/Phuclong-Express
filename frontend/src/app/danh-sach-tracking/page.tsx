@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { getTrackingList, getTrackingCounts, deleteTracking, type TrackingListItem } from '@/lib/api';
 import { useAuthStore } from '@/hooks/use-auth';
+import { NutAnhTracking } from '@/app/components/tracking/xem-anh-tracking';
 
 const TRACKING_STATUSES = ['Received', 'InTransit', 'InVN', 'VNTransit', 'Completed', 'Cancelled'];
 const LIMIT = 20;
@@ -240,6 +241,11 @@ export default function DanhSachTrackingPage() {
                       </td>
                       <td className="border-b border-[#14264b]/10 px-2 py-2.5 text-slate-700 font-medium">
                         {tracking.trackingNumber || tracking.TrackingNumber}
+                        <NutAnhTracking
+                          trackingId={Number(tracking.id || tracking.TrackingID)}
+                          soAnh={Number(tracking.SoAnh) || 0}
+                          className="ml-1.5"
+                        />
                       </td>
                       <td className="border-b border-[#14264b]/10 px-2 py-2.5 text-slate-600">
                         {tracking.orderNumber || tracking.OrderNumber}

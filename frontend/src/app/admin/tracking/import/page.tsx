@@ -229,6 +229,9 @@ export default function TrackingImportPage() {
         >
           Chỉnh sửa tracking bằng excel
         </Link>
+        <Link href="/admin/tracking/anh" className="rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-100">
+          Up ảnh tracking
+        </Link>
       </div>
 
       {/* Step 1: File upload */}
@@ -440,6 +443,9 @@ export default function TrackingImportPage() {
             <button onClick={reset} className={btnSecondary}>
               <FiUpload className="h-4 w-4" /> Import tiếp
             </button>
+            <Link href="/admin/tracking/anh" className={btnSecondary}>
+              <FiUpload className="h-4 w-4" /> Up ảnh cho tracking
+            </Link>
             <Link href="/admin/tracking" className={btnPrimary}>
               <FiX className="h-4 w-4" /> Kết thúc
             </Link>

@@ -12,8 +12,9 @@ import { useAuth } from '@/hooks/use-auth-context';
 import {
   FiPlus, FiCalendar, FiUser, FiPackage,
   FiTrash2, FiCheck, FiX, FiChevronLeft, FiChevronRight,
-  FiEye, FiEdit2, FiUpload,
+  FiEye, FiEdit2, FiUpload, FiCamera,
 } from 'react-icons/fi';
+import { NutAnhTracking } from '@/app/components/tracking/xem-anh-tracking';
 
 interface Tracking {
   TrackingID: number;
@@ -30,6 +31,7 @@ interface Tracking {
   Kien: string;
   Mawb: string;
   Hawb: string;
+  SoAnh?: number;
 }
 
 interface PaginatedResponse<T> {
@@ -185,12 +187,12 @@ export default function TrackingPage() {
   return (
     <div className="space-y-4">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Danh sách Tracking</h1>
           <p className="text-sm text-slate-500 mt-0.5">Quản lý toàn bộ mã tracking vận chuyển</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/admin/tracking/import"
             className="flex items-center gap-2 border border-[#14264b]/20 bg-white text-[#14264b] px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-[#14264b]/5 transition-colors cursor-pointer"
@@ -204,6 +206,13 @@ export default function TrackingPage() {
           >
             <FiUpload className="h-4 w-4" />
             Sửa bằng Excel
+          </Link>
+          <Link
+            href="/admin/tracking/anh"
+            className="flex items-center gap-2 border border-[#eb7325]/30 bg-white text-[#c25a14] px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-orange-50 transition-colors cursor-pointer"
+          >
+            <FiCamera className="h-4 w-4" />
+            Up ảnh
           </Link>
           <Link
             href="/admin/tracking/new"
@@ -334,7 +343,10 @@ export default function TrackingPage() {
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-slate-500">{tracking.TrackingID}</td>
                       <td className="px-4 py-3 text-sm font-medium text-slate-800">{tracking.UserName}</td>
-                      <td className="px-4 py-3 text-sm font-mono text-slate-700">{tracking.TrackingNumber}</td>
+                      <td className="px-4 py-3 text-sm font-mono text-slate-700 whitespace-nowrap">
+                        {tracking.TrackingNumber}
+                        <NutAnhTracking trackingId={tracking.TrackingID} soAnh={tracking.SoAnh} className="ml-2" />
+                      </td>
                       <td className="px-4 py-3 text-sm text-slate-600">{tracking.OrderNumber || '-'}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{tracking.TenLoHang || '-'}</td>
                       <td className="px-4 py-3 text-sm text-slate-500">{formatDate(tracking.NgayDatHang)}</td>

@@ -86,6 +86,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       icon: FiTruck,
       submenu: [
         { href: '/admin/tracking', label: 'Quản lý tracking' },
+        { href: '/admin/tracking/anh', label: 'Up ảnh tracking' },
         { href: '/admin/batches', label: 'Quản lý lô hàng' },
         { href: '/admin/debt-reports/profit-loss-by-lot', label: 'BC phân tích lãi lỗ theo lô hàng' },
         { href: '/admin/debt-reports/by-lot', label: 'BC công nợ khách hàng theo lô' },

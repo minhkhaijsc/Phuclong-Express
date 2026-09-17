@@ -1,13 +1,16 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api-client';
 import {
   FiArrowLeft, FiEdit2, FiPackage, FiUser, FiHash,
-  FiCalendar, FiGlobe, FiFileText, FiClock, FiImage,
+  FiCalendar, FiGlobe, FiFileText, FiClock, FiImage, FiCamera, FiTrash2, FiUpload,
 } from 'react-icons/fi';
+import { KhungXemAnh } from '@/app/components/tracking/xem-anh-tracking';
+import { loiDeDoc, xoaAnhTracking, type AnhTracking } from '@/lib/anh-tracking';
 
 interface TrackingDetail {
   TrackingID: number;
@@ -28,6 +31,7 @@ interface TrackingDetail {
   NgayTao: string;
   chiTietTracking: TrackingDetailItem[];
   lichSuTracking: TrackingHistory[];
+  anhTracking?: AnhTracking[];
 }
 
 interface TrackingDetailItem {
@@ -96,6 +100,22 @@ export default function TrackingDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = Number(params.id);
+  const queryClient = useQueryClient();
+  const [xemAnh, setXemAnh] = useState<number | null>(null);
+  const [dangXoa, setDangXoa] = useState<number | null>(null);
+
+  const xoaAnh = async (a: AnhTracking) => {
+    if (!confirm(`Xoá ảnh "${a.TenFileGoc ?? ''}" khỏi tracking này?`)) return;
+    setDangXoa(a.AnhTrackingID);
+    try {
+      await xoaAnhTracking(a.AnhTrackingID);
+      await queryClient.invalidateQueries({ queryKey: ['tracking', id] });
+    } catch (e) {
+      alert(`Không xoá được: ${loiDeDoc(e)}`);
+    } finally {
+      setDangXoa(null);
+    }
+  };
 
   const { data: tracking, isLoading, error } = useQuery({
     queryKey: ['tracking', id],
@@ -187,6 +207,55 @@ export default function TrackingDetailPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Ảnh hàng */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+          <FiCamera className="h-4 w-4 text-slate-400" />
+          <h2 className="text-sm font-semibold text-slate-700">Ảnh hàng</h2>
+          {(tracking.anhTracking?.length ?? 0) > 0 && (
+            <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+              {tracking.anhTracking!.length} ảnh
+            </span>
+          )}
+          <Link href="/admin/tracking/anh"
+            className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[#14264b] hover:text-cyan-600">
+            <FiUpload className="h-3.5 w-3.5" /> Up ảnh
+          </Link>
+        </div>
+        {(tracking.anhTracking?.length ?? 0) > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {tracking.anhTracking!.map((a, i) => (
+              <div key={a.AnhTrackingID} className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                <button type="button" onClick={() => setXemAnh(i)} className="block w-full cursor-zoom-in" title="Xem ảnh lớn">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={a.LinkHinh} alt={a.TenFileGoc ?? ''} loading="lazy" className="aspect-square w-full object-cover" />
+                </button>
+                <div className="flex items-center gap-1 px-2 py-1.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-mono text-[11px] text-slate-600" title={a.TenFileGoc ?? ''}>{a.TenFileGoc}</p>
+                    <p className="truncate text-[10px] text-slate-400">{a.NguoiTao} · {formatDateTime(a.NgayTao)}</p>
+                  </div>
+                  <button type="button" onClick={() => xoaAnh(a)} disabled={dangXoa === a.AnhTrackingID}
+                    className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 cursor-pointer disabled:opacity-40"
+                    title="Xoá ảnh">
+                    <FiTrash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400 py-4 text-center">Chưa có ảnh</p>
+        )}
+        {xemAnh !== null && tracking.anhTracking?.length ? (
+          <KhungXemAnh
+            anh={tracking.anhTracking.map((a) => ({ src: a.LinkHinh, ten: a.TenFileGoc }))}
+            viTri={xemAnh}
+            onDong={() => setXemAnh(null)}
+          />
+        ) : null}
       </div>
 
       {/* Status history */}

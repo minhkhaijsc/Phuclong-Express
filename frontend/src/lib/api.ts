@@ -1921,6 +1921,8 @@ export interface TrackingSearchResult {
   found: boolean;
   message?: string;
   history?: { ngay: string; tinhTrang: string; moTa: string; ghiChu: string }[];
+  /** Ảnh hàng kho đã chụp (đường dẫn /imgLink/...). */
+  anh?: string[];
 }
 
 /**
