@@ -43,9 +43,22 @@ export interface KetQuaTaiLen {
 
 /** Lấy câu báo lỗi tiếng Việt từ máy chủ thay vì "Request failed with status code 400". */
 export function loiDeDoc(e: unknown): string {
-  const r = (e as { response?: { data?: { message?: unknown } } })?.response?.data?.message;
+  const res = (e as { response?: { status?: number; data?: { message?: unknown } } })?.response;
+  const r = res?.data?.message;
   if (Array.isArray(r)) return r.join('; ');
   if (typeof r === 'string' && r) return r;
+  // Trên server IIS thay thân lỗi bằng trang HTML — chỉ còn mã trạng thái.
+  const theoMa: Record<number, string> = {
+    400: 'Dữ liệu gửi lên không hợp lệ',
+    401: 'Hết phiên đăng nhập, đăng nhập lại rồi thử lại',
+    403: 'Tài khoản không có quyền làm việc này',
+    404: 'Không tìm thấy (có thể đã bị xoá)',
+    413: 'Ảnh quá lớn',
+    500: 'Máy chủ gặp lỗi, thử lại sau',
+    502: 'Máy chủ đang khởi động lại, thử lại sau ít phút',
+    503: 'Máy chủ đang bận, thử lại sau ít phút',
+  };
+  if (res?.status && theoMa[res.status]) return theoMa[res.status];
   const m = (e as Error)?.message ?? '';
   if (/timeout/i.test(m)) return 'Mạng chậm, quá thời gian chờ';
   if (/Network Error/i.test(m)) return 'Mất kết nối mạng';
@@ -66,10 +79,12 @@ export async function taiAnhLen(anh: Blob, tenFileGoc: string): Promise<KetQuaTa
   const fd = new FormData();
   fd.append('file', anh, tenFileGoc);
   fd.append('tenFileGoc', tenFileGoc);
-  const res = await apiClient.post<KetQuaTaiLen>('/tracking/anh/tai-len', fd, {
+  const res = await apiClient.post<KetQuaTaiLen & { ok?: boolean; loi?: string }>('/tracking/anh/tai-len', fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
   });
+  // Lỗi từng ảnh về trong thân 200 (IIS nuốt thân của 4xx) — xem controller.
+  if (res.data?.ok === false) throw new Error(res.data.loi || 'Không lưu được ảnh');
   return res.data;
 }
 

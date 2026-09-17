@@ -36,6 +36,10 @@ const TOI_DA_TEN_FILE = 2000;
  *   DELETE /tracking/anh/:anhId    xoá mềm một ảnh (nhân viên)
  *
  * Tra cứu công khai trên trang chủ lấy ảnh qua GET /tracking/search/:code.
+ *
+ * tai-len trả lỗi TỪNG ẢNH trong thân 200 `{ ok: false, loi }` chứ không ném 400:
+ * IIS trên server (httpErrors trong web.config) thay mọi thân 4xx bằng trang
+ * HTML, câu báo "không có tracking" / "file hỏng" sẽ không tới được trang up ảnh.
  */
 @UseGuards(JwtAuthGuard)
 @Controller('tracking')
@@ -81,11 +85,23 @@ export class AnhTrackingController {
     @Req() req: NguoiDung,
   ) {
     this.batBuocNhanVien(req);
-    return this.anhTrackingService.luuAnh(
-      file,
-      body?.tenFileGoc,
-      req.user?.username || 'system',
-    );
+    try {
+      const kq = await this.anhTrackingService.luuAnh(
+        file,
+        body?.tenFileGoc,
+        req.user?.username || 'system',
+      );
+      return { ok: true, ...kq };
+    } catch (e) {
+      if (e instanceof BadRequestException) {
+        const m = (e.getResponse() as { message?: unknown })?.message;
+        return {
+          ok: false,
+          loi: Array.isArray(m) ? m.join('; ') : String(m ?? e.message),
+        };
+      }
+      throw e;
+    }
   }
 
   @Get(':id/anh')

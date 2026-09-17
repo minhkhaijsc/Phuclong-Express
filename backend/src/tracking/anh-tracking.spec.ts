@@ -459,3 +459,37 @@ describe('AnhTrackingService', () => {
     expect(loi).toEqual([]);
   });
 });
+
+describe('AnhTrackingController.taiLen — lỗi từng ảnh nằm trong thân 200', () => {
+  // IIS trên server thay thân mọi 4xx bằng trang HTML, nên câu báo lỗi phải đi
+  // trong thân 200 thì trang up ảnh mới hiện được.
+  const { AnhTrackingController } = require('./anh-tracking.controller');
+  const nv = { user: { username: 'kho01', roles: ['Admin'] } };
+
+  it('ảnh không có tracking → { ok: false, loi } chứ không ném', async () => {
+    const { service } = taoDb();
+    const c = new AnhTrackingController(service);
+    await expect(c.taiLen(file(), { tenFileGoc: 'KHONGCO123.jpg' }, nv)).resolves.toEqual({
+      ok: false,
+      loi: 'Không có tracking "KHONGCO123" trong hệ thống.',
+    });
+  });
+
+  it('thành công → ok: true kèm kết quả', async () => {
+    const { service } = taoDb();
+    const c = new AnhTrackingController(service);
+    await expect(c.taiLen(file(), { tenFileGoc: 'TBA111111111.jpg' }, nv)).resolves.toMatchObject({
+      ok: true,
+      soTracking: 'TBA111111111',
+      trackingIds: [1],
+    });
+  });
+
+  it('khách (không vai trò) vẫn bị chặn bằng 403, lỗi hệ thống vẫn ném', async () => {
+    const { service, upload } = taoDb();
+    const c = new AnhTrackingController(service);
+    await expect(c.taiLen(file(), { tenFileGoc: 'TBA111111111.jpg' }, { user: { username: 'k', roles: [] } })).rejects.toThrow('Chỉ nhân viên');
+    upload.luuAnhHang.mockRejectedValueOnce(new Error('đĩa đầy'));
+    await expect(c.taiLen(file(), { tenFileGoc: 'TBA111111111.jpg' }, nv)).rejects.toThrow('đĩa đầy');
+  });
+});
