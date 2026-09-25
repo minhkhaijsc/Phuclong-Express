@@ -1340,6 +1340,8 @@ export default function DebtManagementPage() {
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Order / Tuyến</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Nội dung / Ghi chú</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Ngày</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Doanh thu</th>
+                    <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Phụ thu</th>
                     <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Nợ (DR)</th>
                     <th className="px-4 py-3.5 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Có (CR)</th>
                     <th className="px-4 py-3.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Loại phát sinh / SL (kg)</th>
@@ -1368,6 +1370,14 @@ export default function DebtManagementPage() {
                       </td>
                       <td className="px-4 py-3.5 text-sm text-slate-600">
                         {item.NgayGhiNo ? new Date(item.NgayGhiNo).toLocaleDateString('vi-VN') : '-'}
+                      </td>
+                      {/* Dòng nhập trước khi tách doanh thu/phụ thu thì để "-" —
+                          không ai biết trong khoản nợ cũ bao nhiêu là doanh thu. */}
+                      <td className="px-4 py-3.5 text-sm text-right font-mono text-slate-600">
+                        {item.DoanhThu == null ? '-' : item.DoanhThu.toLocaleString('vi-VN')}
+                      </td>
+                      <td className="px-4 py-3.5 text-sm text-right font-mono text-slate-600">
+                        {item.PhuThu == null ? '-' : item.PhuThu.toLocaleString('vi-VN')}
                       </td>
                       <td className="px-4 py-3.5 text-sm text-right font-mono text-orange-600">
                         {item.DR ? item.DR.toLocaleString('vi-VN') : '0'}
