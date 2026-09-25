@@ -29,6 +29,8 @@ export interface KetQuaKhop {
   soTracking: string | null;
   /** Khớp được nhờ bỏ đuôi `_1`, `(2)`… chứ không phải tên nguyên văn. */
   boDuoi: boolean;
+  /** Ô tracking của đơn này chứa NHIỀU mã, ảnh khớp một trong số đó. */
+  nhieuMa: boolean;
   tracking: Omit<TrackingKhop, 'TrackingNumber'>[];
   soAnhDaCo: number;
   /** Tracking này đã có ảnh cùng tên file — up nữa sẽ THAY ảnh cũ. */
@@ -47,6 +49,21 @@ export interface AnhTracking {
 /** SQL Server giới hạn 2100 tham số một lệnh; chia nhỏ cho an toàn. */
 const CO_LO = 500;
 
+/**
+ * Một ô TrackingNumber có thể chứa NHIỀU mã (kho dán cả mã hãng nước ngoài lẫn
+ * mã nội địa, ngăn nhau bằng xuống dòng — 11.400 đơn đang như vậy). Ảnh thì chỉ
+ * đặt tên theo MỘT mã, nên tra bằng dấu bằng là trượt hết.
+ *
+ * Không tra bằng LIKE '%mã%': cột này không index kiểu đó được, mỗi lần tra là
+ * quét cả bảng 244.000 dòng mất 1,5 giây — 20 mã đã 15 giây. Thay vào đó nạp
+ * một lần toàn bộ ô nhiều mã (khoảng 11.400 dòng, 4 giây) rồi tách sẵn trong bộ
+ * nhớ; tra sau đó tức thì.
+ */
+const HAN_BO_NHO = 60_000;
+
+/** Bỏ chữ rác lẫn trong ô ("SCAN TRACK DUOI"): mã thật dài và luôn có số. */
+const laMaThat = (s: string) => s.length >= 8 && /\d/.test(s);
+
 const chiaLo = <T>(ds: T[], co = CO_LO): T[][] => {
   const ra: T[][] = [];
   for (let i = 0; i < ds.length; i += co) ra.push(ds.slice(i, i + co));
@@ -64,6 +81,9 @@ const thieuBang = (e: unknown) =>
  */
 @Injectable()
 export class AnhTrackingService {
+  /** Bản đồ mã phụ -> các đơn, nạp lại sau `HAN_BO_NHO`. */
+  private boNho: { luc: number; theoMa: Map<string, TrackingKhop[]> } | null = null;
+
   constructor(
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private readonly systemLogsService: SystemLogsService,
@@ -97,14 +117,29 @@ export class AnhTrackingService {
       }
     }
 
+    // 2) Ảnh nào chưa khớp thì tìm tiếp trong những ô chứa nhiều mã.
+    const conSot = tep.filter((t) => t.laAnh && !t.ungVien.some((u) => theoSo.has(khoaSo(u))));
+    const phu = conSot.length ? await this.banDoNhieuMa() : new Map<string, TrackingKhop[]>();
+
     const ketQua = tep.map((t) => {
-      const i = t.ungVien.findIndex((u) => theoSo.has(khoaSo(u)));
-      const trung = i >= 0 ? theoSo.get(khoaSo(t.ungVien[i]))! : [];
+      let i = t.ungVien.findIndex((u) => theoSo.has(khoaSo(u)));
+      let trung = i >= 0 ? theoSo.get(khoaSo(t.ungVien[i]))! : [];
+      let nhieuMa = false;
+      if (!trung.length) {
+        i = t.ungVien.findIndex((u) => phu.has(khoaSo(u)));
+        if (i >= 0) {
+          trung = phu.get(khoaSo(t.ungVien[i]))!;
+          nhieuMa = true;
+        }
+      }
       return {
         tenFile: t.ten,
         laAnh: t.laAnh,
-        soTracking: trung[0]?.TrackingNumber?.trim() ?? null,
+        // Ô nhiều mã thì trả về đúng mã khớp với tên ảnh, không trả cả ô —
+        // người nhìn bảng cần thấy mã mình vừa đặt tên.
+        soTracking: nhieuMa ? (t.ungVien[i] ?? null) : (trung[0]?.TrackingNumber?.trim() ?? null),
         boDuoi: i > 0,
+        nhieuMa,
         tracking: trung.map(({ TrackingID, UserName, TinhTrang }) => ({
           TrackingID,
           UserName,
@@ -115,7 +150,7 @@ export class AnhTrackingService {
       } as KetQuaKhop;
     });
 
-    // 2) Ảnh đã có của các tracking vừa khớp — để báo "sẽ thay ảnh cũ".
+    // 3) Ảnh đã có của các tracking vừa khớp — để báo "sẽ thay ảnh cũ".
     const ids = [
       ...new Set(ketQua.flatMap((k) => k.tracking.map((x) => x.TrackingID))),
     ];
@@ -141,6 +176,41 @@ export class AnhTrackingService {
       k.trungTen = ten.includes(khoaSo(k.tenFile));
     }
     return ketQua;
+  }
+
+  /**
+   * Bản đồ "mã phụ -> đơn" của những ô chứa nhiều mã.
+   *
+   * Nạp lại mỗi phút. Đơn vừa nhập trong vòng một phút mà ô có nhiều mã thì ảnh
+   * của nó tạm báo "không có tracking" — up lại sau một phút là được, đổi lại
+   * mỗi lần tra không phải quét cả bảng.
+   */
+  private async banDoNhieuMa(): Promise<Map<string, TrackingKhop[]>> {
+    if (this.boNho && Date.now() - this.boNho.luc < HAN_BO_NHO) return this.boNho.theoMa;
+
+    const rows = await this.sequelize.query<TrackingKhop>(
+      `SELECT TrackingID, TrackingNumber, UserName, TinhTrang
+       FROM dbo.tbTracking
+       WHERE DaXoa = 0
+         AND (TrackingNumber LIKE '%' + CHAR(10) + '%'
+           OR TrackingNumber LIKE '%' + CHAR(13) + '%'
+           OR TrackingNumber LIKE '% %'
+           OR TrackingNumber LIKE '%,%'
+           OR TrackingNumber LIKE '%;%'
+           OR TrackingNumber LIKE '%/%')`,
+      { type: QueryTypes.SELECT },
+    );
+
+    const theoMa = new Map<string, TrackingKhop[]>();
+    for (const r of rows) {
+      for (const ma of String(r.TrackingNumber ?? '').split(/[\s,;/]+/)) {
+        const k = khoaSo(ma);
+        if (!laMaThat(k)) continue;
+        theoMa.set(k, [...(theoMa.get(k) ?? []), r]);
+      }
+    }
+    this.boNho = { luc: Date.now(), theoMa };
+    return theoMa;
   }
 
   /**

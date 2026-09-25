@@ -19,6 +19,8 @@ export interface KetQuaKhop {
   laAnh: boolean;
   soTracking: string | null;
   boDuoi: boolean;
+  /** Ô tracking của đơn chứa nhiều mã, ảnh khớp một trong số đó. */
+  nhieuMa: boolean;
   tracking: TrackingKhop[];
   soAnhDaCo: number;
   trungTen: boolean;

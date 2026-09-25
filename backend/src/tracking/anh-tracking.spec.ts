@@ -127,9 +127,28 @@ function taoDb(opts: { thieuBang?: boolean } = {}) {
       TinhTrang: 'InVN',
       DaXoa: 1,
     },
+    // Một ô chứa HAI mã, ngăn bằng xuống dòng: kho dán cả mã hãng nước ngoài
+    // lẫn mã nội địa. 11.400 đơn thật đang như vậy.
+    {
+      TrackingID: 7,
+      TrackingNumber: '1Z6F857YYW87631219\n92612909858661571682792670',
+      UserName: 'khach7',
+      TinhTrang: 'InTransit',
+      DaXoa: 0,
+    },
+    // Ô lẫn chữ ghi tay của kho.
+    {
+      TrackingID: 8,
+      TrackingNumber: '417047905744\nSCAN TRACK DUOI ',
+      UserName: 'khach8',
+      TinhTrang: 'InTransit',
+      DaXoa: 0,
+    },
   ];
   const anh: Anh[] = [];
   const logs: any[] = [];
+  /** Đếm số lần quét bảng lấy ô nhiều mã — để biết bộ nhớ đệm có ăn không. */
+  const demNhieuMa = { n: 0 };
   const sql: { sql: string; replacements: Record<string, unknown> }[] = [];
   let seq = 100;
 
@@ -149,6 +168,10 @@ function taoDb(opts: { thieuBang?: boolean } = {}) {
         (t) =>
           !t.DaXoa && (r.ds as string[]).some((d) => eq(t.TrackingNumber, d)),
       );
+    }
+    if (/AND \(TrackingNumber LIKE/.test(s)) {
+      demNhieuMa.n++;
+      return tracking.filter((t) => !t.DaXoa && /[\s,;/]/.test(t.TrackingNumber));
     }
     if (/SELECT TOP 1 UserName FROM dbo\.tbTracking/.test(s)) {
       return tracking
@@ -246,7 +269,7 @@ function taoDb(opts: { thieuBang?: boolean } = {}) {
     systemLogs as any,
     upload as any,
   );
-  return { service, tracking, anh, logs, sql, upload, sequelize };
+  return { service, tracking, anh, logs, sql, upload, sequelize, demNhieuMa };
 }
 
 const file = (ten = 'x.jpg') => ({
@@ -408,6 +431,47 @@ describe('AnhTrackingService', () => {
     const { service } = taoDb();
     await expect(service.chuTracking(1)).resolves.toBe('khach1');
     await expect(service.chuTracking(6)).resolves.toBeUndefined();
+  });
+
+  it('ô tracking chứa nhiều mã: ảnh đặt tên theo mã nào cũng khớp', async () => {
+    const { service } = taoDb();
+    const kq = await service.khopTenFile([
+      '1Z6F857YYW87631219.jpg', // mã thứ nhất — trước đây báo "không có tracking"
+      '92612909858661571682792670.jpg', // mã thứ hai
+      '1Z6F857YYW87631219_2.jpg', // ảnh thứ hai của cùng đơn
+      'SCAN.jpg', // chữ ghi tay trong ô, KHÔNG được khớp
+      'TRACK.jpg',
+    ]);
+    const theoTen = Object.fromEntries(kq.map((k) => [k.tenFile, k]));
+    expect(theoTen['1Z6F857YYW87631219.jpg']).toMatchObject({
+      soTracking: '1Z6F857YYW87631219',
+      nhieuMa: true,
+    });
+    expect(theoTen['1Z6F857YYW87631219.jpg'].tracking.map((t) => t.TrackingID)).toEqual([7]);
+    expect(theoTen['92612909858661571682792670.jpg'].tracking.map((t) => t.TrackingID)).toEqual([7]);
+    expect(theoTen['1Z6F857YYW87631219_2.jpg']).toMatchObject({ nhieuMa: true, boDuoi: true });
+    expect(theoTen['SCAN.jpg'].tracking).toEqual([]);
+    expect(theoTen['TRACK.jpg'].tracking).toEqual([]);
+  });
+
+  it('khớp bằng dấu bằng vẫn được ưu tiên, khớp hết thì khỏi quét bảng lớn', async () => {
+    const { service, demNhieuMa } = taoDb();
+    const kq = await service.khopTenFile(['TBA111111111.jpg', 'ABC-12.jpg']);
+    expect(kq.every((k) => k.tracking.length === 1 && !k.nhieuMa)).toBe(true);
+    expect(demNhieuMa.n).toBe(0);
+  });
+
+  it('chỉ quét bảng lớn một lần rồi dùng lại bộ nhớ đệm', async () => {
+    const { service, demNhieuMa } = taoDb();
+    for (let i = 0; i < 5; i++) await service.khopTenFile(['1Z6F857YYW87631219.jpg']);
+    expect(demNhieuMa.n).toBe(1);
+  });
+
+  it('lưu được ảnh cho đơn có ô nhiều mã', async () => {
+    const { service, anh } = taoDb();
+    const r = await service.luuAnh(file(), '1Z6F857YYW87631219.jpg', 'kho01');
+    expect(r).toMatchObject({ trackingIds: [7], soTracking: '1Z6F857YYW87631219' });
+    expect(anh.map((a) => a.TrackingID)).toEqual([7]);
   });
 
   it('mọi câu lệnh đúng cú pháp T-SQL, không sót tham số', async () => {

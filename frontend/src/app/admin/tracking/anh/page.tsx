@@ -415,6 +415,7 @@ export default function UpAnhTrackingPage() {
                   if (d.trungTrongLo) ghiChu.push('Trùng tên ảnh khác trong thư mục — bỏ qua');
                   else if (k && !coTracking) ghiChu.push('Không có tracking này trong hệ thống');
                   if (k?.boDuoi && coTracking) ghiChu.push('Khớp sau khi bỏ đuôi số');
+                  if (k?.nhieuMa && coTracking) ghiChu.push('Tracking này có nhiều mã, khớp 1 mã');
                   if (k?.tracking && k.tracking.length > 1) ghiChu.push(`Gắn cho ${k.tracking.length} dòng cùng số`);
                   if (k?.trungTen && !d.trungTrongLo) ghiChu.push('Thay ảnh cũ cùng tên');
                   else if (k?.soAnhDaCo && coTracking && !d.trungTrongLo) ghiChu.push(`Đã có ${k.soAnhDaCo} ảnh`);
