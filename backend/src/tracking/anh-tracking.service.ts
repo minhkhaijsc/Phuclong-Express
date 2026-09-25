@@ -214,6 +214,19 @@ export class AnhTrackingService {
   }
 
   /**
+   * Tìm đơn theo một mã nằm TRONG ô nhiều mã.
+   *
+   * Dùng cho tra cứu công khai: khách cầm mã hãng nước ngoài (mã thứ nhất trong
+   * ô) tra thì trước đây báo "không tìm thấy", dù đơn có thật.
+   */
+  async timTheoMaPhu(ma: string): Promise<TrackingKhop[]> {
+    const k = khoaSo(ma);
+    if (!k) return [];
+    const ban = await this.banDoNhieuMa();
+    return ban.get(k) ?? [];
+  }
+
+  /**
    * Lưu một ảnh. Máy chủ tự khớp lại từ tên file — không tin mã tracking do
    * trình duyệt gửi lên.
    *

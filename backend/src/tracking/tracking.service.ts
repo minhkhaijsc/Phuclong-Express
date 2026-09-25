@@ -160,12 +160,18 @@ export class TrackingService {
           AND (TrackingNumber = N'${safeCode}' OR OrderNumber = N'${safeCode}')
       `);
 
-      if (!trackingData || !Array.isArray(trackingData) || trackingData.length === 0) {
+      let trackingId = (trackingData as any[])?.[0]?.TrackingID;
+
+      // Không thấy bằng dấu bằng thì tìm tiếp trong những ô chứa NHIỀU mã: kho
+      // dán cả mã hãng nước ngoài lẫn mã nội địa vào một ô, ngăn bằng xuống
+      // dòng. Khách cầm mã nào cũng phải tra ra đơn.
+      if (!trackingId) {
+        const phu = await this.anhTrackingService.timTheoMaPhu(code).catch(() => []);
+        trackingId = phu[0]?.TrackingID;
+      }
+      if (!trackingId) {
         return { found: false, message: 'Không tìm thấy dữ liệu' };
       }
-
-      const trackingInfo = trackingData[0] as any;
-      const trackingId = trackingInfo.TrackingID;
 
       // Get history from tbTinhTrangTracking with Vietnamese descriptions
       const [history] = await this.sequelize.query(`
