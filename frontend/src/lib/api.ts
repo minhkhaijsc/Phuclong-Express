@@ -1144,6 +1144,9 @@ export interface DebtManagementItem {
   NoiDung: string;
   NgayGhiNo: string;
   DR: number;
+  /** Doanh thu và phụ thu cộng lại thành DR. Dòng cũ chưa tách thì null. */
+  DoanhThu?: number | null;
+  PhuThu?: number | null;
   CR: number;
   GhiChu: string;
   Status: boolean;
@@ -1196,6 +1199,9 @@ export interface CreateDebtParams {
   allowEmptyNoiDung?: boolean;
   sanLuong?: number; // Sản lượng (kg) — gửi khi loaiPhatSinh === 8
   quocGiaId?: number; // Tuyến (Quốc gia)
+  /** Doanh thu + phụ thu — máy chủ cộng lại thành phát sinh nợ (dr). */
+  doanhThu?: number;
+  phuThu?: number;
 }
 
 export const createDebt = async (data: CreateDebtParams): Promise<{ success: boolean; message?: string }> => {
@@ -1245,6 +1251,9 @@ export interface UpdateDebtParams {
   loaiPhatSinh?: number; // dùng để backend quyết định lưu/null sản lượng khi sửa
   sanLuong?: number; // Sản lượng (kg) — gửi khi loaiPhatSinh === 8
   quocGiaId?: number; // Tuyến (Quốc gia)
+  /** Doanh thu + phụ thu — máy chủ cộng lại thành phát sinh nợ (dr). */
+  doanhThu?: number;
+  phuThu?: number;
 }
 
 export const updateDebt = async (

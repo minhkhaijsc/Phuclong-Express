@@ -150,7 +150,9 @@ export default function DebtManagementPage() {
     username: '',
     noiDung: '',
     ngay: getTodayFormatted(),
-    dr: 0,
+    // Phát sinh nợ = doanh thu + phụ thu; kế toán nhập hai khoản, máy tự cộng.
+    doanhThu: 0,
+    phuThu: 0,
     cr: 0,
     ghiChu: '',
     loHangId: undefined as number | undefined,
@@ -202,7 +204,8 @@ export default function DebtManagementPage() {
       username: '',
       noiDung: '',
       ngay: getTodayFormatted(),
-      dr: 0,
+      doanhThu: 0,
+      phuThu: 0,
       cr: 0,
       ghiChu: '',
       loHangId: undefined,
@@ -663,7 +666,7 @@ export default function DebtManagementPage() {
   const buildExcelRows = (items: DebtManagementItem[]) => {
     const headers = [
       'CongNo_ID', 'User Name', 'Order number', 'Tuyến', 'Lô hàng', 'Nội Dung', 'Ngày phát sinh',
-      'Phát sinh nợ', 'Phát sinh có', 'Ghi Chú', 'Loại phát sinh', 'Sản lượng (kg)',
+      'Doanh thu', 'Phụ thu', 'Phát sinh nợ', 'Phát sinh có', 'Ghi Chú', 'Loại phát sinh', 'Sản lượng (kg)',
       'Trạng thái', 'Người tạo', 'Người cập nhật cuối', 'Ngày cập nhật cuối',
     ];
     const rows = items.map((item) => {
@@ -676,6 +679,9 @@ export default function DebtManagementPage() {
       lo,
       item.NoiDung || '',
       item.NgayGhiNo ? new Date(item.NgayGhiNo).toLocaleDateString('vi-VN') : '',
+      // Dòng nhập trước khi tách thì để trống, không đoán bừa là doanh thu.
+      item.DoanhThu ?? '',
+      item.PhuThu ?? '',
       item.DR ?? 0,
       item.CR ?? 0,
       ghiChu,
@@ -801,7 +807,9 @@ export default function DebtManagementPage() {
                   data: {
                     username: newDebt.username,
                     noiDung: newDebt.noiDung,
-                    dr: newDebt.dr,
+                    // Gửi hai khoản, máy chủ tự cộng ra phát sinh nợ.
+                    doanhThu: newDebt.doanhThu,
+                    phuThu: newDebt.phuThu,
                     cr: newDebt.cr,
                     ghiChu: newDebt.ghiChu,
                     loaiPhatSinh: newDebt.loaiPhatSinh,
@@ -1042,14 +1050,37 @@ export default function DebtManagementPage() {
               )}
 
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-700">Tiền Nợ (DR)</label>
+                <label className="text-xs font-medium text-slate-700">Doanh thu</label>
                 <input
                   type="number"
-                  value={newDebt.dr === 0 ? '' : newDebt.dr}
-                  onChange={(e) => setNewDebt({ ...newDebt, dr: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  value={newDebt.doanhThu === 0 ? '' : newDebt.doanhThu}
+                  onChange={(e) => setNewDebt({ ...newDebt, doanhThu: e.target.value === '' ? 0 : Number(e.target.value) })}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all"
                   placeholder="0"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-700">Phụ thu</label>
+                <input
+                  type="number"
+                  value={newDebt.phuThu === 0 ? '' : newDebt.phuThu}
+                  onChange={(e) => setNewDebt({ ...newDebt, phuThu: e.target.value === '' ? 0 : Number(e.target.value) })}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all"
+                  placeholder="0"
+                />
+              </div>
+
+              {/* Phát sinh nợ không nhập tay nữa — cộng thẳng từ hai ô trên để
+                  số trên màn hình và số lưu xuống không bao giờ lệch. */}
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-700">Phát sinh nợ (DR)</label>
+                <div
+                  className="w-full border border-slate-200 bg-slate-50 rounded-lg px-3 py-2 text-xs font-semibold text-[#14264b]"
+                  title="Doanh thu + Phụ thu"
+                >
+                  {(newDebt.doanhThu + newDebt.phuThu).toLocaleString('vi-VN')}
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -1395,7 +1426,10 @@ export default function DebtManagementPage() {
                                 username: item.UserName || '',
                                 noiDung: item.NoiDung || '',
                                 ngay: item.NgayGhiNo ? (() => { const d = new Date(item.NgayGhiNo); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })() : getTodayFormatted(),
-                                dr: item.DR || 0,
+                                // Dòng cũ chưa tách thì coi toàn bộ là doanh thu,
+                                // để tổng giữ nguyên khi lưu lại.
+                                doanhThu: item.DoanhThu ?? item.DR ?? 0,
+                                phuThu: item.PhuThu ?? 0,
                                 cr: item.CR || 0,
                                 ghiChu: item.GhiChu || '',
                                 loHangId: item.LoHangID,

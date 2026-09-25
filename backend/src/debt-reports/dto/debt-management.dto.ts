@@ -128,6 +128,17 @@ export class CreateDebtDto {
   @IsNumber()
   @Type(() => Number)
   quocGiaId?: number;
+
+  // Doanh thu và phụ thu — máy chủ cộng lại thành phát sinh nợ (DR)
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  doanhThu?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  phuThu?: number;
 }
 
 /**
@@ -189,6 +200,17 @@ export class UpdateDebtManagementDto {
   @IsNumber()
   @Type(() => Number)
   quocGiaId?: number;
+
+  // Doanh thu và phụ thu — máy chủ cộng lại thành phát sinh nợ (DR)
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  doanhThu?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  phuThu?: number;
 }
 
 /**

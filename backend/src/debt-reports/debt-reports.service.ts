@@ -1296,6 +1296,9 @@ export class DebtReportsService {
       noiDung: string;
       ngay: string;
       dr?: number;
+      /** Doanh thu và phụ thu — cộng lại thành phát sinh nợ (DR). */
+      doanhThu?: number;
+      phuThu?: number;
       cr?: number;
       ghiChu?: string;
       loHangId?: number;
@@ -1323,6 +1326,9 @@ export class DebtReportsService {
       noiDung: string;
       ngay: string;
       dr?: number;
+      /** Doanh thu và phụ thu — cộng lại thành phát sinh nợ (DR). */
+      doanhThu?: number;
+      phuThu?: number;
       cr?: number;
       ghiChu?: string;
       loHangId?: number;
@@ -1352,7 +1358,17 @@ export class DebtReportsService {
         return { success: false, message: 'Bạn phải chọn Tuyến cho loại phát sinh Cân Kg' };
       }
 
-      const dr = dto.dr ?? 0;
+      /**
+       * Phát sinh nợ = doanh thu + phụ thu.
+       *
+       * Kế toán nhập hai khoản riêng, máy chủ tự cộng — không tin số tổng do web
+       * gửi lên, để hai nơi không bao giờ lệch nhau. Đường nhập Excel và các chỗ
+       * gọi cũ không gửi hai khoản này thì vẫn dùng `dr` như trước.
+       */
+      const coTach = dto.doanhThu !== undefined || dto.phuThu !== undefined;
+      const doanhThu = coTach ? (dto.doanhThu ?? 0) : null;
+      const phuThu = coTach ? (dto.phuThu ?? 0) : null;
+      const dr = coTach ? (doanhThu ?? 0) + (phuThu ?? 0) : (dto.dr ?? 0);
       const cr = dto.cr ?? 0;
 
       if (dr === 0 && cr === 0) {
@@ -1392,7 +1408,9 @@ export class DebtReportsService {
           @NguoiTao = :nguoiTao,
           @LoaiPhatSinh = :loaiPhatSinh,
           @SanLuong = :sanLuong,
-          @QuocGiaID = :quocGiaId`,
+          @QuocGiaID = :quocGiaId,
+          @DoanhThu = :doanhThu,
+          @PhuThu = :phuThu`,
         {
           replacements: {
             username: dto.username,
@@ -1407,6 +1425,8 @@ export class DebtReportsService {
             loaiPhatSinh: dto.loaiPhatSinh || 2,
             sanLuong,
             quocGiaId: dto.quocGiaId || null,
+            doanhThu,
+            phuThu,
           },
           type: 'SELECT' as const,
         },
@@ -1427,7 +1447,7 @@ export class DebtReportsService {
               chucNang: dto.status === 0 ? 'ChuyenKhoan:Insert_CongNo' : 'ManageCongNo:Insert_CongNo',
               hanhDong: 'Them moi',
               ma: '',
-              ghiChu: `UserName: ${dto.username}; NoiDung: ${noiDung}; Ngay: ${dto.ngay}; DR: ${dr}; CR: ${cr}; GhiChu: ${ghiChu}; LoaiPhatSinh: ${dto.loaiPhatSinh || 2}`,
+              ghiChu: `UserName: ${dto.username}; NoiDung: ${noiDung}; Ngay: ${dto.ngay}; DR: ${dr}${coTach ? ` (DoanhThu: ${doanhThu}; PhuThu: ${phuThu})` : ''}; CR: ${cr}; GhiChu: ${ghiChu}; LoaiPhatSinh: ${dto.loaiPhatSinh || 2}`,
             },
             type: 'SELECT' as const,
           },
@@ -1532,6 +1552,9 @@ export class DebtReportsService {
       username?: string;
       noiDung?: string;
       dr?: number;
+      /** Doanh thu và phụ thu — cộng lại thành phát sinh nợ (DR). */
+      doanhThu?: number;
+      phuThu?: number;
       cr?: number;
       ghiChu?: string;
       status?: number;
@@ -1566,7 +1589,11 @@ export class DebtReportsService {
         return { success: false, message: 'Bạn phải chọn Tuyến cho loại phát sinh Cân Kg' };
       }
 
-      const dr = dto.dr ?? 0;
+      // Như lúc thêm mới: có gửi doanh thu/phụ thu thì máy chủ tự cộng ra DR.
+      const coTach = dto.doanhThu !== undefined || dto.phuThu !== undefined;
+      const doanhThu = coTach ? (dto.doanhThu ?? 0) : null;
+      const phuThu = coTach ? (dto.phuThu ?? 0) : null;
+      const dr = coTach ? (doanhThu ?? 0) + (phuThu ?? 0) : (dto.dr ?? 0);
       const cr = dto.cr ?? 0;
       const status = dto.status ?? 1;
       // Sản lượng (kg): chỉ lưu khi loại phát sinh là "Cân Kg" (8), ngược lại NULL
@@ -1585,6 +1612,10 @@ export class DebtReportsService {
           @NguoiTao = :nguoiCapNhat,
           @SanLuong = :sanLuong,
           @QuocGiaID = :quocGiaId,
+          @DoanhThu = :doanhThu,
+          @PhuThu = :phuThu,
+          @udDoanhThu = :udTach,
+          @udPhuThu = :udTach,
           @udUserName = 1,
           @udNoiDung = 1,
           @udDR = 1,
@@ -1607,6 +1638,11 @@ export class DebtReportsService {
             nguoiCapNhat: dto.updatedBy || username || 'system',
             sanLuong,
             quocGiaId: dto.quocGiaId || null,
+            doanhThu,
+            phuThu,
+            // Không gửi hai khoản thì giữ nguyên giá trị cũ trong cơ sở dữ liệu,
+            // đừng ghi đè thành rỗng.
+            udTach: coTach ? 1 : 0,
           },
           type: 'SELECT' as const,
         },
@@ -1627,7 +1663,7 @@ export class DebtReportsService {
               chucNang: 'ManageCongNo:CapNhatCongNo',
               hanhDong: 'Chinh sua',
               ma: id.toString(),
-              ghiChu: `ID:${id}; UserName: ${dto.username}; NoiDung: ${dto.noiDung}; DR: ${dr}; CR: ${cr}; GhiChu: ${dto.ghiChu}; status: ${status}`,
+              ghiChu: `ID:${id}; UserName: ${dto.username}; NoiDung: ${dto.noiDung}; DR: ${dr}${coTach ? ` (DoanhThu: ${doanhThu}; PhuThu: ${phuThu})` : ''}; CR: ${cr}; GhiChu: ${dto.ghiChu}; status: ${status}`,
             },
             type: 'SELECT' as const,
           },
