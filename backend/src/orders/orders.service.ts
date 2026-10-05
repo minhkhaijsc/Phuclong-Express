@@ -524,7 +524,7 @@ export class OrdersService {
           @trangthaiOrder = :trangthaiOrder,
           @NoiDungTim = :search,
           @TimTheo = -1,
-          @MaDatHang = '',
+          @MaDatHang = :MaDatHang,
           @TenDotHang = '',
           @HangKhoan = 0,
           @QuocGiaID = :quocGiaId,
@@ -539,6 +539,12 @@ export class OrdersService {
             username: username || '',
             trangthaiOrder,
             search: search || '',
+            // Ô "Mã đặt hàng" của màn /admin/orders/list. Trước truyền cứng chuỗi
+            // rỗng nên gõ mã vào đó KHÔNG lọc gì — danh sách trả về y như không
+            // gõ, mà ô vẫn hiện nên người dùng tưởng mình tra sai mã.
+            // getQLDatHangList gọi ĐÚNG SP này và vẫn truyền `ids` vào
+            // @MaDatHang từ trước, nên đây chỉ là chỗ này quên.
+            MaDatHang: ids || '',
             quocGiaId: quocGiaId || -1,
             limit: safeLimit,
             page,
@@ -1449,7 +1455,7 @@ export class OrdersService {
    * Converted from OrderDaXoa.aspx.cs - LoadDanhSachDonHangDaXoa()
    */
   async findDeleted(query: QueryOrderDto): Promise<{ data: any[]; total: number; page: number; limit: number }> {
-    const { website, username, status, statuses, search, startDate, endDate, quocGiaId, page = 1, limit = 20 } = query;
+    const { website, username, status, statuses, search, startDate, endDate, quocGiaId, page = 1, limit = 20, orderId } = query;
 
     const safeLimit = Math.min(limit, 500);
     try {
@@ -1468,7 +1474,7 @@ export class OrdersService {
           @trangthaiOrder = :trangthaiOrder,
           @NoiDungTim = :search,
           @TimTheo = -1,
-          @MaDatHang = '',
+          @MaDatHang = :MaDatHang,
           @TenDotHang = '',
           @HangKhoan = 0,
           @QuocGiaID = :quocGiaId,
@@ -1483,6 +1489,9 @@ export class OrdersService {
             username: username || '',
             trangthaiOrder,
             search: search || '',
+            // Ô "Mã đặt hàng" của màn /admin/orders/deleted. Cùng lỗi như findAll:
+            // giao diện gửi `orderId`, DTO nhận, nhưng chỗ này không truyền đi.
+            MaDatHang: orderId || '',
             quocGiaId: quocGiaId || -1,
             limit: safeLimit,
             page,
