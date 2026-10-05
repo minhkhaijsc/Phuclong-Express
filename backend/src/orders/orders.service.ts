@@ -25,6 +25,32 @@ import { ImageUploadService } from '../common/services/image-upload.service';
 export class OrdersService {
   private orderModel: typeof Order;
 
+  /**
+   * Lọc ô "Mã đặt hàng" về dạng an toàn cho SP_Lay_DonHang.
+   *
+   * SP nối thẳng tham số này vào câu lệnh động rồi chạy bằng sp_executesql:
+   *     SET @Sql = @Sql + ' AND ID IN (' + @MaDatHang + ')'
+   * Nên đây KHÔNG phải mã đơn hàng mà là danh sách ID (số) nội bộ, và mọi thứ
+   * gõ vào đi thẳng vào SQL. Gõ chữ ("UHSA8Y") thì câu lệnh thành
+   * `ID IN (UHSA8Y)` → SQL Server báo lỗi, vỡ cả màn hình; gõ dấu nháy thì
+   * thành lỗ SQL injection.
+   *
+   * Giữ lại đúng chữ số và dấu phẩy, bỏ phần còn lại. Không còn số nào thì trả
+   * chuỗi rỗng — SP bỏ qua điều kiện, danh sách vẫn hiện bình thường, hơn là
+   * ném lỗi vào mặt người dùng.
+   */
+  private locMaDatHang(v: unknown): string {
+    const tho = String(v ?? '').trim();
+    if (!tho) return '';
+
+    const phan = tho.split(/[,;\s]+/).filter((x) => x.length > 0);
+    // TOÀN BỘ phải là số thì mới nhận. Không được "nhặt số ra khỏi chữ": mã đơn
+    // thật có dạng "UHSA8Y", nhặt số ra thành 8 rồi lọc theo ID 8 là trả về một
+    // đơn hoàn toàn khác — sai âm thầm, tệ hơn hẳn báo lỗi.
+    if (!phan.every((x) => /^[0-9]{1,10}$/.test(x))) return '';
+    return phan.join(',');
+  }
+
   constructor(
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private readonly systemLogsService: SystemLogsService,
@@ -544,7 +570,7 @@ export class OrdersService {
             // gõ, mà ô vẫn hiện nên người dùng tưởng mình tra sai mã.
             // getQLDatHangList gọi ĐÚNG SP này và vẫn truyền `ids` vào
             // @MaDatHang từ trước, nên đây chỉ là chỗ này quên.
-            MaDatHang: ids || '',
+            MaDatHang: this.locMaDatHang(ids),
             quocGiaId: quocGiaId || -1,
             limit: safeLimit,
             page,
@@ -1491,7 +1517,7 @@ export class OrdersService {
             search: search || '',
             // Ô "Mã đặt hàng" của màn /admin/orders/deleted. Cùng lỗi như findAll:
             // giao diện gửi `orderId`, DTO nhận, nhưng chỗ này không truyền đi.
-            MaDatHang: orderId || '',
+            MaDatHang: this.locMaDatHang(orderId),
             quocGiaId: quocGiaId || -1,
             limit: safeLimit,
             page,

@@ -37,22 +37,22 @@ function taoService(seq: any) {
 describe('Ô "Mã đặt hàng" được truyền tới SP_Lay_DonHang', () => {
   it('findAll (màn Mua hàng) truyền `ids` vào @MaDatHang', async () => {
     const seq = taoSequelizeGia();
-    await taoService(seq).findAll({ ids: 'ABC123' } as any);
+    await taoService(seq).findAll({ ids: '42621' } as any);
 
     const goi = seq.calls.find((c) => c.sql.includes('SP_Lay_DonHang'));
     expect(goi).toBeDefined();
     expect(goi!.sql).toContain('@MaDatHang = :MaDatHang');
-    expect(goi!.replacements.MaDatHang).toBe('ABC123');
+    expect(goi!.replacements.MaDatHang).toBe('42621');
   });
 
   it('findDeleted (màn đơn đã xoá) truyền `orderId` vào @MaDatHang', async () => {
     const seq = taoSequelizeGia();
-    await taoService(seq).findDeleted({ orderId: 'XYZ789' } as any);
+    await taoService(seq).findDeleted({ orderId: '42620' } as any);
 
     const goi = seq.calls.find((c) => c.sql.includes('SP_Lay_DonHang'));
     expect(goi).toBeDefined();
     expect(goi!.sql).toContain('@MaDatHang = :MaDatHang');
-    expect(goi!.replacements.MaDatHang).toBe('XYZ789');
+    expect(goi!.replacements.MaDatHang).toBe('42620');
   });
 
   it('không gõ mã thì truyền chuỗi rỗng, không phải undefined', async () => {
@@ -65,12 +65,43 @@ describe('Ô "Mã đặt hàng" được truyền tới SP_Lay_DonHang', () => {
     expect(goi!.replacements.MaDatHang).toBe('');
   });
 
-  it('vẫn truyền song song với ô Filter, hai ô dùng được cùng lúc', async () => {
+  // --- phần dưới: SP nối @MaDatHang thẳng vào câu lệnh động rồi sp_executesql,
+  // nên những gì đi qua đây phải sạch tuyệt đối.
+
+  it('chỉ cho số đi qua — gõ chữ thì bỏ, KHÔNG để SQL vỡ', async () => {
     const seq = taoSequelizeGia();
-    await taoService(seq).findAll({ ids: 'ABC123', search: 'nguyen' } as any);
+    // Mã đơn thật có dạng chữ-số ("UHSA8Y"), người dùng rất dễ gõ nhầm vào đây.
+    // Trước khi siết, câu lệnh thành `ID IN (UHSA8Y)` → SQL Server báo lỗi.
+    await taoService(seq).findAll({ ids: 'UHSA8Y' } as any);
 
     const goi = seq.calls.find((c) => c.sql.includes('SP_Lay_DonHang'));
-    expect(goi!.replacements.MaDatHang).toBe('ABC123');
+    expect(goi!.replacements.MaDatHang).toBe('');
+  });
+
+  it('chặn SQL injection qua ô Mã đặt hàng', async () => {
+    const seq = taoSequelizeGia();
+    await taoService(seq).findAll({ ids: "1); DROP TABLE Don_Hang--" } as any);
+
+    const goi = seq.calls.find((c) => c.sql.includes('SP_Lay_DonHang'));
+    const ra = String(goi!.replacements.MaDatHang);
+    expect(ra).not.toMatch(/[^0-9,]/);
+    expect(ra).not.toMatch(/DROP|--|\)/i);
+  });
+
+  it('nhiều ID phân cách kiểu gì cũng gom lại thành danh sách sạch', async () => {
+    const seq = taoSequelizeGia();
+    await taoService(seq).findAll({ ids: ' 42621, 42620 ; 42619\n42617 ' } as any);
+
+    const goi = seq.calls.find((c) => c.sql.includes('SP_Lay_DonHang'));
+    expect(goi!.replacements.MaDatHang).toBe('42621,42620,42619,42617');
+  });
+
+  it('vẫn truyền song song với ô Filter, hai ô dùng được cùng lúc', async () => {
+    const seq = taoSequelizeGia();
+    await taoService(seq).findAll({ ids: '42621', search: 'nguyen' } as any);
+
+    const goi = seq.calls.find((c) => c.sql.includes('SP_Lay_DonHang'));
+    expect(goi!.replacements.MaDatHang).toBe('42621');
     expect(goi!.replacements.search).toBe('nguyen');
   });
 });
