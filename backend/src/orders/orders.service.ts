@@ -51,6 +51,41 @@ export class OrdersService {
     return phan.join(',');
   }
 
+  /**
+   * Tách ô "Filter" thành danh sách mã khi người dùng dán nhiều mã cùng lúc.
+   *
+   * HD dán một cột mã từ Excel vào ô Filter và muốn xem hết một lượt. Dán từ
+   * Excel ra chuỗi ngăn bởi xuống dòng; gõ tay thì hay dùng dấu phẩy hoặc
+   * khoảng trắng — nhận cả ba.
+   *
+   * CHỈ chuyển sang chế độ nhiều mã khi có TỪ HAI mã trở lên. Một giá trị thì
+   * giữ nguyên đường cũ (@NoiDungTim, tìm LIKE) vì người ta còn dùng ô này để
+   * tìm một phần ghi chú, tên đợt hàng, link web — đổi sang khớp chính xác là
+   * làm hỏng cách dùng sẵn có.
+   *
+   * Trả '' nghĩa là "không phải danh sách mã, cứ xử lý như cũ".
+   */
+  private tachDanhSachMa(v: unknown): string {
+    const tho = String(v ?? '').trim();
+    if (!tho) return '';
+
+    const ma = tho
+      // CHỈ tách theo dấu phẩy / chấm phẩy / xuống dòng — KHÔNG tách theo
+      // khoảng trắng. Người ta vẫn gõ cụm từ vào ô này để tìm ghi chú
+      // ("hang de vo"); tách theo khoảng trắng là biến cụm đó thành 3 mã
+      // rồi trả 0 đơn — hỏng hẳn một cách dùng sẵn có.
+      .split(/[,;\r\n]+/)
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0);
+
+    if (ma.length < 2) return '';
+    // Mã dài bất thường thì nhiều khả năng không phải mã — đừng đoán bừa.
+    if (ma.some((x) => x.length > 100)) return '';
+
+    // Bỏ trùng, giữ nguyên thứ tự người dùng dán vào.
+    return Array.from(new Set(ma)).join(',');
+  }
+
   constructor(
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private readonly systemLogsService: SystemLogsService,
@@ -533,6 +568,8 @@ export class OrdersService {
     // Cap limit to 500 max to match @Max(500) validation
     const safeLimit = Math.min(limit, 10000);
 
+    const danhSachMa = this.tachDanhSachMa(search);
+
     try {
       // Build status string for SP (e.g., "'Received','Confirmed'")
       let trangthaiOrder = '';
@@ -558,13 +595,17 @@ export class OrdersService {
           @PageNum = :page,
           @DaXoa = :includeDeleted,
           @TuNgay = :startDate,
-          @DenNgay = :endDate`,
+          @DenNgay = :endDate,
+          @DanhSachMa = :DanhSachMa`,
         {
           replacements: {
             website: website || '',
             username: username || '',
             trangthaiOrder,
-            search: search || '',
+            // Dán nhiều mã vào ô Filter thì chuyển sang khớp chính xác theo
+            // danh sách; một giá trị thì vẫn đi đường LIKE như cũ.
+            search: danhSachMa ? '' : search || '',
+            DanhSachMa: danhSachMa,
             // Ô "Mã đặt hàng" của màn /admin/orders/list. Trước truyền cứng chuỗi
             // rỗng nên gõ mã vào đó KHÔNG lọc gì — danh sách trả về y như không
             // gõ, mà ô vẫn hiện nên người dùng tưởng mình tra sai mã.

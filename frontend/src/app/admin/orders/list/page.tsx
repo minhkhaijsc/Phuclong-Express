@@ -696,6 +696,38 @@ export default function EditOrderListPage() {
     );
   };
 
+  /**
+   * Dán một cột mã từ Excel vào ô Filter.
+   *
+   * Thẻ <input> KHÔNG giữ được dấu xuống dòng: Chrome nuốt sạch khi dán, nên hai
+   * mã dính liền thành một chuỗi sai mà người dùng không hề biết. Vì vậy phải tự
+   * bắt sự kiện dán, đổi xuống dòng và tab thành dấu phẩy rồi mới chèn vào.
+   */
+  const handleDanNhieuMa = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const tho = e.clipboardData.getData('text');
+    if (!/[\r\n\t]/.test(tho)) return; // dán một dòng thì để nguyên
+
+    e.preventDefault();
+    const ma = tho
+      .split(/[\r\n\t,;]+/)
+      .map((x) => x.trim())
+      .filter((x) => x.length > 0);
+
+    const o = e.currentTarget;
+    const cu = filters.search || '';
+    const truoc = cu.slice(0, o.selectionStart ?? cu.length);
+    const sau = cu.slice(o.selectionEnd ?? cu.length);
+    handleFilterChange('search', (truoc + ma.join(', ') + sau).replace(/^,\s*/, ''));
+  };
+
+  // Bao nhiêu mã đang tra — khớp đúng cách máy chủ tách (chỉ dấu phẩy / chấm
+  // phẩy / xuống dòng, KHÔNG tách theo khoảng trắng), để con số hiện ra không
+  // nói một đằng máy chủ làm một nẻo.
+  const soMaDangTra = (filters.search || '')
+    .split(/[,;\r\n]+/)
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0).length;
+
   // Handle search button click (matching btTimKiem_Click in C#)
   // Both search and ids can be used together (matching EditOrder.aspx)
   const handleSearch = () => {
@@ -966,16 +998,22 @@ export default function EditOrderListPage() {
       {/* Filter panel - matching EditOrder.aspx filters */}
       <div className="rounded-lg bg-white p-4 shadow">
         <div className="flex flex-wrap gap-4">
-          {/* Filter - search text */}
+          {/* Filter - tìm tự do, HOẶC dán nhiều mã cùng lúc */}
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-700">Filter</label>
             <input
               type="text"
-              placeholder="Filter"
-              className="w-32 rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#14264b] focus:outline-none"
+              placeholder="Mã, mã, mã... hoặc từ khoá"
+              title={'Gõ một từ khoá để tìm như cũ, hoặc dán nhiều mã (ngăn bởi dấu phẩy ' +
+                'hoặc dán thẳng một cột từ Excel) để tra nhiều mã cùng lúc.'}
+              className="w-56 rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#14264b] focus:outline-none"
               value={filters.search || ''}
               onChange={(e) => handleFilterChange('search', e.target.value)}
+              onPaste={handleDanNhieuMa}
             />
+            {soMaDangTra > 1 && (
+              <p className="mt-1 text-xs text-gray-500">Đang tra {soMaDangTra} mã</p>
+            )}
           </div>
 
           {/* Mã đặt hàng - matching tbMaDatHang in C# */}

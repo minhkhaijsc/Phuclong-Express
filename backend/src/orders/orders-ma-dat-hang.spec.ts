@@ -105,3 +105,72 @@ describe('Ô "Mã đặt hàng" được truyền tới SP_Lay_DonHang', () => {
     expect(goi!.replacements.search).toBe('nguyen');
   });
 });
+
+/**
+ * Ô "Filter": dán nhiều mã cùng lúc (yêu cầu của HD, 05/10/2026).
+ *
+ * Một giá trị thì PHẢI giữ đường cũ (LIKE) — ô này lâu nay còn dùng để tìm một
+ * phần ghi chú / tên đợt hàng / link web, đổi hết sang khớp chính xác là làm
+ * hỏng cách dùng sẵn có của mọi người.
+ */
+describe('Ô Filter nhận nhiều mã', () => {
+  const goiFindAll = async (search: string) => {
+    const seq = taoSequelizeGia();
+    await taoService(seq).findAll({ search } as any);
+    const goi = seq.calls.find((c) => c.sql.includes('SP_Lay_DonHang'));
+    return goi!.replacements as Record<string, string>;
+  };
+
+  it('MỘT giá trị vẫn đi đường cũ (LIKE), không bật chế độ nhiều mã', async () => {
+    const r = await goiFindAll('54465698271');
+    expect(r.search).toBe('54465698271');
+    expect(r.DanhSachMa).toBe('');
+  });
+
+  it('gõ CỤM TỪ có khoảng trắng vẫn tìm LIKE như trước, không bị hiểu thành nhiều mã', async () => {
+    // Ô này lâu nay dùng để tìm một phần ghi chú / tên đợt hàng. Tách theo
+    // khoảng trắng thì "hang de vo" thành 3 mã và trả 0 đơn — hỏng hẳn một cách
+    // dùng sẵn có. Vì vậy chỉ tách theo dấu phẩy / chấm phẩy / xuống dòng.
+    const r = await goiFindAll('hang de vo');
+    expect(r.DanhSachMa).toBe('');
+    expect(r.search).toBe('hang de vo');
+  });
+
+  it('một mã có khoảng trắng thừa hai đầu vẫn là MỘT giá trị', async () => {
+    const r = await goiFindAll('  54465698271  ');
+    expect(r.DanhSachMa).toBe('');
+    expect(r.search).toBe('  54465698271  ');
+  });
+
+  it('dán hai mã trở lên thì chuyển sang khớp chính xác', async () => {
+    const r = await goiFindAll('54465698271,54479892581');
+    expect(r.DanhSachMa).toBe('54465698271,54479892581');
+    expect(r.search).toBe('');
+  });
+
+  it('dán từ Excel (xuống dòng) nhận được', async () => {
+    const r = await goiFindAll('54465698271\n54479892581\n40393208912');
+    expect(r.DanhSachMa).toBe('54465698271,54479892581,40393208912');
+  });
+
+  it('thừa khoảng trắng, dấu phẩy rỗng, dòng trống đều bỏ qua', async () => {
+    const r = await goiFindAll('  54465698271 ,, \n  54479892581  ;\n\n');
+    expect(r.DanhSachMa).toBe('54465698271,54479892581');
+  });
+
+  it('mã trùng chỉ tính một lần, giữ nguyên thứ tự dán vào', async () => {
+    const r = await goiFindAll('B111,A222,B111,C333');
+    expect(r.DanhSachMa).toBe('B111,A222,C333');
+  });
+
+  it('mã chữ-số như UHSA8Y dùng được (đây mới là mã đơn thật)', async () => {
+    const r = await goiFindAll('UHSA8Y,54465698271');
+    expect(r.DanhSachMa).toBe('UHSA8Y,54465698271');
+  });
+
+  it('ô để trống thì không bật gì cả', async () => {
+    const r = await goiFindAll('');
+    expect(r.DanhSachMa).toBe('');
+    expect(r.search).toBe('');
+  });
+});
