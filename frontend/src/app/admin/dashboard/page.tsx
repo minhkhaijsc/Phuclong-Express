@@ -12,8 +12,10 @@ import {
   getDashboardNewCustomers,
   getDashboardRevenue,
   getDashboardOutputDaily,
+  getVanHanhTuyen,
 } from '@/lib/api';
 import { DateRangeFilter } from './components/date-range-filter';
+import { TabVanHanh } from './components/tab-van-hanh';
 import { DailyTrendChart } from './components/daily-trend-chart';
 import { StaffOutputTable } from './components/staff-output-table';
 
@@ -41,6 +43,22 @@ export default function DashboardPage() {
 
   const [draft, setDraft] = useState(getDefaultRange);
   const [applied, setApplied] = useState(draft);
+
+  /**
+   * Hai tab vì hai người đọc khác nhau.
+   *
+   * Vận hành cần biết HÔM NAY phải làm gì (kiện chưa có chủ, chưa có ảnh); quản
+   * lý cần biết xu hướng kinh doanh. Gộp một màn thì ai cũng phải lọc qua thứ
+   * không liên quan.
+   */
+  const [tab, setTab] = useState<'van-hanh' | 'kinh-doanh'>('van-hanh');
+  const [quocGiaId, setQuocGiaId] = useState<number | undefined>();
+  const [khach, setKhach] = useState('');
+  const [khachDaApDung, setKhachDaApDung] = useState('');
+
+  // Chỉ nạp danh sách tuyến CÓ dữ liệu — 10/13 nước trong danh mục chưa từng có
+  // kiện nào, đổ hết vào ô lọc chỉ làm người dùng chọn nhầm rồi thấy trống.
+  const tuyen = useQuery({ queryKey: ['vh-tuyen'], queryFn: getVanHanhTuyen, enabled: isAdmin });
 
   // Chỉ Admin được xem dashboard — non-admin redirect về login (chặn ở giao diện).
   useEffect(() => {
@@ -85,17 +103,105 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#14264b]">Dashboard thống kê</h1>
-        <p className="text-sm text-gray-500 mt-1">KH mới, doanh thu, sản lượng theo ngày · sản lượng nhân viên theo tháng</p>
+        <h1 className="text-2xl font-bold text-[#14264b]">Dashboard</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          {tab === 'van-hanh'
+            ? 'Hàng về, kiện chưa khớp chủ, kiện chưa có ảnh — việc cần xử lý'
+            : 'KH mới, doanh thu, sản lượng · sản lượng nhân viên theo tháng'}
+        </p>
+      </div>
+
+      <div className="flex gap-1 border-b border-gray-200">
+        {([
+          ['van-hanh', 'Vận hành'],
+          ['kinh-doanh', 'Kinh doanh'],
+        ] as const).map(([k, nhan]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={
+              'px-4 py-2 text-sm font-medium -mb-px border-b-2 ' +
+              (tab === k
+                ? 'border-[#14264b] text-[#14264b]'
+                : 'border-transparent text-gray-500 hover:text-gray-700')
+            }
+          >
+            {nhan}
+          </button>
+        ))}
       </div>
 
       <DateRangeFilter
         fromDate={draft.fromDate}
         toDate={draft.toDate}
         onChange={setDraft}
-        onSearch={() => setApplied(draft)}
+        onSearch={() => {
+          setApplied(draft);
+          setKhachDaApDung(khach);
+        }}
       />
 
+      {tab === 'van-hanh' && (
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-700">Tuyến</label>
+            <select
+              value={quocGiaId ?? ''}
+              onChange={(e) => setQuocGiaId(e.target.value ? Number(e.target.value) : undefined)}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="">Tất cả tuyến</option>
+              {(tuyen.data ?? []).map((t) => (
+                <option key={t.quocGiaId ?? 0} value={t.quocGiaId ?? 0}>
+                  {t.tenQuocGia} ({t.soKien.toLocaleString('vi-VN')})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-700">Khách hàng</label>
+            <input
+              value={khach}
+              onChange={(e) => setKhach(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') setKhachDaApDung(khach);
+              }}
+              placeholder="Mã khách, vd HP2668"
+              className="w-48 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <button
+            onClick={() => setKhachDaApDung(khach)}
+            className="rounded-lg bg-[#14264b] px-4 py-2 text-sm font-medium text-white"
+          >
+            Lọc
+          </button>
+          {(quocGiaId || khachDaApDung) && (
+            <button
+              onClick={() => {
+                setQuocGiaId(undefined);
+                setKhach('');
+                setKhachDaApDung('');
+              }}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
+            >
+              Bỏ lọc
+            </button>
+          )}
+        </div>
+      )}
+
+      {tab === 'van-hanh' && (
+        <TabVanHanh
+          fromDate={applied.fromDate}
+          toDate={applied.toDate}
+          quocGiaId={quocGiaId}
+          khach={khachDaApDung || undefined}
+        />
+      )}
+
+      {tab === 'kinh-doanh' && (
+        <>
       {/* KPI tổng hợp */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard label="Tổng KH mới" value={totals.khMoi.toLocaleString('vi-VN')} icon={<FiUsers size={28} />} />
@@ -130,6 +236,8 @@ export default function DashboardPage() {
 
       {/* Bảng nhân viên theo tháng */}
       <StaffOutputTable fromDate={applied.fromDate} toDate={applied.toDate} />
+        </>
+      )}
     </div>
   );
 }

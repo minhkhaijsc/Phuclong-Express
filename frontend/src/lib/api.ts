@@ -2312,3 +2312,110 @@ export const uploadArticleImage = async (file: File): Promise<string> => {
 };
 
 export default apiClient;
+
+// ===================================================================
+// Dashboard — mảng VẬN HÀNH (tbTracking)
+//
+// Dashboard cũ chỉ đo DON_HANG và CONGNO, bỏ qua ~93% khối lượng thật.
+// Các đường dưới đây đo đúng mảng vận chuyển.
+// ===================================================================
+
+export interface SoLieuVanHanh {
+  kienTrongKy: number;
+  soKhach: number;
+  kienChuaCoChu: number;
+  tyLeChuaCoChu: number;
+  kienChuaCoAnh: number;
+  /** Hàng về theo ĐỢT, không đều ngày — nên đo "lần nhập gần nhất", không đo "hôm nay". */
+  ngayNhapGanNhat: string | null;
+  kienLanGanNhat: number;
+  soNgayTuLanNhap: number | null;
+  kien7Ngay: number;
+}
+
+export interface KienTheoNgay {
+  ngay: string;
+  soKien: number;
+  chuaCoChu: number;
+}
+
+export interface KienTheoTuyen {
+  quocGiaId: number | null;
+  tenQuocGia: string;
+  soKien: number;
+}
+
+export interface TopKhachVanHanh {
+  khach: string;
+  soKien: number;
+  lanCuoi: string | null;
+}
+
+export interface CanhBaoDuLieu {
+  muc: string;
+  noiDung: string;
+}
+
+/** Ghép tham số lọc chung của mảng vận hành. */
+const thamSoVanHanh = (
+  fromDate?: string,
+  toDate?: string,
+  quocGiaId?: number,
+  khach?: string,
+): string => {
+  const p = new URLSearchParams(buildDateParams(fromDate, toDate));
+  if (quocGiaId && quocGiaId > 0) p.set('quocGiaId', String(quocGiaId));
+  if (khach && khach.trim()) p.set('khach', khach.trim());
+  return p.toString();
+};
+
+export const getVanHanhSoLieu = async (
+  fromDate?: string,
+  toDate?: string,
+  quocGiaId?: number,
+  khach?: string,
+): Promise<SoLieuVanHanh> => {
+  const res = await apiClient.get(`/dashboard/van-hanh/so-lieu?${thamSoVanHanh(fromDate, toDate, quocGiaId, khach)}`);
+  return res.data;
+};
+
+export const getVanHanhTheoNgay = async (
+  fromDate?: string,
+  toDate?: string,
+  quocGiaId?: number,
+  khach?: string,
+): Promise<KienTheoNgay[]> => {
+  const res = await apiClient.get(`/dashboard/van-hanh/theo-ngay?${thamSoVanHanh(fromDate, toDate, quocGiaId, khach)}`);
+  return res.data;
+};
+
+export const getVanHanhTheoTuyen = async (
+  fromDate?: string,
+  toDate?: string,
+  khach?: string,
+): Promise<KienTheoTuyen[]> => {
+  const res = await apiClient.get(`/dashboard/van-hanh/theo-tuyen?${thamSoVanHanh(fromDate, toDate, undefined, khach)}`);
+  return res.data;
+};
+
+export const getVanHanhTopKhach = async (
+  fromDate?: string,
+  toDate?: string,
+  quocGiaId?: number,
+  limit = 10,
+): Promise<TopKhachVanHanh[]> => {
+  const p = new URLSearchParams(thamSoVanHanh(fromDate, toDate, quocGiaId));
+  p.set('limit', String(limit));
+  const res = await apiClient.get(`/dashboard/van-hanh/top-khach?${p.toString()}`);
+  return res.data;
+};
+
+export const getVanHanhCanhBao = async (): Promise<CanhBaoDuLieu[]> => {
+  const res = await apiClient.get('/dashboard/van-hanh/canh-bao');
+  return res.data;
+};
+
+export const getVanHanhTuyen = async (): Promise<KienTheoTuyen[]> => {
+  const res = await apiClient.get('/dashboard/van-hanh/tuyen');
+  return res.data;
+};
