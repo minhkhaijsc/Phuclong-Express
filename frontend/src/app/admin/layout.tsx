@@ -103,6 +103,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { href: '/admin/debt-reports/by-period', label: 'Chi tiết công nợ theo kỳ' },
         { href: '/admin/debt-reports/total-revenue', label: 'Tổng doanh thu' },
         { href: '/admin/debt-reports/debt-by-user', label: 'Tổng công nợ theo user' },
+        { href: '/admin/debt-reports/aging', label: 'Tuổi nợ' },
         { href: '/admin/debt-reports/reconciliation', label: 'Kiểm tra đơn hàng mua' },
         { href: '/admin/debt-reports/customer', label: 'Công nợ khách hàng' },
         { href: '/admin/debt-reports/by-shipment-lot', label: 'Công nợ theo đợt hàng' },

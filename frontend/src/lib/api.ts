@@ -2419,3 +2419,55 @@ export const getVanHanhTuyen = async (): Promise<KienTheoTuyen[]> => {
   const res = await apiClient.get('/dashboard/van-hanh/tuyen');
   return res.data;
 };
+
+// ===================================================================
+// Báo cáo TUỔI NỢ
+//
+// PLE có 9 màn công nợ nhưng không màn nào hiện nợ GIÀ bao nhiêu.
+// Tính theo FIFO: tiền thu khấu vào khoản nợ cũ trước.
+// ===================================================================
+
+export interface TuoiNoTongHop {
+  soKhachConNo: number;
+  tongConNo: number;
+  n0_30: number;
+  n31_60: number;
+  n61_90: number;
+  tren90: number;
+}
+
+export interface TuoiNoDong {
+  khach: string;
+  tong: number;
+  n0_30: number;
+  n31_60: number;
+  n61_90: number;
+  tren90: number;
+  soNgayCuNhat: number;
+  lanCuoi: string | null;
+}
+
+export interface TuoiNoChiTiet {
+  ngay: string;
+  noiDung: string;
+  conLai: number;
+  soNgay: number;
+}
+
+export const getTuoiNoTongHop = async (): Promise<TuoiNoTongHop> => {
+  const res = await apiClient.get('/dashboard/tuoi-no/tong-hop');
+  return res.data;
+};
+
+export const getTuoiNoDanhSach = async (
+  sapTheo: 'gia' | 'tien' = 'gia',
+  limit = 200,
+): Promise<TuoiNoDong[]> => {
+  const res = await apiClient.get(`/dashboard/tuoi-no/danh-sach?sapTheo=${sapTheo}&limit=${limit}`);
+  return res.data;
+};
+
+export const getTuoiNoChiTiet = async (khach: string): Promise<TuoiNoChiTiet[]> => {
+  const res = await apiClient.get(`/dashboard/tuoi-no/chi-tiet?khach=${encodeURIComponent(khach)}`);
+  return res.data;
+};
