@@ -9,11 +9,17 @@ import { FiUsers, FiDollarSign, FiPackage, FiShoppingBag } from 'react-icons/fi'
 import { KPICard } from '@/app/components/admin';
 import { useAuth } from '@/hooks/use-auth-context';
 import {
+  getVanHanhSoLieu,
+  getVanHanhTheoNgay,
+  getVanHanhTheoTuyen,
+  getVanHanhTopKhach,
   getDashboardNewCustomers,
   getDashboardRevenue,
   getDashboardOutputDaily,
   getVanHanhTuyen,
 } from '@/lib/api';
+import { downloadDataAsExcel } from '@/lib/excel-download';
+import { FiDownload } from 'react-icons/fi';
 import { DateRangeFilter } from './components/date-range-filter';
 import { TabVanHanh } from './components/tab-van-hanh';
 import { DailyTrendChart } from './components/daily-trend-chart';
@@ -92,6 +98,92 @@ export default function DashboardPage() {
     [newCustomers.data, revenue.data, output.data],
   );
 
+  /**
+   * Xuất Excel đúng dữ liệu ĐANG XEM: theo tab, theo khoảng ngày và bộ lọc hiện
+   * tại. Xuất cả một đống không theo bộ lọc thì người ta phải lọc lại bằng tay
+   * trong Excel — mất hẳn ý nghĩa của mấy ô lọc trên màn.
+   */
+  const [dangXuat, setDangXuat] = useState(false);
+  const xuatExcel = async () => {
+    setDangXuat(true);
+    try {
+      const ky = `${applied.fromDate.replace(/\//g, '-')}_${applied.toDate.replace(/\//g, '-')}`;
+
+      if (tab === 'kinh-doanh') {
+        const rows: (string | number)[][] = [
+          ['BÁO CÁO KINH DOANH', ''],
+          ['Kỳ', `${applied.fromDate} - ${applied.toDate}`],
+          [],
+          ['Chỉ số', 'Giá trị'],
+          ['Tổng KH mới', totals.khMoi],
+          ['Tổng doanh thu (đ)', totals.doanhThu],
+          ['Đơn hoàn tất', totals.soDon],
+          ['Tổng sản lượng (kg)', totals.sanLuong],
+          [],
+          ['CHI TIẾT THEO NGÀY'],
+          ['Ngày', 'KH mới', 'Doanh thu (đ)', 'Sản lượng (kg)'],
+        ];
+        // Gộp ba chuỗi theo ngày vào một bảng — mỗi ngày một dòng, dễ đọc hơn
+        // là ba bảng rời.
+        const ngay = new Set<string>([
+          ...(newCustomers.data ?? []).map((x) => x.ngay),
+          ...(revenue.data ?? []).map((x) => x.ngay),
+          ...(output.data ?? []).map((x) => x.ngay),
+        ]);
+        for (const n of [...ngay].sort()) {
+          rows.push([
+            n,
+            (newCustomers.data ?? []).find((x) => x.ngay === n)?.soKHMoi ?? 0,
+            (revenue.data ?? []).find((x) => x.ngay === n)?.doanhThu ?? 0,
+            (output.data ?? []).find((x) => x.ngay === n)?.sanLuongKg ?? 0,
+          ]);
+        }
+        downloadDataAsExcel(rows, `Dashboard_KinhDoanh_${ky}.xlsx`);
+      } else {
+        // Tab vận hành: gọi lại API để lấy ĐỦ dữ liệu theo bộ lọc, không lấy từ
+        // cache của biểu đồ (biểu đồ có thể đang hiện bản rút gọn).
+        const [so, theoNgay, theoTuyen, topKhach] = await Promise.all([
+          getVanHanhSoLieu(applied.fromDate, applied.toDate, quocGiaId, khachDaApDung || undefined),
+          getVanHanhTheoNgay(applied.fromDate, applied.toDate, quocGiaId, khachDaApDung || undefined),
+          getVanHanhTheoTuyen(applied.fromDate, applied.toDate, khachDaApDung || undefined),
+          getVanHanhTopKhach(applied.fromDate, applied.toDate, quocGiaId, 100),
+        ]);
+        const rows: (string | number)[][] = [
+          ['BÁO CÁO VẬN HÀNH', ''],
+          ['Kỳ', `${applied.fromDate} - ${applied.toDate}`],
+          ['Tuyến', quocGiaId ? String(quocGiaId) : 'Tất cả'],
+          ['Khách hàng', khachDaApDung || 'Tất cả'],
+          [],
+          ['Chỉ số', 'Giá trị'],
+          ['Kiện trong kỳ', so.kienTrongKy],
+          ['Số khách', so.soKhach],
+          ['Kiện chưa khớp được chủ', so.kienChuaCoChu],
+          ['Tỷ lệ chưa có chủ (%)', so.tyLeChuaCoChu],
+          ['Kiện chưa có ảnh', so.kienChuaCoAnh],
+          [],
+          ['KIỆN VỀ THEO NGÀY'],
+          ['Ngày', 'Số kiện', 'Chưa có chủ'],
+          ...theoNgay.map((x) => [x.ngay, x.soKien, x.chuaCoChu]),
+          [],
+          ['THEO TUYẾN'],
+          ['Tuyến', 'Số kiện'],
+          ...theoTuyen.map((x) => [x.tenQuocGia, x.soKien]),
+          [],
+          ['KHÁCH NHIỀU KIỆN NHẤT'],
+          ['Khách', 'Số kiện', 'Lần gần nhất'],
+          ...topKhach.map((x) => [
+            x.khach,
+            x.soKien,
+            x.lanCuoi ? new Date(x.lanCuoi).toLocaleDateString('vi-VN') : '',
+          ]),
+        ];
+        downloadDataAsExcel(rows, `Dashboard_VanHanh_${ky}.xlsx`);
+      }
+    } finally {
+      setDangXuat(false);
+    }
+  };
+
   // Gate giao diện: chờ auth load, chặn non-admin (useEffect ở trên đã điều hướng).
   if (authLoading) {
     return <div className="p-6 text-sm text-gray-500">Đang tải…</div>;
@@ -102,13 +194,34 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
         <h1 className="text-2xl font-bold text-[#14264b]">Dashboard</h1>
         <p className="text-sm text-gray-500 mt-1">
           {tab === 'van-hanh'
             ? 'Hàng về, kiện chưa khớp chủ, kiện chưa có ảnh — việc cần xử lý'
             : 'KH mới, doanh thu, sản lượng · sản lượng nhân viên theo tháng'}
         </p>
+        </div>
+        <button
+          onClick={xuatExcel}
+          disabled={dangXuat}
+          className="flex items-center gap-2 rounded-lg bg-[#14264b] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+        >
+          <FiDownload size={16} />
+          {dangXuat ? 'Đang xuất…' : `Xuất Excel ${tab === 'van-hanh' ? 'vận hành' : 'kinh doanh'}`}
+        </button>
+      </div>
+
+      {/* Bốn số tổng đặt TRÊN tab, không nằm trong tab nào.
+          Trước đó tôi để chúng trong tab Kinh doanh và để tab Vận hành làm mặc
+          định — người dùng mở dashboard ra là không thấy mấy số vẫn xem hằng
+          ngày nữa. Đây là thứ họ nhìn đầu tiên, không nên bắt bấm thêm một nhịp. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard label="Tổng KH mới" value={totals.khMoi.toLocaleString('vi-VN')} icon={<FiUsers size={28} />} />
+        <KPICard label="Tổng doanh thu" value={fmtMoney(totals.doanhThu)} unit="₫" icon={<FiDollarSign size={28} />} />
+        <KPICard label="Đơn hoàn tất" value={totals.soDon.toLocaleString('vi-VN')} icon={<FiShoppingBag size={28} />} />
+        <KPICard label="Tổng sản lượng" value={fmtKg(totals.sanLuong)} unit="kg" icon={<FiPackage size={28} />} />
       </div>
 
       <div className="flex gap-1 border-b border-gray-200">
@@ -202,13 +315,6 @@ export default function DashboardPage() {
 
       {tab === 'kinh-doanh' && (
         <>
-      {/* KPI tổng hợp */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard label="Tổng KH mới" value={totals.khMoi.toLocaleString('vi-VN')} icon={<FiUsers size={28} />} />
-        <KPICard label="Tổng doanh thu" value={fmtMoney(totals.doanhThu)} unit="₫" icon={<FiDollarSign size={28} />} />
-        <KPICard label="Đơn hoàn tất" value={totals.soDon.toLocaleString('vi-VN')} icon={<FiShoppingBag size={28} />} />
-        <KPICard label="Tổng sản lượng" value={fmtKg(totals.sanLuong)} unit="kg" icon={<FiPackage size={28} />} />
-      </div>
 
       {/* Biểu đồ theo ngày */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
