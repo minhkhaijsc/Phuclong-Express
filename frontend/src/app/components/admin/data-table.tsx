@@ -17,6 +17,16 @@ interface DataTableProps {
   loading?: boolean;
   emptyMessage?: string;
   onRowClick?: (row: any) => void;
+  /**
+   * Hàng tổng ở đáy bảng — mỗi phần tử ứng với MỘT cột, đúng thứ tự `columns`.
+   *
+   * Để trong `<tfoot>` chứ không phải một ô chữ đặt dưới bảng, để con số tổng
+   * nằm thẳng cột với con số nó cộng ra — nhìn phát biết là tổng của cột nào.
+   *
+   * Bảng rỗng thì không hiện: "Tổng: 0" dễ bị đọc nhầm thành "kỳ này không có
+   * sản lượng" trong khi thật ra là chưa lọc ra dòng nào.
+   */
+  footer?: React.ReactNode[];
 }
 
 export function DataTable({
@@ -26,6 +36,7 @@ export function DataTable({
   loading = false,
   emptyMessage = 'Không có dữ liệu',
   onRowClick,
+  footer,
 }: DataTableProps) {
   if (loading) {
     return (
@@ -80,6 +91,17 @@ export function DataTable({
             </tr>
           )}
         </tbody>
+        {footer && data && data.length > 0 && (
+          <tfoot>
+            <tr className="border-t-2 border-[#14264b]/30 bg-[#14264b]/5 font-semibold text-[#14264b]">
+              {columns.map((col, i) => (
+                <td key={col.key} className={`px-4 py-3 text-${col.align || 'left'}`}>
+                  {footer[i]}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );

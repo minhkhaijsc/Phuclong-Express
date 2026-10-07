@@ -2162,6 +2162,28 @@ export const getDashboardOutputDaily = async (
 };
 
 /** Sản lượng mỗi nhân viên theo tháng (số đơn + kg), lọc được theo Tuyến (Quốc gia). */
+/** Một dòng của bảng "Sản lượng theo tuyến": mỗi tuyến, mỗi tháng. */
+export interface DashboardRouteOutput {
+  quocGiaId: number | null;
+  tenTuyen: string;
+  thang: string;
+  soDon: number;
+  sanLuongKg: number;
+}
+
+/**
+ * Sản lượng gom theo TUYẾN — không nhận bộ lọc tuyến, vì mục đích của nó là
+ * bày cả Hàn / Anh / Mỹ cạnh nhau để so.
+ */
+export const getDashboardOutputByRoute = async (
+  fromDate?: string,
+  toDate?: string,
+): Promise<DashboardRouteOutput[]> => {
+  const params = new URLSearchParams(buildDateParams(fromDate, toDate));
+  const response = await apiClient.get(`/dashboard/output-by-route?${params}`);
+  return response.data;
+};
+
 export const getDashboardOutputByStaff = async (
   fromDate?: string,
   toDate?: string,

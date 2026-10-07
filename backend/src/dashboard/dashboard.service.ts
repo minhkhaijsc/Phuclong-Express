@@ -101,6 +101,72 @@ export class DashboardService {
     }
   }
 
+  /**
+   * Sản lượng theo TUYẾN và theo tháng — "tuyến Hàn tháng này tổng bao nhiêu".
+   *
+   * Bảng sản lượng nhân viên lọc được theo tuyến, nhưng muốn so Hàn với Anh với
+   * Mỹ thì phải đổi ô lọc ba lần rồi tự cộng. Bảng này bày sẵn cả ba.
+   *
+   * Dùng ĐÚNG cách tính của SP_Dashboard_SanLuongNhanVienTheoThang, chỉ đổi chỗ
+   * gom nhóm từ nhân viên sang tuyến: số đơn đếm trên DON_HANG, sản lượng cộng
+   * trên CONGNO, hai bảng giữ Tuyến riêng nên FULL OUTER JOIN để không rớt bên
+   * nào. Lệch cách tính là hai bảng cạnh nhau ra hai con số, không ai tin nữa.
+   *
+   * Viết thẳng SQL thay vì thêm một SP: trên máy chủ thật phải chạy migration
+   * mới có SP, mà phần lớn logic ở đây lại trùng với SP đã có.
+   *
+   * Tuyến trống (QuocGiaID NULL) vẫn hiện thành "Chưa gán tuyến" — giấu đi thì
+   * cộng các dòng lại không bằng tổng, người xem tưởng báo cáo sai.
+   */
+  async getOutputByRoute(
+    fromDate?: string,
+    toDate?: string,
+  ): Promise<{ quocGiaId: number | null; tenTuyen: string; thang: string; soDon: number; sanLuongKg: number }[]> {
+    try {
+      const { tuNgay, denNgay } = this.resolveRange(fromDate, toDate);
+      const results = await this.sequelize.query(
+        `WITH DonTheoTuyen AS (
+           SELECT QuocGiaID, FORMAT(ngaymuahang, 'yyyy-MM') AS Thang, COUNT(*) AS SoDon
+           FROM dbo.DON_HANG
+           WHERE DaXoa = 0 AND ngaymuahang BETWEEN :tuNgay AND :denNgay
+           GROUP BY QuocGiaID, FORMAT(ngaymuahang, 'yyyy-MM')
+         ),
+         KgTheoTuyen AS (
+           SELECT QuocGiaID, FORMAT(NgayGhiNo, 'yyyy-MM') AS Thang, SUM(ISNULL(SanLuong, 0)) AS SanLuongKg
+           FROM dbo.CONGNO
+           WHERE DaXoa = 0 AND SanLuong IS NOT NULL AND NgayGhiNo BETWEEN :tuNgay AND :denNgay
+           GROUP BY QuocGiaID, FORMAT(NgayGhiNo, 'yyyy-MM')
+         ),
+         Gop AS (
+           SELECT ISNULL(d.QuocGiaID, k.QuocGiaID) AS QuocGiaID,
+                  ISNULL(d.Thang, k.Thang)         AS Thang,
+                  ISNULL(d.SoDon, 0)               AS SoDon,
+                  ISNULL(k.SanLuongKg, 0)          AS SanLuongKg
+           FROM DonTheoTuyen d
+           FULL OUTER JOIN KgTheoTuyen k ON d.QuocGiaID = k.QuocGiaID AND d.Thang = k.Thang
+         )
+         SELECT g.QuocGiaID, g.Thang, g.SoDon, g.SanLuongKg, q.TenQuocGia
+         FROM Gop g
+         LEFT JOIN dbo.tbQuocGia q ON q.QuocGiaID = g.QuocGiaID
+         ORDER BY g.Thang, g.SanLuongKg DESC, g.SoDon DESC`,
+        { replacements: { tuNgay, denNgay }, type: 'SELECT' as const },
+      );
+      const rows: any[] = Array.isArray(results)
+        ? Array.isArray(results[0]) ? (results[0] as any[]) : (results as any[])
+        : [];
+      return rows.map((r) => ({
+        quocGiaId: r.QuocGiaID == null ? null : Number(r.QuocGiaID),
+        tenTuyen: r.TenQuocGia || 'Chưa gán tuyến',
+        thang: r.Thang || '',
+        soDon: Number(r.SoDon) || 0,
+        sanLuongKg: Number(r.SanLuongKg) || 0,
+      }));
+    } catch (error) {
+      console.error('Error in getOutputByRoute:', error.message);
+      return [];
+    }
+  }
+
   /** Chi tiết sản lượng từng bản ghi CONGNO của 1 nhân viên trong 1 tháng, lọc được theo Tuyến. */
   async getOutputDetailByStaff(
     nhanVien: string,

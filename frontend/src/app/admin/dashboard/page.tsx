@@ -17,6 +17,7 @@ import {
   getDashboardRevenue,
   getDashboardOutputDaily,
   getVanHanhTuyen,
+  getDashboardOutputByRoute,
 } from '@/lib/api';
 import { downloadDataAsExcel } from '@/lib/excel-download';
 import { FiDownload } from 'react-icons/fi';
@@ -24,6 +25,7 @@ import { DateRangeFilter } from './components/date-range-filter';
 import { TabVanHanh } from './components/tab-van-hanh';
 import { DailyTrendChart } from './components/daily-trend-chart';
 import { StaffOutputTable } from './components/staff-output-table';
+import { RouteOutputTable } from './components/route-output-table';
 
 /** Khoảng mặc định: đầu→cuối tháng hiện tại (dd/MM/yyyy). */
 const getDefaultRange = () => {
@@ -104,6 +106,14 @@ export default function DashboardPage() {
    * trong Excel — mất hẳn ý nghĩa của mấy ô lọc trên màn.
    */
   const [dangXuat, setDangXuat] = useState(false);
+  /**
+   * Cộng dồn số thực trong JS đẻ ra đuôi rác: 2814.5082999999977.
+   * Trên màn hình không thấy vì có bộ định dạng, nhưng vào Excel thì hiện
+   * nguyên con — kế toán nhìn tưởng số liệu bẩn. Làm tròn 4 chữ số, đúng bằng
+   * mức mà bảng trên màn đang hiển thị.
+   */
+  const lamTron4 = (v: number) => Math.round((v + Number.EPSILON) * 10000) / 10000;
+
   const xuatExcel = async () => {
     setDangXuat(true);
     try {
@@ -118,7 +128,7 @@ export default function DashboardPage() {
           ['Tổng KH mới', totals.khMoi],
           ['Tổng doanh thu (đ)', totals.doanhThu],
           ['Đơn hoàn tất', totals.soDon],
-          ['Tổng sản lượng (kg)', totals.sanLuong],
+          ['Tổng sản lượng (kg)', lamTron4(totals.sanLuong)],
           [],
           ['CHI TIẾT THEO NGÀY'],
           ['Ngày', 'KH mới', 'Doanh thu (đ)', 'Sản lượng (kg)'],
@@ -135,9 +145,21 @@ export default function DashboardPage() {
             n,
             (newCustomers.data ?? []).find((x) => x.ngay === n)?.soKHMoi ?? 0,
             (revenue.data ?? []).find((x) => x.ngay === n)?.doanhThu ?? 0,
-            (output.data ?? []).find((x) => x.ngay === n)?.sanLuongKg ?? 0,
+            lamTron4((output.data ?? []).find((x) => x.ngay === n)?.sanLuongKg ?? 0),
           ]);
         }
+        // Tổng theo tuyến: gọi lại API thay vì đọc cache của bảng trên màn —
+        // người dùng có thể bấm Xuất trước khi bảng đó kịp tải xong.
+        const theoTuyen = await getDashboardOutputByRoute(applied.fromDate, applied.toDate);
+        rows.push([], ['SẢN LƯỢNG THEO TUYẾN'], ['Tuyến', 'Tháng', 'Số đơn', 'Sản lượng (kg)']);
+        for (const t of theoTuyen) rows.push([t.tenTuyen, t.thang, t.soDon, lamTron4(t.sanLuongKg)]);
+        rows.push([
+          'Tổng tất cả tuyến',
+          '',
+          theoTuyen.reduce((a, t) => a + t.soDon, 0),
+          lamTron4(theoTuyen.reduce((a, t) => a + t.sanLuongKg, 0)),
+        ]);
+
         downloadDataAsExcel(rows, `Dashboard_KinhDoanh_${ky}.xlsx`);
       } else {
         // Tab vận hành: gọi lại API để lấy ĐỦ dữ liệu theo bộ lọc, không lấy từ
@@ -340,7 +362,9 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Bảng nhân viên theo tháng */}
+      {/* Tổng theo tuyến trước, rồi mới tới chi tiết từng nhân viên — đọc từ
+          khái quát xuống chi tiết, và tuyến là thứ được hỏi tới nhiều hơn. */}
+      <RouteOutputTable fromDate={applied.fromDate} toDate={applied.toDate} />
       <StaffOutputTable fromDate={applied.fromDate} toDate={applied.toDate} />
         </>
       )}

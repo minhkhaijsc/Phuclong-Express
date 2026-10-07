@@ -51,6 +51,27 @@ export function StaffOutputTable({ fromDate, toDate }: StaffOutputTableProps) {
 
   const totalDetailKg = (detail.data || []).reduce((s, r) => s + r.sanLuongKg, 0);
 
+  /**
+   * Tổng của ĐÚNG những dòng đang hiện.
+   *
+   * `data` đã được máy chủ lọc sẵn theo tuyến (quocGiaId nằm trong queryKey),
+   * nên cộng các dòng đang xem chính là tổng của tuyến đang chọn — không cần
+   * gọi thêm API, và không bao giờ lệch với bảng bên trên.
+   */
+  const tong = data.reduce(
+    (s, r) => ({ soDon: s.soDon + (r.soDon || 0), kg: s.kg + (r.sanLuongKg || 0) }),
+    { soDon: 0, kg: 0 },
+  );
+
+  const tenTuyen = quocGiaId
+    ? (countries.data || []).find((c) => c.QuocGiaID === quocGiaId)?.TenQuocGia
+    : undefined;
+
+  // Mỗi dòng là MỘT nhân viên trong MỘT tháng, nên khoảng ngày trải qua hai
+  // tháng thì một người xuất hiện hai dòng — đếm "dòng" chứ không đếm "nhân
+  // viên", nói sai số người còn tệ hơn là không nói.
+  const nhanFooter = tenTuyen ? `Tổng — tuyến ${tenTuyen}` : 'Tổng — tất cả tuyến';
+
   const handleExport = () => {
     if (!selected || !detail.data?.length) return;
     const rows = [
@@ -88,6 +109,7 @@ export function StaffOutputTable({ fromDate, toDate }: StaffOutputTableProps) {
           loading={loading}
           emptyMessage="Không có dữ liệu trong khoảng đã chọn"
           onRowClick={(row) => setSelected({ nhanVien: row.nhanVien, thang: row.thang, soDon: row.soDon, sanLuongKg: row.sanLuongKg })}
+          footer={[nhanFooter, `${data.length} dòng`, fmtInt(tong.soDon), fmtKg(tong.kg)]}
         />
       </div>
 

@@ -44,6 +44,12 @@ export class DashboardController {
     return this.dashboardService.getOutputByStaff(query.fromDate, query.toDate, query.quocGiaId);
   }
 
+  /** Sản lượng theo TUYẾN và theo tháng — để so Hàn / Anh / Mỹ cạnh nhau. */
+  @Get('output-by-route')
+  async getOutputByRoute(@Query() query: DashboardQueryDto) {
+    return this.dashboardService.getOutputByRoute(query.fromDate, query.toDate);
+  }
+
   /** Chi tiết từng bản ghi CONGNO của 1 nhân viên trong 1 tháng, lọc được theo Tuyến. */
   @Get('output-detail')
   async getOutputDetail(
