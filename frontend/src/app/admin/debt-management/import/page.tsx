@@ -42,12 +42,21 @@ const HEADER_KEY_MAP: Record<string, string> = {
   'tuyến': 'tuyen',
   'sản lượng (kg)': 'sanLuong',
   'tài khoản': 'bankAccount',
+  'doanh thu': 'doanhThu',
+  'phụ thu': 'phuThu',
   'tiền nợ (dr)': 'dr',
   'tiền có (cr)': 'cr',
   'ghi chú': 'ghiChu',
 };
 
-const TEMPLATE_HEADERS = ['User', 'Nội dung', 'Ngày', 'Loại phát sinh', 'Tuyến', 'Sản lượng (kg)', 'Tài khoản', 'Tiền Nợ (DR)', 'Tiền Có (CR)', 'Ghi chú'];
+/**
+ * Doanh thu + Phụ thu đứng TRƯỚC Tiền Nợ (DR), vì DR là tổng của hai cột đó —
+ * đọc từ trái sang phải thấy ngay quan hệ. Giống thứ tự ở màn nhập tay.
+ *
+ * Vẫn giữ cột DR cho ai nhập gộp như cũ: file cũ đổ vào vẫn chạy, không bắt
+ * kế toán làm lại từ đầu.
+ */
+const TEMPLATE_HEADERS = ['User', 'Nội dung', 'Ngày', 'Loại phát sinh', 'Tuyến', 'Sản lượng (kg)', 'Tài khoản', 'Doanh thu', 'Phụ thu', 'Tiền Nợ (DR)', 'Tiền Có (CR)', 'Ghi chú'];
 
 interface ParsedDebtRow {
   rowIndex: number; // dòng thực tế trong file Excel (tính cả header)
@@ -61,6 +70,8 @@ interface ParsedDebtRow {
   bankAccount: string;
   dr: number;
   cr: number;
+  doanhThu?: number;
+  phuThu?: number;
   ghiChu: string;
   errors: string[];
 }
@@ -163,16 +174,38 @@ function parseImportRows(
       errors.push(`Tài khoản "${bankAccount}" không tồn tại`);
     }
 
-    const drRaw = get('dr');
-    const crRaw = get('cr');
-    const drStr = drRaw === null || drRaw === undefined ? '' : String(drRaw).trim();
-    const crStr = crRaw === null || crRaw === undefined ? '' : String(crRaw).trim();
-    const dr = drStr === '' ? 0 : Number(drStr);
-    const cr = crStr === '' ? 0 : Number(crStr);
-    if (isNaN(dr) || isNaN(cr)) {
-      errors.push('Tiền Nợ/Tiền Có phải là số');
+    const soTuO = (key: string): { co: boolean; gt: number } => {
+      const raw = get(key);
+      const str = raw === null || raw === undefined ? '' : String(raw).trim();
+      return { co: str !== '', gt: str === '' ? 0 : Number(str) };
+    };
+
+    const oDoanhThu = soTuO('doanhThu');
+    const oPhuThu = soTuO('phuThu');
+    const oDr = soTuO('dr');
+    const oCr = soTuO('cr');
+
+    /**
+     * DR = Doanh thu + Phụ thu khi có ít nhất một trong hai.
+     *
+     * Máy chủ cũng tự cộng lại y như vậy (createDebtCore), nên không tin con số
+     * tổng mà file gửi lên — hai nơi tính một lần là hai nơi lệch nhau.
+     *
+     * Điền cả ba cột mà tổng không khớp thì BÁO LỖI chứ không im lặng chọn một
+     * bên: im lặng là kế toán tưởng đã nhập đúng số mình gõ.
+     */
+    const tachRa = oDoanhThu.co || oPhuThu.co;
+    const dr = tachRa ? oDoanhThu.gt + oPhuThu.gt : oDr.gt;
+    const cr = oCr.gt;
+
+    if ([oDoanhThu, oPhuThu, oDr, oCr].some((o) => o.co && isNaN(o.gt))) {
+      errors.push('Doanh thu / Phụ thu / Tiền Nợ / Tiền Có phải là số');
+    } else if (tachRa && oDr.co && Math.abs(oDr.gt - dr) > 0.5) {
+      errors.push(
+        `Tiền Nợ (DR) ${oDr.gt.toLocaleString('vi-VN')} không khớp Doanh thu + Phụ thu = ${dr.toLocaleString('vi-VN')}`,
+      );
     } else if (dr === 0 && cr === 0) {
-      errors.push('Phải nhập ít nhất Tiền Nợ hoặc Tiền Có');
+      errors.push('Phải nhập ít nhất Doanh thu/Phụ thu, Tiền Nợ hoặc Tiền Có');
     }
 
     const ghiChu = String(get('ghiChu') ?? '').trim();
@@ -189,6 +222,10 @@ function parseImportRows(
       bankAccount,
       dr: isNaN(dr) ? 0 : dr,
       cr: isNaN(cr) ? 0 : cr,
+      // Chỉ gửi khi file CÓ tách; dòng nhập gộp kiểu cũ thì để trống, đúng như
+      // màn nhập tay — dòng cũ không bị gán doanh thu bịa ra.
+      doanhThu: tachRa ? oDoanhThu.gt : undefined,
+      phuThu: tachRa ? oPhuThu.gt : undefined,
       ghiChu,
       errors,
     };
@@ -270,6 +307,25 @@ export default function DebtImportPage() {
     downloadDataAsExcel(
       [
         TEMPLATE_HEADERS,
+        // Hai dòng ví dụ, mỗi dòng một cách nhập — số ô phải ĐÚNG BẰNG số cột
+        // của TEMPLATE_HEADERS, thiếu một ô là lệch hết các cột phía sau.
+        //
+        // Dòng 1: tách Doanh thu / Phụ thu, để trống Tiền Nợ (DR) cho hệ thống tự cộng.
+        [
+          usernames[0] ?? 'user01',
+          'PHI MUA HANG + PHU THU',
+          todayStr,
+          LOAI_PHAT_SINH_LABELS[2],
+          countryNames[0] ?? '',
+          '',
+          '',
+          450000,
+          50000,
+          '',
+          '',
+          'Ví dụ: để trống DR, hệ thống tự cộng 450.000 + 50.000',
+        ],
+        // Dòng 2: thu tiền về — chỉ có Tiền Có (CR), cách nhập gộp như file cũ.
         [
           usernames[0] ?? 'user01',
           'CK CONG NO',
@@ -278,9 +334,11 @@ export default function DebtImportPage() {
           countryNames[0] ?? '',
           '',
           bankAccountNames[0] ?? '',
+          '',
+          '',
           0,
           500000,
-          'Ví dụ dòng mẫu',
+          'Ví dụ dòng thu tiền',
         ],
       ],
       'Mau_Import_CongNo.xlsx',
@@ -355,6 +413,8 @@ export default function DebtImportPage() {
       ngay: r.ngay,
       dr: r.dr,
       cr: r.cr,
+      doanhThu: r.doanhThu,
+      phuThu: r.phuThu,
       ghiChu: r.ghiChu || undefined,
       loaiPhatSinh: r.loaiPhatSinh,
       quocGiaId: r.quocGiaId,
@@ -400,7 +460,7 @@ export default function DebtImportPage() {
             <h2 className="text-base font-bold text-slate-800">Bước 1: Chọn file Excel</h2>
             <p className="text-xs text-slate-500 mt-0.5">
               File phải có các cột: {TEMPLATE_HEADERS.join(', ')}. Chỉ hỗ trợ thêm mới công nợ.
-              Trong file mẫu, cột &quot;User&quot;, &quot;Loại phát sinh&quot;, &quot;Tuyến&quot; và &quot;Tài khoản&quot; có sẵn danh sách để chọn cho đúng, tránh gõ sai. Dòng ví dụ chỉ để minh họa định dạng, hãy xóa hoặc thay bằng dữ liệu thật trước khi import.
+              Trong file mẫu, cột &quot;User&quot;, &quot;Loại phát sinh&quot;, &quot;Tuyến&quot; và &quot;Tài khoản&quot; có sẵn danh sách để chọn cho đúng, tránh gõ sai. Các dòng ví dụ chỉ để minh họa định dạng, hãy xóa hoặc thay bằng dữ liệu thật trước khi import.
             </p>
           </div>
 
@@ -419,6 +479,7 @@ export default function DebtImportPage() {
             <p className="font-medium text-slate-700 pt-1">Cột &quot;Sản lượng (kg)&quot; là bắt buộc khi Loại phát sinh = Cân Kg, ngược lại để trống.</p>
             <p className="font-medium text-slate-700 pt-1">Cột &quot;Tài khoản&quot; (nếu điền) phải khớp đúng tên tài khoản ngân hàng đang hoạt động trong hệ thống.</p>
             <p className="font-medium text-slate-700 pt-1">Cột &quot;Tuyến&quot; là bắt buộc; phải khớp đúng tên quốc gia đang có trong hệ thống.</p>
+            <p className="font-medium text-slate-700 pt-1">Cột &quot;Doanh thu&quot; và &quot;Phụ thu&quot;: điền để tách rõ khoản nợ. Khi có một trong hai thì &quot;Tiền Nợ (DR)&quot; = Doanh thu + Phụ thu, nên để trống DR cho hệ thống tự cộng (điền cả ba mà tổng không khớp sẽ báo lỗi). Vẫn nhập gộp một cột DR như file cũ được.</p>
           </div>
 
           <div>
@@ -501,6 +562,8 @@ export default function DebtImportPage() {
                   <th className="px-2 py-2 text-left font-medium text-slate-600">Tuyến</th>
                   <th className="px-2 py-2 text-right font-medium text-slate-600">SL (kg)</th>
                   <th className="px-2 py-2 text-left font-medium text-slate-600">Tài khoản</th>
+                  <th className="px-2 py-2 text-right font-medium text-slate-600">Doanh thu</th>
+                  <th className="px-2 py-2 text-right font-medium text-slate-600">Phụ thu</th>
                   <th className="px-2 py-2 text-right font-medium text-slate-600">DR</th>
                   <th className="px-2 py-2 text-right font-medium text-slate-600">CR</th>
                   <th className="px-2 py-2 text-left font-medium text-slate-600">Ghi chú</th>
@@ -518,7 +581,13 @@ export default function DebtImportPage() {
                     <td className="px-2 py-1.5">{r.tuyen}</td>
                     <td className="px-2 py-1.5 text-right">{r.sanLuong != null ? r.sanLuong.toLocaleString('vi-VN', { maximumFractionDigits: 4 }) : ''}</td>
                     <td className="px-2 py-1.5">{r.bankAccount}</td>
-                    <td className="px-2 py-1.5 text-right">{r.dr ? r.dr.toLocaleString('vi-VN') : ''}</td>
+                    <td className="px-2 py-1.5 text-right">{r.doanhThu ? r.doanhThu.toLocaleString('vi-VN') : ''}</td>
+                    <td className="px-2 py-1.5 text-right">{r.phuThu ? r.phuThu.toLocaleString('vi-VN') : ''}</td>
+                    {/* DR là tổng của hai cột trên khi file có tách — tô đậm để
+                        kế toán soi lại trước khi bấm nhập. */}
+                    <td className={'px-2 py-1.5 text-right ' + (r.doanhThu != null || r.phuThu != null ? 'font-medium' : '')}>
+                      {r.dr ? r.dr.toLocaleString('vi-VN') : ''}
+                    </td>
                     <td className="px-2 py-1.5 text-right">{r.cr ? r.cr.toLocaleString('vi-VN') : ''}</td>
                     <td className="px-2 py-1.5">{r.ghiChu}</td>
                     <td className="px-2 py-1.5 text-red-600">{r.errors.join('; ')}</td>

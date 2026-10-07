@@ -1215,6 +1215,9 @@ export interface ImportDebtRow {
   ngay: string;
   dr?: number;
   cr?: number;
+  /** Hai khoản tách ra của phát sinh nợ; máy chủ tự cộng thành DR. */
+  doanhThu?: number;
+  phuThu?: number;
   ghiChu?: string;
   loaiPhatSinh?: number;
   bankAccount?: string;

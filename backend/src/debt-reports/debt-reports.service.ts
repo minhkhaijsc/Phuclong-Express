@@ -1494,6 +1494,9 @@ export class DebtReportsService {
       ngay: string;
       dr?: number;
       cr?: number;
+      /** Hai khoản tách ra của phát sinh nợ — createDebtCore tự cộng thành DR. */
+      doanhThu?: number;
+      phuThu?: number;
       ghiChu?: string;
       loaiPhatSinh?: number;
       bankAccount?: string;

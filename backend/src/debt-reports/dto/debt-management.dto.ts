@@ -252,6 +252,22 @@ export class ImportCreateDebtRowDto {
   @Type(() => Number)
   cr?: number;
 
+  // Doanh thu + Phụ thu: hai khoản tách ra của phát sinh nợ. Máy chủ tự cộng
+  // thành DR nên kế toán khỏi phải tự tính rồi lệch số ở hai nơi.
+  //
+  // PHẢI khai ở DTO: ValidationPipe bật `whitelist: true` nên trường nào không
+  // có ở đây sẽ bị cắt im lặng — gửi lên mà không khai thì mất dữ liệu mà không
+  // báo lỗi gì.
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  doanhThu?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  phuThu?: number;
+
   @IsOptional()
   @IsString()
   ghiChu?: string;

@@ -1,4 +1,6 @@
+import { ValidationPipe } from '@nestjs/common';
 import { DebtReportsService } from './debt-reports.service';
+import { ImportCreateDebtDto } from './dto/debt-management.dto';
 
 /**
  * Phát sinh nợ = doanh thu + phụ thu.
@@ -93,5 +95,44 @@ describe('Công nợ: doanh thu + phụ thu', () => {
     const { dv, congNo } = taoDv();
     await dv.createDebt({ ...donCoBan, doanhThu: 10, phuThu: 5 }, 'ketoan');
     expect(String(congNo(/SP_Them_SystemLogs/).ghiChu)).toMatch(/DR: 15 \(DoanhThu: 10; PhuThu: 5\)/);
+  });
+});
+
+/**
+ * Hai cột mới phải SỐNG SÓT qua ValidationPipe.
+ *
+ * `whitelist: true` (main.ts) CẮT IM LẶNG mọi trường không khai ở DTO: web gửi
+ * doanh thu + phụ thu lên, pipe vứt đi, service thấy không có gì nên ghi DR
+ * theo số gộp — không lỗi, không cảnh báo, chỉ là hai cột trống trong sổ.
+ *
+ * Phép kiểm này dựng đúng pipe của main.ts, nên quên khai ở DTO là đỏ ngay.
+ */
+describe('Import công nợ: doanh thu + phụ thu qua ValidationPipe', () => {
+  const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: false, transform: true });
+  const sieuDuLieu = { type: 'body' as const, metatype: ImportCreateDebtDto };
+  const chay = (rows: unknown[]) => pipe.transform({ rows }, sieuDuLieu) as Promise<ImportCreateDebtDto>;
+
+  const dongCoBan = { username: 'HP123', noiDung: 'Cước tháng 9', ngay: '25/09/2026' };
+
+  it('giữ nguyên doanh thu và phụ thu', async () => {
+    const kq = await chay([{ ...dongCoBan, doanhThu: 450_000, phuThu: 50_000 }]);
+    expect(kq.rows[0]).toMatchObject({ doanhThu: 450_000, phuThu: 50_000 });
+  });
+
+  it('giữ phụ thu khi chỉ có một trong hai', async () => {
+    const kq = await chay([{ ...dongCoBan, phuThu: 50_000 }]);
+    expect(kq.rows[0].phuThu).toBe(50_000);
+    expect(kq.rows[0].doanhThu).toBeUndefined();
+  });
+
+  it('dòng nhập gộp kiểu cũ vẫn đi qua được, không bị gán số bịa', async () => {
+    const kq = await chay([{ ...dongCoBan, dr: 500_000, cr: 0 }]);
+    expect(kq.rows[0].dr).toBe(500_000);
+    expect(kq.rows[0].doanhThu).toBeUndefined();
+    expect(kq.rows[0].phuThu).toBeUndefined();
+  });
+
+  it('chữ ở cột doanh thu thì báo lỗi chứ không lặng lẽ thành 0', async () => {
+    await expect(chay([{ ...dongCoBan, doanhThu: 'nhiều lắm' }])).rejects.toThrow();
   });
 });
