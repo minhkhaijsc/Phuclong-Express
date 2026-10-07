@@ -43,6 +43,11 @@ function O({ nhan, giaTri, phu, mau }: { nhan: string; giaTri: string; phu?: str
 export default function TuoiNoPage() {
   const [sapTheo, setSapTheo] = useState<'gia' | 'tien'>('gia');
   const [dangMo, setDangMo] = useState<string | null>(null);
+  /**
+   * Vẽ hết 164 khách một lượt thành trang dài hơn 15.000px — cuộn mỏi tay mà
+   * phần đáng xem chỉ nằm ở đầu. Hiện 30 dòng trước, ai cần thì bấm xem thêm.
+   */
+  const [soDongHien, setSoDongHien] = useState(30);
 
   const tongHop = useQuery({ queryKey: ['tuoi-no-tong-hop'], queryFn: getTuoiNoTongHop });
   const danhSach = useQuery({
@@ -153,7 +158,10 @@ export default function TuoiNoPage() {
             ] as const).map(([k, nhan, icon]) => (
               <button
                 key={k}
-                onClick={() => setSapTheo(k)}
+                onClick={() => {
+                  setSapTheo(k);
+                  setSoDongHien(30);
+                }}
                 className={
                   'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ' +
                   (sapTheo === k ? 'bg-[#14264b] text-white' : 'text-gray-600 hover:bg-gray-50')
@@ -182,7 +190,7 @@ export default function TuoiNoPage() {
                 </tr>
               </thead>
               <tbody>
-                {(danhSach.data ?? []).map((d) => (
+                {(danhSach.data ?? []).slice(0, soDongHien).map((d) => (
                   // Fragment phải có key: nó là phần tử gốc của mỗi vòng lặp,
                   // đặt key ở <tr> bên trong thì React vẫn cảnh báo thiếu key.
                   <Fragment key={d.khach}>
@@ -269,6 +277,16 @@ export default function TuoiNoPage() {
                 )}
               </tbody>
             </table>
+            {(danhSach.data ?? []).length > soDongHien && (
+              <div className="border-t p-3 text-center">
+                <button
+                  onClick={() => setSoDongHien((n) => n + 50)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm hover:bg-gray-50"
+                >
+                  Xem thêm — còn {(danhSach.data ?? []).length - soDongHien} khách
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
