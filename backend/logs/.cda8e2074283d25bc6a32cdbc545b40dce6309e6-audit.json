@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 90
+    },
+    "auditLog": "D:\\MinhKhaiJSC\\Phuclong-Express\\backend\\logs\\.cda8e2074283d25bc6a32cdbc545b40dce6309e6-audit.json",
+    "files": [
+        {
+            "date": 1791357506385,
+            "name": "D:\\MinhKhaiJSC\\Phuclong-Express\\backend\\logs\\requests-2026-10-07.log",
+            "hash": "a8199439a204fd2f23e43b71e2761231bd795685e86ee6e4c28938ad118cedd6"
+        }
+    ],
+    "hashType": "sha256"
+}

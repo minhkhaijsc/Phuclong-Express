@@ -21,12 +21,12 @@ Kiểm: `curl -o /dev/null -w "%{http_code}" http://localhost:3101/api/orders/co
 
 ## 2. Lớp chắn ghi (khuyến nghị khi chỉ muốn xem)
 
-`scratchpad/ple/chan-ghi.cjs` đứng trước backend, chặn đúng các lời gọi GHI đã
+`backend/scripts/chan-ghi.cjs` đứng trước backend, chặn đúng các lời gọi GHI đã
 khai trong mảng `CHAN` (hiện có: import công nợ), trả kết quả thành công giả và
 in ra thân JSON mà web gửi lên. Mọi đường khác đi thẳng xuống backend thật.
 
 ```bash
-CONG_BE=3101 node chan-ghi.cjs      # nghe 3094 -> 3101
+CONG_BE=3101 node backend/scripts/chan-ghi.cjs    # nghe 3094 -> 3101
 ```
 
 Bỏ bước này thì bấm nút trên màn local là ghi thật vào sổ công nợ.
