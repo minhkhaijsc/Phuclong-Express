@@ -14,7 +14,7 @@ user  plelogisticsco
 | Backend (NestJS) | `/api.phuclongexpress.com` | `dist/src/...` |
 | API công khai | `https://api.phuclongexpress.com/api` | — |
 
-## Bốn điều đã trả giá để biết — đừng bỏ bước nào
+## Năm điều đã trả giá để biết — đừng bỏ bước nào
 
 1. **Đẩy vào `.next.moi` trước rồi mới đổi tên.** Ghi đè thẳng vào `.next` thì
    suốt lúc truyền (vài phút) khách vào site sẽ gặp lỗi thiếu chunk.
@@ -36,7 +36,14 @@ user  plelogisticsco
    `CWD C:/Program Files/Git/` → `550 The parameter is incorrect`. Lỗi đọc như
    là sai mật khẩu hoặc sai đường dẫn trên máy chủ, trong khi không phải.
 
-4. **Build frontend phải có `.env.production`**, không thì `NEXT_PUBLIC_API_URL`
+4. **Dừng `next dev` rồi build LẠI trước khi đẩy.** `next dev` ghi đè chính thư
+   mục `.next` mà `npm run build` đổ ra. Đẩy nhầm bản dev thì iisnode trả
+   `Could not find a production build in the '.next' directory` và cả site chết
+   — đã xảy ra 07/10/2026, mất khoảng 2 phút. Đếm trước khi đẩy:
+   `find .next -type f -not -path "*/cache/*" | wc -l` — bản thật khoảng 629
+   file và có `.next/BUILD_ID`; khoảng 89 file là bản dev. Xem `chay-local.md`.
+
+5. **Build frontend phải có `.env.production`**, không thì `NEXT_PUBLIC_API_URL`
    bị nướng cứng thành `localhost:3001` và cả site chết. Kiểm TRƯỚC khi đẩy:
 
    ```bash
