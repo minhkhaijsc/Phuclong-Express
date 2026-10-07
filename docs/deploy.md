@@ -14,7 +14,7 @@ user  plelogisticsco
 | Backend (NestJS) | `/api.phuclongexpress.com` | `dist/src/...` |
 | API công khai | `https://api.phuclongexpress.com/api` | — |
 
-## Ba điều đã trả giá để biết — đừng bỏ bước nào
+## Bốn điều đã trả giá để biết — đừng bỏ bước nào
 
 1. **Đẩy vào `.next.moi` trước rồi mới đổi tên.** Ghi đè thẳng vào `.next` thì
    suốt lúc truyền (vài phút) khách vào site sẽ gặp lỗi thiếu chunk.
@@ -30,7 +30,13 @@ user  plelogisticsco
    Thiếu bước này thì tiến trình cũ vẫn trả HTML trỏ tới tên chunk đã bị đổi đi
    mất → hàng loạt tệp tĩnh lỗi 400.
 
-3. **Build frontend phải có `.env.production`**, không thì `NEXT_PUBLIC_API_URL`
+3. **Chạy script FTP từ Git Bash thì phải đặt `MSYS_NO_PATHCONV=1`.** Git Bash
+   tự đổi mọi tham số bắt đầu bằng `/` thành đường dẫn Windows, nên
+   `node ftp.mjs ls /api.phuclongexpress.com` tới máy chủ lại thành
+   `CWD C:/Program Files/Git/` → `550 The parameter is incorrect`. Lỗi đọc như
+   là sai mật khẩu hoặc sai đường dẫn trên máy chủ, trong khi không phải.
+
+4. **Build frontend phải có `.env.production`**, không thì `NEXT_PUBLIC_API_URL`
    bị nướng cứng thành `localhost:3001` và cả site chết. Kiểm TRƯỚC khi đẩy:
 
    ```bash
