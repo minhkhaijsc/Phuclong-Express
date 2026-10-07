@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { DataTable } from '@/app/components/admin';
 import { DashboardStaffOutput, getDashboardOutputByStaff, getDashboardOutputDetail, getQuocGia } from '@/lib/api';
 import { downloadDataAsExcel } from '@/lib/excel-download';
+import { BarChartNgang } from './bar-chart-ngang';
 
 interface StaffOutputTableProps {
   fromDate: string;
@@ -33,6 +34,7 @@ const detailColumns = [
 export function StaffOutputTable({ fromDate, toDate }: StaffOutputTableProps) {
   const [selected, setSelected] = useState<DashboardStaffOutput | null>(null);
   const [quocGiaId, setQuocGiaId] = useState<number | undefined>(undefined);
+  const [chiSo, setChiSo] = useState<'kg' | 'don'>('kg');
 
   const countries = useQuery({ queryKey: ['quoc-gia-list'], queryFn: getQuocGia });
 
@@ -62,6 +64,26 @@ export function StaffOutputTable({ fromDate, toDate }: StaffOutputTableProps) {
     (s, r) => ({ soDon: s.soDon + (r.soDon || 0), kg: s.kg + (r.sanLuongKg || 0) }),
     { soDon: 0, kg: 0 },
   );
+
+  /**
+   * Top 10 nhân viên để vẽ. Gom theo người (bỏ chiều tháng) rồi mới cắt top —
+   * cắt trước khi gom thì người làm đều hai tháng lại thua người dồn một tháng.
+   *
+   * Cắt 10 vì biểu đồ này để thấy ai dẫn đầu; muốn xem đủ thì đã có bảng ngay
+   * bên dưới, không giấu ai cả.
+   */
+  const duLieuBieuDo = Object.values(
+    data.reduce<Record<string, { nhan: string; kg: number; don: number }>>((m, r) => {
+      m[r.nhanVien] = m[r.nhanVien] || { nhan: r.nhanVien, kg: 0, don: 0 };
+      m[r.nhanVien].kg += r.sanLuongKg || 0;
+      m[r.nhanVien].don += r.soDon || 0;
+      return m;
+    }, {}),
+  )
+    .map((x) => ({ nhan: x.nhan, giaTri: chiSo === 'kg' ? x.kg : x.don }))
+    .filter((x) => x.giaTri > 0)
+    .sort((a, b) => b.giaTri - a.giaTri)
+    .slice(0, 10);
 
   const tenTuyen = quocGiaId
     ? (countries.data || []).find((c) => c.QuocGiaID === quocGiaId)?.TenQuocGia
@@ -100,7 +122,28 @@ export function StaffOutputTable({ fromDate, toDate }: StaffOutputTableProps) {
                 </option>
               ))}
             </select>
+            <div className="flex rounded-md border border-[#14264b]/20 overflow-hidden text-xs">
+              {([['kg', 'Sản lượng'], ['don', 'Số đơn']] as const).map(([ma, nhan]) => (
+                <button
+                  key={ma}
+                  type="button"
+                  onClick={() => setChiSo(ma)}
+                  className={`px-2.5 py-1.5 ${chiSo === ma ? 'bg-[#14264b] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                >
+                  {nhan}
+                </button>
+              ))}
+            </div>
           </div>
+        </div>
+
+        {/* 10 người dẫn đầu; bảng bên dưới vẫn liệt kê đủ. */}
+        <div className="mb-4">
+          <BarChartNgang
+            data={duLieuBieuDo}
+            loading={loading}
+            valueFormatter={chiSo === 'kg' ? (v) => `${fmtKg(v)} kg` : (v) => `${fmtInt(v)} đơn`}
+          />
         </div>
         <DataTable
           columns={summaryColumns}
