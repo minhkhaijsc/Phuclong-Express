@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { VanHanhService } from './van-hanh.service';
+import { TuoiNoService } from './tuoi-no.service';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -16,6 +17,7 @@ export class DashboardController {
   constructor(
     private readonly dashboardService: DashboardService,
     private readonly vanHanhService: VanHanhService,
+    private readonly tuoiNoService: TuoiNoService,
   ) {}
 
   /** KH mới theo ngày. */
@@ -91,5 +93,28 @@ export class DashboardController {
   @Get('van-hanh/tuyen')
   async danhSachTuyen() {
     return this.vanHanhService.danhSachTuyen();
+  }
+
+  // ---------------- TUỔI NỢ ----------------
+  //
+  // PLE đã có 9 màn báo cáo công nợ nhưng không màn nào trả lời "ai nợ LÂU
+  // nhất" — tất cả chỉ hiện số dư, không hiện thời gian.
+
+  /** Bốn ô tổng hợp theo nhóm tuổi. */
+  @Get('tuoi-no/tong-hop')
+  async tuoiNoTongHop() {
+    return this.tuoiNoService.tongHop();
+  }
+
+  /** Danh sách khách còn nợ; sapTheo = 'gia' (mặc định) | 'tien'. */
+  @Get('tuoi-no/danh-sach')
+  async tuoiNoDanhSach(@Query('sapTheo') sapTheo?: string, @Query('limit') limit?: string) {
+    return this.tuoiNoService.danhSach(sapTheo === 'tien' ? 'tien' : 'gia', Number(limit) || 200);
+  }
+
+  /** Chi tiết các khoản còn nợ của một khách. */
+  @Get('tuoi-no/chi-tiet')
+  async tuoiNoChiTiet(@Query('khach') khach: string) {
+    return this.tuoiNoService.chiTiet(khach);
   }
 }

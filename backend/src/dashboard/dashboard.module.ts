@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 import { VanHanhService } from './van-hanh.service';
+import { TuoiNoService } from './tuoi-no.service';
 import { DatabaseModule } from '../database/database.module';
 import { AuthModule } from '../auth/auth.module';
 
@@ -14,7 +15,7 @@ import { AuthModule } from '../auth/auth.module';
 @Module({
   imports: [DatabaseModule, AuthModule],
   controllers: [DashboardController],
-  providers: [DashboardService, VanHanhService],
-  exports: [DashboardService, VanHanhService],
+  providers: [DashboardService, VanHanhService, TuoiNoService],
+  exports: [DashboardService, VanHanhService, TuoiNoService],
 })
 export class DashboardModule {}
