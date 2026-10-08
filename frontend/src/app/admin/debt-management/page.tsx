@@ -665,7 +665,7 @@ export default function DebtManagementPage() {
 
   const buildExcelRows = (items: DebtManagementItem[]) => {
     const headers = [
-      'CongNo_ID', 'User Name', 'Mã đơn hàng', 'Order number', 'Tuyến', 'Lô hàng', 'Nội Dung', 'Ngày phát sinh',
+      'CongNo_ID', 'User Name', 'ID đơn hàng', 'Mã đơn hàng', 'Tuyến', 'Lô hàng', 'Nội Dung', 'Ngày phát sinh',
       'Doanh thu', 'Phụ thu', 'Phát sinh nợ', 'Phát sinh có', 'Ghi Chú', 'Loại phát sinh', 'Sản lượng (kg)',
       'Trạng thái', 'Người tạo', 'Người cập nhật cuối', 'Ngày cập nhật cuối',
     ];
@@ -1275,7 +1275,10 @@ export default function DebtManagementPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Order number</label>
+                {/* Ghi "Mã đơn hàng" chứ không phải "Order number": kế toán tìm theo
+                    chữ Việt, ô này có từ 07/09/2026 mà vẫn bị hỏi xin thêm vì
+                    không ai nhận ra nó là cái mình cần. */}
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Mã đơn hàng</label>
                 <input
                   type="text"
                   value={filters.orderNumber}
