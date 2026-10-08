@@ -665,7 +665,7 @@ export default function DebtManagementPage() {
 
   const buildExcelRows = (items: DebtManagementItem[]) => {
     const headers = [
-      'CongNo_ID', 'User Name', 'Order number', 'Tuyến', 'Lô hàng', 'Nội Dung', 'Ngày phát sinh',
+      'CongNo_ID', 'User Name', 'Mã đơn hàng', 'Order number', 'Tuyến', 'Lô hàng', 'Nội Dung', 'Ngày phát sinh',
       'Doanh thu', 'Phụ thu', 'Phát sinh nợ', 'Phát sinh có', 'Ghi Chú', 'Loại phát sinh', 'Sản lượng (kg)',
       'Trạng thái', 'Người tạo', 'Người cập nhật cuối', 'Ngày cập nhật cuối',
     ];
@@ -674,6 +674,10 @@ export default function DebtManagementPage() {
       return [
       item.CongNo_ID,
       item.UserName || '',
+      // Mã đơn hàng nội bộ (CONGNO.DonHang_ID) — mốc tra cứu chắc chắn nhất:
+      // `ordernumber` là mã bên sàn/nhà vận chuyển, có đơn trùng nhau (hai dòng
+      // công nợ cùng mã 1021020168), còn id thì không bao giờ trùng.
+      item.DonHang_ID ?? '',
       item.OrderNumber || '',
       item.Tuyen || '',
       lo,
