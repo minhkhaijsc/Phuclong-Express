@@ -61,13 +61,17 @@ export function BarChartNgang({
   const cao = height ?? Math.max(160, data.length * 34 + 40);
 
   // Thanh dài nhất chừa thêm chỗ cuối trục để nhãn "2.814,5 (82%)" không bị cắt.
+  //
+  // Làm tròn LÊN: 378 × 1,08 = 408,24 và recharts in nguyên vạch "408,24" ở
+  // cuối trục — một con số lẻ không có nghĩa gì, trông như lỗi.
   const lonNhat = Math.max(...data.map((d) => d.giaTri || 0), 0);
+  const hetTruc = Math.ceil(lonNhat * 1.08) || 1;
 
   return (
     <ResponsiveContainer width="100%" height={cao}>
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 72, left: 0, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
-        <XAxis type="number" tickFormatter={rutGon} domain={[0, lonNhat * 1.08 || 1]} fontSize={12} />
+        <XAxis type="number" tickFormatter={rutGon} domain={[0, hetTruc]} fontSize={12} />
         <YAxis type="category" dataKey="nhan" width={130} fontSize={12} interval={0} />
         <Tooltip
           // recharts gõ kiểu tham số rất rộng (ValueType), ép về số ngay tại đây

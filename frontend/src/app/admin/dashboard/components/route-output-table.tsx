@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DataTable } from '@/app/components/admin';
 import { getDashboardOutputByRoute } from '@/lib/api';
-import { BarChartNgang } from './bar-chart-ngang';
+import { BarChartNgang } from '@/app/components/bieu-do/bar-chart-ngang';
 
 interface RouteOutputTableProps {
   fromDate: string;

@@ -61,6 +61,9 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
 
   const authNavItems: NavItem[] = [
     { label: 'TRANG CHỦ', href: '/' },
+    // Đặt ngay sau TRANG CHỦ: đây là màn khách mở đầu tiên sau khi đăng nhập,
+    // nằm cuối menu thì không ai thấy.
+    { label: 'TỔNG QUAN', href: '/tong-quan' },
     {
       label: 'ĐẶT HÀNG',
       dropdown: [

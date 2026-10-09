@@ -1,7 +1,8 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, Query, Request, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { VanHanhService } from './van-hanh.service';
 import { TuoiNoService } from './tuoi-no.service';
+import { KhachHangService } from './khach-hang.service';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -18,6 +19,7 @@ export class DashboardController {
     private readonly dashboardService: DashboardService,
     private readonly vanHanhService: VanHanhService,
     private readonly tuoiNoService: TuoiNoService,
+    private readonly khachHangService: KhachHangService,
   ) {}
 
   /** KH mới theo ngày. */
@@ -122,5 +124,48 @@ export class DashboardController {
   @Get('tuoi-no/chi-tiet')
   async tuoiNoChiTiet(@Query('khach') khach: string) {
     return this.tuoiNoService.chiTiet(khach);
+  }
+
+  // ---------------- TỔNG QUAN CỦA KHÁCH HÀNG ----------------
+  //
+  // Màn /tong-quan mà chính khách đăng nhập vào xem. Mọi đường dưới đây lấy
+  // username TỪ JWT, không nhận từ query — xem ghi chú đầu `khach-hang.service.ts`.
+
+  /**
+   * Số liệu + sản lượng theo tuyến + chuỗi theo tháng, một lần gọi.
+   *
+   * `?khach=` CHỈ có tác dụng với tài khoản Admin (CSKH cần xem đúng thứ khách
+   * đang thấy khi khách gọi lên hỏi). Khách thường truyền vào sẽ bị bỏ qua —
+   * bỏ qua chứ không báo lỗi, vì đây không phải lỗi của người dùng thật, mà nếu
+   * báo lỗi thì lại thành cách để dò xem username nào tồn tại.
+   */
+  @Get('khach-hang/tong-quan')
+  async khachTongQuan(@Request() req: any, @Query('soThang') soThang?: string, @Query('khach') khach?: string) {
+    return this.khachHangService.tongQuan(this.khachDuocXem(req, khach), Number(soThang) || undefined);
+  }
+
+  /** Danh sách khách để Admin chọn khi xem hộ. Khách thường không được gọi. */
+  @Get('khach-hang/danh-sach')
+  async khachDanhSach(@Request() req: any, @Query('tuKhoa') tuKhoa?: string) {
+    if (!this.laAdmin(req)) throw new ForbiddenException('Chỉ Admin được xem danh sách khách');
+    return this.khachHangService.danhSachKhachCoDuLieu(tuKhoa);
+  }
+
+  private laAdmin(req: any): boolean {
+    return Array.isArray(req?.user?.roles) && req.user.roles.includes('Admin');
+  }
+
+  /**
+   * Username được phép xem: của chính mình, trừ khi là Admin và có chỉ định.
+   *
+   * Trả về chuỗi rỗng là KHÔNG được — truy vấn `UserName = ''` không khớp dòng
+   * nào nên vẫn an toàn, nhưng JwtAuthGuard đã chặn trước, tới đây thì chắc
+   * chắn có username.
+   */
+  private khachDuocXem(req: any, khach?: string): string {
+    const toi = String(req?.user?.username ?? '').trim();
+    const chiDinh = (khach ?? '').trim();
+    if (chiDinh && this.laAdmin(req)) return chiDinh;
+    return toi;
   }
 }

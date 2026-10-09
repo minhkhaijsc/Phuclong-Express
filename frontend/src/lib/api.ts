@@ -2496,3 +2496,136 @@ export const getTuoiNoChiTiet = async (khach: string): Promise<TuoiNoChiTiet[]> 
   const res = await apiClient.get(`/dashboard/tuoi-no/chi-tiet?khach=${encodeURIComponent(khach)}`);
   return res.data;
 };
+
+// ============================================================
+// TỔNG QUAN CỦA KHÁCH HÀNG (màn /tong-quan)
+// ============================================================
+//
+// Không hàm nào ở đây nhận username: máy chủ lấy từ JWT. Tham số `khach` chỉ
+// có tác dụng với tài khoản Admin (CSKH xem hộ màn của khách) và bị máy chủ bỏ
+// qua với mọi tài khoản khác — xem `backend/src/dashboard/khach-hang.service.ts`.
+
+export interface SoLieuKhach {
+  soKien: number;
+  soKien30Ngay: number;
+  soKg: number;
+  /** true khi có kiện nhưng chưa dòng nào được cân — để giao diện ghi rõ. */
+  kgThieuSo: boolean;
+  soTuyen: number;
+  /** Âm nghĩa là khách đã trả trước. */
+  duNo: number;
+  tongPhatSinh: number;
+  tongDaTra: number;
+  lanGuiGanNhat: string | null;
+}
+
+export interface TuyenCuaKhach {
+  tenQuocGia: string;
+  soKien: number;
+  tyLe: number;
+}
+
+export interface ThangCuaKhach {
+  /** yyyy-MM */
+  thang: string;
+  soKien: number;
+  soKg: number;
+  phatSinh: number;
+  daTra: number;
+  duNoCuoiThang: number;
+}
+
+export interface TongQuanKhach {
+  khach: string;
+  soThang: number;
+  soLieu: SoLieuKhach;
+  theoTuyen: TuyenCuaKhach[];
+  theoThang: ThangCuaKhach[];
+}
+
+export const getTongQuanKhach = async (soThang = 12, khach?: string): Promise<TongQuanKhach> => {
+  const p = new URLSearchParams({ soThang: String(soThang) });
+  if (khach) p.set('khach', khach);
+  const res = await apiClient.get(`/dashboard/khach-hang/tong-quan?${p}`);
+  return res.data;
+};
+
+export interface KhachCoDuLieu {
+  khach: string;
+  soKien: number;
+  lanCuoi: string | null;
+}
+
+/** Chỉ Admin gọi được — dùng cho ô chọn "xem hộ khách". */
+export const getDanhSachKhachCoDuLieu = async (tuKhoa?: string): Promise<KhachCoDuLieu[]> => {
+  const p = new URLSearchParams();
+  if (tuKhoa) p.set('tuKhoa', tuKhoa);
+  const res = await apiClient.get(`/dashboard/khach-hang/danh-sach?${p}`);
+  return res.data;
+};
+
+// ============================================================
+// TRẠNG THÁI KHÁCH HÀNG (màn admin/users)
+// ============================================================
+
+export type TrangThaiKhach = 'hoat-dong' | 'tam-nghi' | 'dong-ma';
+export type NhomTuDongKhach = 'hoat-dong' | 'nghi-3-6' | 'nghi-6-12' | 'nghi-tren-12' | 'chua-giao-dich';
+
+export interface KhachKemTrangThai {
+  id: string;
+  userName: string;
+  hoTen: string | null;
+  phone: string | null;
+  email: string | null;
+  lanGiaoDichCuoi: string | null;
+  soNgayNghi: number | null;
+  /** Suy ra từ dữ liệu, không phải cột trong bảng. */
+  nhomTuDong: NhomTuDongKhach;
+  /** null = chưa ai xét tới mã này. */
+  trangThai: TrangThaiKhach | null;
+  ngayDoiTrangThai: string | null;
+  nguoiDoiTrangThai: string | null;
+  lyDoTrangThai: string | null;
+  duNo: number;
+}
+
+export interface TongHopTrangThaiKhach {
+  tongKhach: number;
+  dangHoatDong: number;
+  nghi3Den6: number;
+  nghi6Den12: number;
+  nghiTren12: number;
+  chuaGiaoDich: number;
+  canDongMa: number;
+  canDongMaConNo: number;
+  tienConTreo: number;
+}
+
+export const getTongHopTrangThaiKhach = async (): Promise<TongHopTrangThaiKhach> => {
+  const res = await apiClient.get('/users/trang-thai/tong-hop');
+  return res.data;
+};
+
+export const getDanhSachTrangThaiKhach = async (opts: {
+  nhom?: string;
+  tuKhoa?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ data: KhachKemTrangThai[]; total: number; page: number; limit: number }> => {
+  const p = new URLSearchParams();
+  if (opts.nhom) p.set('nhom', opts.nhom);
+  if (opts.tuKhoa) p.set('tuKhoa', opts.tuKhoa);
+  p.set('page', String(opts.page ?? 1));
+  p.set('limit', String(opts.limit ?? 50));
+  const res = await apiClient.get(`/users/trang-thai?${p}`);
+  return res.data;
+};
+
+export const datTrangThaiKhach = async (
+  id: string,
+  trangThai: TrangThaiKhach,
+  lyDo?: string,
+): Promise<KhachKemTrangThai> => {
+  const res = await apiClient.put(`/users/trang-thai/${id}`, { trangThai, lyDo });
+  return res.data;
+};

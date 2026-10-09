@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -14,6 +15,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { TrangThaiKhachService } from './trang-thai-khach.service';
 import { User } from './entities/user.entity';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -22,10 +24,24 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  * Users Controller
  *
  * Handles user CRUD endpoints.
+ *
+ * `@UseGuards` đặt Ở CẤP LỚP, cố ý: trước đây chỉ hai đường (`POST /users` và
+ * `POST /users/clear-data`) có khoá, nên `GET /users` trả về danh sách 981 tài
+ * khoản kèm email + điện thoại, `PUT /users/:id` và `DELETE /users/:id` đều
+ * gọi được mà KHÔNG CẦN đăng nhập. Mọi nơi gọi trong giao diện đều là màn admin
+ * và `apiClient` luôn gắn token, nên khoá cả lớp không làm hỏng gì.
+ *
+ * Việc này cũng là điều kiện để phần trạng thái khách chạy đúng: nhật ký đổi
+ * trạng thái ghi `req.user.username`, không có khoá thì mọi thay đổi đều mang
+ * tên "system" và không truy được ai làm.
  */
 @Controller('users')
+@UseGuards(JwtAuthGuard)
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly trangThaiKhachService: TrangThaiKhachService,
+  ) {}
 
   /**
    * GET /users
@@ -34,6 +50,57 @@ export class UsersController {
   @Get()
   async findAll(@Query('keyword') keyword?: string): Promise<User[]> {
     return this.usersService.findAll(keyword);
+  }
+
+  // ---------------- TRẠNG THÁI KHÁCH HÀNG ----------------
+  //
+  // Khai TRƯỚC `@Get(':id')`: Nest so khớp theo thứ tự khai báo, để sau thì
+  // 'trang-thai' bị bắt làm giá trị của :id và luôn trả "không tìm thấy".
+
+  /**
+   * GET /users/trang-thai/tong-hop
+   * Các con số để nhắc CSKH đóng mã.
+   */
+  @Get('trang-thai/tong-hop')
+  async trangThaiTongHop() {
+    return this.trangThaiKhachService.tongHop();
+  }
+
+  /**
+   * GET /users/trang-thai
+   * Danh sách khách kèm tình trạng giao dịch. `nhom=can-dong-ma` cho việc cần làm.
+   */
+  @Get('trang-thai')
+  async trangThaiDanhSach(
+    @Query('nhom') nhom?: string,
+    @Query('tuKhoa') tuKhoa?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.trangThaiKhachService.danhSach({
+      nhom,
+      tuKhoa,
+      page: Number(page) || 1,
+      limit: Number(limit) || 50,
+    });
+  }
+
+  /**
+   * PUT /users/trang-thai/:id
+   * CSKH chốt trạng thái: hoat-dong | tam-nghi | dong-ma (đóng mã phải có lý do).
+   */
+  @Put('trang-thai/:id')
+  async datTrangThai(
+    @Param('id') id: string,
+    @Body() body: { trangThai: string; lyDo?: string },
+    @Request() req: any,
+  ) {
+    return this.trangThaiKhachService.dat(
+      id,
+      body?.trangThai,
+      body?.lyDo,
+      req.user?.username || 'system',
+    );
   }
 
   /**
@@ -50,7 +117,6 @@ export class UsersController {
    * Create new user
    */
   @Post()
-  @UseGuards(JwtAuthGuard)
   async create(@Body() userData: Partial<User>, @Request() req: any): Promise<User> {
     return this.usersService.create(userData, req.user?.username || 'system');
   }
@@ -74,6 +140,20 @@ export class UsersController {
    */
   @Delete(':id')
   async remove(@Param('id') id: string, @Request() req: any): Promise<void> {
+    // "Khách nghỉ, KHÔNG xoá": AspNetUsers bị xoá cứng (`user.destroy()`) trong
+    // khi CONGNO / tbTracking / Don_Hang trỏ tới khách bằng CHUỖI UserName,
+    // không khoá ngoại nào. Xoá một mã đang có giao dịch là để lại hàng nghìn
+    // dòng công nợ mồ côi, âm thầm, không cách nào dựng lại. Chặn tại đây và
+    // chỉ sang đổi trạng thái.
+    const u = await this.usersService.findByStringId(id);
+    const gd = await this.trangThaiKhachService.coGiaoDich(u.UserName);
+    if (gd.co) {
+      throw new BadRequestException(
+        `Không xoá được: mã ${u.UserName} đang có ${gd.congNo} dòng công nợ, ` +
+          `${gd.tracking} kiện hàng, ${gd.donHang} đơn mua hộ. ` +
+          `Khách ngừng giao dịch thì đổi trạng thái sang "Đã đóng mã", đừng xoá.`,
+      );
+    }
     return this.usersService.remove(id, req.user?.username || 'system');
   }
 
@@ -82,7 +162,6 @@ export class UsersController {
    * Clear all data for a specific user
    */
   @Post('clear-data')
-  @UseGuards(JwtAuthGuard)
   async clearUserData(@Body() body: { username: string }, @Request() req: any) {
     return this.usersService.clearUserData(body.username, req.user?.username || 'system');
   }

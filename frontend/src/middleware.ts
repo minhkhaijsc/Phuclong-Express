@@ -6,6 +6,7 @@ export function middleware(request: NextRequest) {
 
   // Danh sách các route cần bảo mật
   const protectedRoutes = [
+    '/tong-quan',
     '/dat-hang',
     '/danh-sach-don-hang',
     '/danh-sach-tracking',
@@ -45,6 +46,7 @@ export function middleware(request: NextRequest) {
 // Loại bỏ hoàn toàn các folder hệ thống của Next.js
 export const config = {
   matcher: [
+    '/tong-quan/:path*',
     '/dat-hang/:path*',
     '/danh-sach-don-hang/:path*',
     '/danh-sach-tracking/:path*',

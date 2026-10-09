@@ -115,6 +115,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       submenu: [
         { href: '/admin/roles', label: 'Role' },
         { href: '/admin/users', label: 'User' },
+        { href: '/admin/khach-ngung-giao-dich', label: 'Khách ngừng giao dịch' },
         { href: '/admin/clear-user-data', label: 'Xóa dữ liệu theo user' },
       ],
     },

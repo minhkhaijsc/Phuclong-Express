@@ -8,8 +8,15 @@ cũng ghi thật, trừ những đường bị chặn ở mục 3.
 
 ```bash
 cd backend && npm run build
-PORT=3101 node dist/src/main.js
+CORS_THEM=http://localhost:9555 PORT=3101 node dist/src/main.js
 ```
+
+**`CORS_THEM` là bắt buộc nếu web chạy ở cổng 9555.** Danh sách gốc được gọi API
+trong `main.ts` chỉ có `localhost:3000` và hai tên miền thật; thiếu biến này thì
+mọi lời gọi từ 9555 bị trình duyệt chặn — biểu hiện là **trang trắng, ô số đứng
+im, mà nhật ký máy chủ không có lấy một dòng**. Lỗi chỉ hiện trong Console của
+trình duyệt (`blocked by CORS policy`), rất dễ lần nhầm sang phía backend. Máy
+chủ thật không đặt biến này nên danh sách giữ nguyên như cũ.
 
 **Đừng dùng cổng 3001 mặc định**: máy đã có một ứng dụng node khác nghe cổng đó.
 Windows cho hai tiến trình cùng bind một cổng, không báo lỗi gì, rồi request rơi

@@ -11,9 +11,11 @@ import {
   FiUsers,
   FiRefreshCw,
   FiExternalLink,
+  FiAlertTriangle,
 } from 'react-icons/fi';
 import apiClient from '@/lib/api-client';
 import { downloadDataAsExcel } from '@/lib/excel-download';
+import { getTongHopTrangThaiKhach } from '@/lib/api';
 
 interface User {
   Id: string;
@@ -36,6 +38,12 @@ export default function ListUserPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  /**
+   * Lời nhắc đóng mã. Nạp rời khỏi danh sách user vì truy vấn này quét cả
+   * CONGNO / tbTracking / Don_Hang (~1,5 giây) — gộp vào thì danh sách user
+   * cũng phải đợi theo, mà người vào đây thường chỉ muốn tra một tài khoản.
+   */
+  const [canDongMa, setCanDongMa] = useState<{ canDongMa: number; canDongMaConNo: number } | null>(null);
 
   const fetchUsers = useCallback(async (kw: string) => {
     setLoading(true);
@@ -55,6 +63,13 @@ export default function ListUserPage() {
     fetchUsers('');
   }, [fetchUsers]);
 
+  useEffect(() => {
+    // Hỏng thì im lặng: đây là lời nhắc phụ, không được chặn màn danh sách.
+    getTongHopTrangThaiKhach()
+      .then((t) => setCanDongMa({ canDongMa: t.canDongMa, canDongMaConNo: t.canDongMaConNo }))
+      .catch(() => undefined);
+  }, []);
+
   const handleSearch = () => fetchUsers(keyword);
 
   const handleDelete = async (id: string, username: string) => {
@@ -63,8 +78,11 @@ export default function ListUserPage() {
     try {
       await apiClient.delete(`/users/${id}`);
       setUsers(prev => prev.filter(u => u.Id !== id));
-    } catch {
-      alert('Xóa thất bại');
+    } catch (e: any) {
+      // PHẢI hiện câu của máy chủ. Backend chặn xoá mã còn giao dịch và câu trả
+      // về nói rõ còn bao nhiêu dòng công nợ, bao nhiêu kiện, và phải làm gì
+      // thay thế. Nuốt đi rồi hiện "Xóa thất bại" là bỏ mất toàn bộ chỗ hữu ích.
+      alert(e?.response?.data?.message || 'Xóa thất bại');
     } finally {
       setDeletingId(null);
     }
@@ -117,6 +135,27 @@ export default function ListUserPage() {
           </Link>
         </div>
       </div>
+
+      {/* Nhắc CSKH đóng mã — số liệu ở màn "Khách ngừng giao dịch" */}
+      {canDongMa && canDongMa.canDongMa > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <FiAlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+          <span>
+            <strong>{canDongMa.canDongMa.toLocaleString('vi-VN')}</strong> mã khách quá 3 tháng
+            không phát sinh giao dịch, cần xem và đóng mã
+            {canDongMa.canDongMaConNo > 0 && (
+              <> — trong đó <strong>{canDongMa.canDongMaConNo}</strong> mã còn nợ</>
+            )}
+            .
+          </span>
+          <Link
+            href="/admin/khach-ngung-giao-dich"
+            className="ml-auto rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 cursor-pointer"
+          >
+            Xem danh sách
+          </Link>
+        </div>
+      )}
 
       {/* Search bar */}
       <div className="flex items-center gap-3">

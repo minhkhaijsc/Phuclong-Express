@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { DataTable } from '@/app/components/admin';
 import { DashboardStaffOutput, getDashboardOutputByStaff, getDashboardOutputDetail, getQuocGia } from '@/lib/api';
 import { downloadDataAsExcel } from '@/lib/excel-download';
-import { BarChartNgang } from './bar-chart-ngang';
+import { BarChartNgang } from '@/app/components/bieu-do/bar-chart-ngang';
 
 interface StaffOutputTableProps {
   fromDate: string;
