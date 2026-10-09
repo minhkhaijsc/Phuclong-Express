@@ -93,6 +93,25 @@ describe('TrangThaiKhachService', () => {
       expect(sql).toContain('NOT EXISTS (SELECT 1 FROM AspNetUserRoles');
     });
 
+    it('nhưng MỞ một tài khoản cụ thể thì KHÔNG lọc vai trò', async () => {
+      // Lọc ở đây là bít đường: nhân viên nghỉ việc (CSKHTHUPHUONG có vai trò
+      // Sale + Kho) sẽ trả "không tìm thấy", và cách duy nhất còn lại để dọn
+      // tài khoản đó là xoá cứng — đúng thứ phần này sinh ra để chặn.
+      mockSequelize.query.mockResolvedValue([DONG_KHACH]);
+      await service.motKhach('abc-123');
+      const [sql] = mockSequelize.query.mock.calls[0];
+      expect(sql).not.toContain('NOT EXISTS (SELECT 1 FROM AspNetUserRoles');
+      expect(sql).toContain('laNhanVien');
+    });
+
+    it('đổi trạng thái được cho tài khoản nhân viên', async () => {
+      mockSequelize.query.mockResolvedValue([{ ...DONG_KHACH, laNhanVien: 1 }]);
+      const kq = await service.dat('abc-123', 'dong-ma', 'nghỉ việc 09/2026', 'admin');
+      expect(kq.laNhanVien).toBe(true);
+      const coUpdate = mockSequelize.query.mock.calls.some(([q]) => String(q).includes('UPDATE'));
+      expect(coUpdate).toBe(true);
+    });
+
     it('nhóm lạ thì KHÔNG lọc gì, và không ghép chuỗi vào SQL', async () => {
       mockSequelize.query.mockResolvedValue([]);
       await service.danhSach({ nhom: "'; DROP TABLE CONGNO--" });
@@ -206,21 +225,59 @@ describe('TrangThaiKhachService', () => {
     });
   });
 
-  describe('coGiaoDich — chốt chặn "khách nghỉ, không xoá"', () => {
-    it('đếm cả ba nguồn', async () => {
-      mockSequelize.query.mockResolvedValue([{ congNo: 277, tracking: 379, donHang: 0 }]);
-      const kq = await service.coGiaoDich('HP3028');
-      expect(kq).toEqual({ co: true, congNo: 277, tracking: 379, donHang: 0 });
+  describe('raSoatXoa — chốt chặn "nghỉ thì đóng mã, không xoá"', () => {
+    const dong = (o: Record<string, number>) =>
+      mockSequelize.query.mockResolvedValue([
+        {
+          laNhanVien: 0,
+          khachCongNo: 0,
+          khachTracking: 0,
+          khachDonHang: 0,
+          taoCongNo: 0,
+          taoTracking: 0,
+          taoDonHang: 0,
+          duNo: 0,
+          ...o,
+        },
+      ]);
+
+    it('đếm dòng MANG TÊN mã — cả ba nguồn', async () => {
+      dong({ khachCongNo: 526, khachTracking: 379, duNo: -14666335.55 });
+      const kq = await service.raSoatXoa('HP3028');
+      expect(kq.chan).toBe(true);
+      expect(kq.laKhach).toEqual({ congNo: 526, tracking: 379, donHang: 0, tong: 905 });
+      expect(kq.duNo).toBeCloseTo(-14666335.55, 2);
     });
 
-    it('chỉ có đơn mua hộ cũng tính là có giao dịch', async () => {
-      mockSequelize.query.mockResolvedValue([{ congNo: 0, tracking: 0, donHang: 4 }]);
-      expect((await service.coGiaoDich('AI_DO')).co).toBe(true);
+    it('chặn cả tài khoản sạch tên mình nhưng ĐÃ TẠO ra dữ liệu', async () => {
+      // CSKHNHI: 0 dòng mang tên nó, nhưng là người nhập 78.783 kiện hàng. Bản
+      // đầu chỉ đếm nhóm trên nên tài khoản này xoá trôi, kéo theo 78.783 dòng
+      // mất tên người nhập.
+      dong({ laNhanVien: 1, taoCongNo: 72, taoTracking: 78783, taoDonHang: 1 });
+      const kq = await service.raSoatXoa('CSKHNHI');
+      expect(kq.chan).toBe(true);
+      expect(kq.laKhach.tong).toBe(0);
+      expect(kq.daTao).toEqual({ congNo: 72, tracking: 78783, donHang: 1, tong: 78856 });
+      expect(kq.laNhanVien).toBe(true);
     });
 
-    it('sạch cả ba nguồn thì mới cho xoá', async () => {
-      mockSequelize.query.mockResolvedValue([{ congNo: 0, tracking: 0, donHang: 0 }]);
-      expect((await service.coGiaoDich('TRONG')).co).toBe(false);
+    it('chỉ có đơn mua hộ cũng là có dữ liệu', async () => {
+      dong({ khachDonHang: 4 });
+      expect((await service.raSoatXoa('AI_DO')).chan).toBe(true);
+    });
+
+    it('sạch CẢ SÁU nguồn thì mới cho xoá', async () => {
+      dong({});
+      const kq = await service.raSoatXoa('TRONG');
+      expect(kq.chan).toBe(false);
+      expect(kq.laKhach.tong + kq.daTao.tong).toBe(0);
+    });
+
+    it('không có dòng trả về thì coi là sạch, không ra NaN', async () => {
+      mockSequelize.query.mockResolvedValue([]);
+      const kq = await service.raSoatXoa('KHONG_CO');
+      expect(kq.chan).toBe(false);
+      expect(Number.isNaN(kq.duNo)).toBe(false);
     });
   });
 });

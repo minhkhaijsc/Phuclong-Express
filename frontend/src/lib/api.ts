@@ -2589,6 +2589,13 @@ export interface KhachKemTrangThai {
   nguoiDoiTrangThai: string | null;
   lyDoTrangThai: string | null;
   duNo: number;
+  /**
+   * Tài khoản nội bộ (có vai trò Admin/Kho/Sale/Order), không phải khách.
+   *
+   * Chỉ có giá trị thật khi lấy qua `getMotTrangThaiKhach`; danh sách việc cần
+   * làm vốn đã loại hết nhân viên nên ở đó luôn là false.
+   */
+  laNhanVien?: boolean;
 }
 
 export interface TongHopTrangThaiKhach {
@@ -2620,6 +2627,17 @@ export const getDanhSachTrangThaiKhach = async (opts: {
   p.set('page', String(opts.page ?? 1));
   p.set('limit', String(opts.limit ?? 50));
   const res = await apiClient.get(`/users/trang-thai?${p}`);
+  return res.data;
+};
+
+/**
+ * Một tài khoản kèm mốc giao dịch cuối + dư nợ.
+ *
+ * Màn danh sách User chỉ có dòng `AspNetUsers` thô; hộp đổi trạng thái cần hai
+ * thứ kia để người bấm biết mình đang đóng mã của ai và còn nợ bao nhiêu.
+ */
+export const getMotTrangThaiKhach = async (id: string): Promise<KhachKemTrangThai> => {
+  const res = await apiClient.get(`/users/trang-thai/mot/${id}`);
   return res.data;
 };
 

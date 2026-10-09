@@ -15,7 +15,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { TrangThaiKhachService } from './trang-thai-khach.service';
+import { TrangThaiKhachService, RaSoatXoa } from './trang-thai-khach.service';
 import { User } from './entities/user.entity';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -86,6 +86,20 @@ export class UsersController {
   }
 
   /**
+   * GET /users/trang-thai/mot/:id
+   *
+   * Một tài khoản kèm mốc giao dịch cuối + dư nợ. Màn danh sách User chỉ có
+   * dòng `AspNetUsers` thô, không có hai thứ đó — mà đóng mã khi chưa biết
+   * khách còn nợ bao nhiêu thì đúng là làm mò.
+   *
+   * KHÔNG lọc theo vai trò: tài khoản nhân viên cũng phải mở được ở đây.
+   */
+  @Get('trang-thai/mot/:id')
+  async motTrangThai(@Param('id') id: string) {
+    return this.trangThaiKhachService.motKhach(id);
+  }
+
+  /**
    * PUT /users/trang-thai/:id
    * CSKH chốt trạng thái: hoat-dong | tam-nghi | dong-ma (đóng mã phải có lý do).
    */
@@ -141,20 +155,65 @@ export class UsersController {
   @Delete(':id')
   async remove(@Param('id') id: string, @Request() req: any): Promise<void> {
     // "Khách nghỉ, KHÔNG xoá": AspNetUsers bị xoá cứng (`user.destroy()`) trong
-    // khi CONGNO / tbTracking / Don_Hang trỏ tới khách bằng CHUỖI UserName,
-    // không khoá ngoại nào. Xoá một mã đang có giao dịch là để lại hàng nghìn
-    // dòng công nợ mồ côi, âm thầm, không cách nào dựng lại. Chặn tại đây và
-    // chỉ sang đổi trạng thái.
+    // khi CONGNO / tbTracking / Don_Hang trỏ tới tài khoản bằng CHUỖI UserName,
+    // không khoá ngoại nào (đã kiểm: 0 foreign key trỏ về AspNetUsers). Xoá một
+    // mã đang có dữ liệu là để lại hàng nghìn dòng mồ côi, âm thầm, không cách
+    // nào dựng lại. Chặn tại đây và chỉ sang đổi trạng thái.
     const u = await this.usersService.findByStringId(id);
-    const gd = await this.trangThaiKhachService.coGiaoDich(u.UserName);
-    if (gd.co) {
-      throw new BadRequestException(
-        `Không xoá được: mã ${u.UserName} đang có ${gd.congNo} dòng công nợ, ` +
-          `${gd.tracking} kiện hàng, ${gd.donHang} đơn mua hộ. ` +
-          `Khách ngừng giao dịch thì đổi trạng thái sang "Đã đóng mã", đừng xoá.`,
-      );
+    const rs = await this.trangThaiKhachService.raSoatXoa(u.UserName);
+    if (rs.chan) {
+      throw new BadRequestException(this.loiChanXoa(u, rs));
     }
     return this.usersService.remove(id, req.user?.username || 'system');
+  }
+
+  /**
+   * Câu từ chối xoá.
+   *
+   * Viết dài có chủ ý. Người bấm xoá đang muốn dọn danh sách, câu trả về phải
+   * nói đủ ba điều, không thì họ chỉ thấy "lỗi": vì sao chặn, CON SỐ nào đang
+   * bị chặn, và làm gì thay thế. Bản đầu gọi mọi tài khoản là "khách" và chỉ
+   * đẩy sang "đóng mã" — với tài khoản kế toán hay CSKH thì câu đó vừa sai vừa
+   * dẫn vào đường cùng, vì màn nhắc đóng mã chỉ liệt kê tài khoản không có vai
+   * trò.
+   */
+  private loiChanXoa(u: User, rs: RaSoatXoa): string {
+    // Làm tròn về đồng: dư nợ là cột float, để nguyên thì câu hiện
+    // "14.666.335,55đ" — hai số lẻ đó là bụi làm tròn, không phải tiền.
+    const so = (n: number) => Math.round(n).toLocaleString('vi-VN');
+    const ten = u.HoTen ? `${u.UserName} (${u.HoTen})` : u.UserName;
+
+    const ke = (g: { congNo: number; tracking: number; donHang: number }) =>
+      [
+        g.congNo ? `${so(g.congNo)} dòng công nợ` : '',
+        g.tracking ? `${so(g.tracking)} kiện hàng` : '',
+        g.donHang ? `${so(g.donHang)} đơn mua hộ` : '',
+      ]
+        .filter(Boolean)
+        .join(', ');
+
+    const phan: string[] = [];
+    if (rs.laKhach.tong > 0) phan.push(`đang mang ${ke(rs.laKhach)} của chính mã này`);
+    if (rs.daTao.tong > 0) phan.push(`là người nhập ${ke(rs.daTao)}`);
+
+    const dong: string[] = [
+      `Không xoá được ${rs.laNhanVien ? 'tài khoản nhân viên' : 'mã khách'} ${ten}: ` +
+        `${phan.join('; ')}.`,
+    ];
+
+    // Tiền là lý do mạnh nhất, và là thứ duy nhất không dọn được về sau.
+    if (rs.duNo >= 1000) dong.push(`Mã này còn nợ ${so(rs.duNo)}đ — chốt nợ trước đã.`);
+    else if (rs.duNo <= -1000) dong.push(`Mã này đang dư trả trước ${so(-rs.duNo)}đ.`);
+
+    dong.push(
+      rs.laNhanVien
+        ? 'Xoá đi thì những dòng trên mất tên người nhập, không truy lại được việc về ai. ' +
+            'Nhân viên nghỉ việc thì đổi trạng thái sang "Đã đóng mã" — tài khoản không ' +
+            'đăng nhập được nữa mà dữ liệu cũ vẫn tra được.'
+        : 'Khách ngừng giao dịch thì đổi trạng thái sang "Đã đóng mã", đừng xoá.',
+    );
+
+    return dong.join(' ');
   }
 
   /**

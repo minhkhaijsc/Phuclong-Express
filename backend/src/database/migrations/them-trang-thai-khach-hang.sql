@@ -23,6 +23,14 @@
 -- không mặc định 'hoat-dong' để phân biệt được "đã xem và thấy vẫn hoạt động"
 -- với "chưa ai nhìn tới mã này".
 --
+-- 'dong-ma' CHẶN ĐĂNG NHẬP (`auth.service.ts`, kiểm sau khi mật khẩu đã đúng).
+-- Hai trạng thái còn lại không chặn gì — 'tam-nghi' là ghi chú của CSKH, chặn
+-- luôn cả nó thì một lần bấm nhầm là khách mất đường vào. Lúc đầu không có
+-- phần chặn này và 'dong-ma' chỉ là cái nhãn để bỏ mã khỏi danh sách việc cần
+-- làm; nhưng câu từ chối xoá tài khoản khuyên "đóng mã thay vì xoá", nên nếu
+-- đóng mã không khoá được gì thì lời khuyên đó là sai, nhất là với tài khoản
+-- nhân viên đã nghỉ việc.
+--
 -- SỐ ĐO ngày 09/10/2026 (938 khách = tài khoản không có vai trò nào):
 --      515 còn hoạt động (<3 tháng)   54 nghỉ 3–6 tháng
 --       92 nghỉ 6–12 tháng           217 nghỉ hơn 1 năm

@@ -111,6 +111,30 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // ĐÓNG MÃ phải thật sự đóng được đường vào.
+    //
+    // Không có chỗ này thì "đóng mã" chỉ là một nhãn: mã biến khỏi danh sách
+    // việc cần làm của CSKH, nhưng người giữ mật khẩu vẫn đăng nhập xem dữ liệu
+    // như thường. Với tài khoản nhân viên đã nghỉ thì đó đúng là lỗ hổng, và nó
+    // cũng là lý do câu từ chối xoá dám khuyên "đóng mã thay vì xoá".
+    //
+    // Kiểm SAU khi đã xác thực mật khẩu, cố ý: trả lời "mã đã đóng" cho một lần
+    // thử mật khẩu sai là tiết lộ mã đó có tồn tại.
+    if (user.TrangThai === 'dong-ma') {
+      await this.systemLogsService
+        .create({
+          nguoiTao: user.UserName,
+          nguon: 'Auth:Login',
+          hanhDong: 'Dang nhap',
+          doiTuong: user.Id,
+          noiDung: `TU CHOI - ma da dong. UserName: ${user.UserName}; LyDo: ${user.LyDoTrangThai || '(khong ghi)'}`,
+        })
+        .catch((err) => console.error('[SystemLog]', err?.message ?? err));
+      throw new UnauthorizedException(
+        'Mã này đã đóng, không đăng nhập được. Liên hệ CSKH nếu cần mở lại.',
+      );
+    }
+
     await this.systemLogsService.create({
       nguoiTao: user.UserName,
       nguon: 'Auth:Login',

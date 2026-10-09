@@ -12,10 +12,16 @@ import {
   FiRefreshCw,
   FiExternalLink,
   FiAlertTriangle,
+  FiLock,
 } from 'react-icons/fi';
 import apiClient from '@/lib/api-client';
 import { downloadDataAsExcel } from '@/lib/excel-download';
-import { getTongHopTrangThaiKhach } from '@/lib/api';
+import {
+  getTongHopTrangThaiKhach,
+  getMotTrangThaiKhach,
+  type KhachKemTrangThai,
+} from '@/lib/api';
+import { HopDoiTrangThai } from '@/app/components/hop-doi-trang-thai';
 
 interface User {
   Id: string;
@@ -44,6 +50,17 @@ export default function ListUserPage() {
    * cũng phải đợi theo, mà người vào đây thường chỉ muốn tra một tài khoản.
    */
   const [canDongMa, setCanDongMa] = useState<{ canDongMa: number; canDongMaConNo: number } | null>(null);
+  /**
+   * Tài khoản đang mở hộp đổi trạng thái.
+   *
+   * Có ở màn này vì màn nhắc đóng mã chỉ liệt kê tài khoản KHÔNG có vai trò.
+   * Tài khoản nhân viên (kế toán, CSKH, kho) không bao giờ hiện ở đó, nên nếu
+   * chỉ có đường dẫn sang bên kia thì người ta vẫn không khoá được nó — đúng
+   * tình trạng hôm 09/10/2026: chặn xoá hai tài khoản kế toán rồi để người
+   * dùng ở đường cùng.
+   */
+  const [dangSuaTrangThai, setDangSuaTrangThai] = useState<KhachKemTrangThai | null>(null);
+  const [dangMoTrangThai, setDangMoTrangThai] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async (kw: string) => {
     setLoading(true);
@@ -72,6 +89,17 @@ export default function ListUserPage() {
 
   const handleSearch = () => fetchUsers(keyword);
 
+  const moTrangThai = async (id: string) => {
+    setDangMoTrangThai(id);
+    try {
+      setDangSuaTrangThai(await getMotTrangThaiKhach(id));
+    } catch (e: any) {
+      alert(e?.response?.data?.message || 'Không mở được trạng thái của tài khoản này');
+    } finally {
+      setDangMoTrangThai(null);
+    }
+  };
+
   const handleDelete = async (id: string, username: string) => {
     if (!confirm(`Bạn có chắc muốn xóa user "${username}"?`)) return;
     setDeletingId(id);
@@ -79,10 +107,15 @@ export default function ListUserPage() {
       await apiClient.delete(`/users/${id}`);
       setUsers(prev => prev.filter(u => u.Id !== id));
     } catch (e: any) {
-      // PHẢI hiện câu của máy chủ. Backend chặn xoá mã còn giao dịch và câu trả
-      // về nói rõ còn bao nhiêu dòng công nợ, bao nhiêu kiện, và phải làm gì
-      // thay thế. Nuốt đi rồi hiện "Xóa thất bại" là bỏ mất toàn bộ chỗ hữu ích.
-      alert(e?.response?.data?.message || 'Xóa thất bại');
+      // PHẢI hiện câu của máy chủ. Backend chặn xoá mã còn dữ liệu và câu trả
+      // về nói rõ còn bao nhiêu dòng công nợ, bao nhiêu kiện, ai là người nhập,
+      // và phải làm gì thay thế. Nuốt đi rồi hiện "Xóa thất bại" là bỏ mất toàn
+      // bộ chỗ hữu ích — đúng cái đã xảy ra hôm 09/10/2026.
+      const cau = e?.response?.data?.message;
+      alert(cau || 'Xóa thất bại');
+      // Bị chặn thì mở luôn hộp đổi trạng thái: câu trên vừa khuyên "đóng mã
+      // thay vì xoá", bắt người ta tự đi tìm chỗ làm việc đó là bỏ dở câu nói.
+      if (e?.response?.status === 400 && cau) await moTrangThai(id);
     } finally {
       setDeletingId(null);
     }
@@ -272,19 +305,39 @@ export default function ListUserPage() {
                         <span className="text-slate-300">—</span>
                       )}
                     </td>
+                    {/*
+                      Hai thao tác không nguy hiểm để NGUYÊN BIỂU TƯỢNG, chỉ "Xóa"
+                      còn chữ.
+                      Bảng này 11 cột và dùng `table-fixed`, nên mỗi cột được
+                      khoảng 182px (đo tại chỗ) — ba nút có chữ cần ~235px, chữ
+                      xuống dòng và nút cuối bị cắt mất. Đặt `w-[250px]` cho cột
+                      cũng không ăn thua: trình duyệt co lại cho vừa bề ngang bảng.
+                      Chữ "Xóa" giữ lại vì đó là thao tác không lùi được — nó phải
+                      đọc ra thành lời, không để người ta bấm nhầm một biểu tượng.
+                    */}
                     <td className="px-3 py-2.5">
-                      <div className="flex items-center justify-center gap-1.5">
+                      <div className="flex items-center justify-center gap-1 whitespace-nowrap">
                         <Link
                           href={`/admin/users/${user.Id}`}
-                          className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800 cursor-pointer"
+                          title="Xem chi tiết tài khoản"
+                          aria-label="Xem chi tiết tài khoản"
+                          className="inline-flex items-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 cursor-pointer"
                         >
                           <FiEye className="h-4 w-4" />
-                          Chi tiết
                         </Link>
+                        <button
+                          onClick={() => moTrangThai(user.Id)}
+                          disabled={dangMoTrangThai === user.Id}
+                          title="Đổi trạng thái — đóng mã / khoá đăng nhập, dùng thay cho xoá"
+                          aria-label="Đổi trạng thái tài khoản"
+                          className="inline-flex items-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50 cursor-pointer"
+                        >
+                          <FiLock className={`h-4 w-4 ${dangMoTrangThai === user.Id ? 'animate-pulse' : ''}`} />
+                        </button>
                         <button
                           onClick={() => handleDelete(user.Id, user.UserName)}
                           disabled={deletingId === user.Id}
-                          className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 cursor-pointer"
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 cursor-pointer"
                         >
                           <FiTrash2 className="h-4 w-4" />
                           {deletingId === user.Id ? '...' : 'Xóa'}
@@ -298,6 +351,20 @@ export default function ListUserPage() {
           </div>
         )}
       </div>
+
+      {dangSuaTrangThai && (
+        <HopDoiTrangThai
+          khach={dangSuaTrangThai}
+          dong={() => setDangSuaTrangThai(null)}
+          xong={() => {
+            setDangSuaTrangThai(null);
+            // Nạp lại lời nhắc: vừa đóng một mã thì con số phải giảm theo.
+            getTongHopTrangThaiKhach()
+              .then((t) => setCanDongMa({ canDongMa: t.canDongMa, canDongMaConNo: t.canDongMaConNo }))
+              .catch(() => undefined);
+          }}
+        />
+      )}
     </div>
   );
 }

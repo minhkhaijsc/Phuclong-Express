@@ -65,6 +65,32 @@ export interface KhachKemTrangThai {
   lyDoTrangThai: string | null;
   /** Còn nợ bao nhiêu — CSKH cần biết trước khi đóng mã. */
   duNo: number;
+  /** Có vai trò trong AspNetUserRoles — tài khoản nội bộ, không phải khách. */
+  laNhanVien: boolean;
+}
+
+/**
+ * Rà soát trước khi xoá cứng một tài khoản.
+ *
+ * Tách làm HAI NHÓM vì chúng là hai kiểu thiệt hại khác nhau, và bản đầu của
+ * phần này chỉ đếm nhóm thứ nhất:
+ *
+ *   • `laKhach` — dòng MANG TÊN tài khoản. Xoá đi thì công nợ, kiện hàng, đơn
+ *     mua hộ của chính mã đó thành vô chủ.
+ *   • `daTao`   — dòng tài khoản này LÀM RA (`NguoiTao` / `usernamesave`). Đây
+ *     mới là chỗ chứa phần lớn dữ liệu của tài khoản nhân viên: đo ngày
+ *     09/10/2026 có 12 tài khoản sạch ở nhóm trên nhưng lại là người tạo ra
+ *     dữ liệu, nặng nhất là CSKHNHI với 78.783 kiện hàng. Chỉ đếm nhóm trên
+ *     thì mấy tài khoản đó xoá trôi, và 78.783 dòng mất tên người nhập —
+ *     không hỏng ngay, chỉ là từ đó không ai truy được việc về ai.
+ */
+export interface RaSoatXoa {
+  chan: boolean;
+  laNhanVien: boolean;
+  laKhach: { congNo: number; tracking: number; donHang: number; tong: number };
+  daTao: { congNo: number; tracking: number; donHang: number; tong: number };
+  /** Dư nợ của chính mã này. Âm = khách trả trước. */
+  duNo: number;
 }
 
 export interface TongHopTrangThai {
@@ -126,7 +152,17 @@ export class TrangThaiKhachService {
     return { moc3: lui(SO_THANG_NGUNG_GIAO_DICH), moc6: lui(6), moc12: lui(12) };
   }
 
-  private readonly KHOI_KHACH = `
+  /**
+   * `chiKhach = false` để MỞ và ĐỔI trạng thái cho tài khoản nhân viên.
+   *
+   * Danh sách việc cần làm vẫn chỉ gồm khách (`true`): CSKH không có việc gì
+   * với mã nhân viên. Nhưng khi admin bấm vào đúng một tài khoản để đóng nó
+   * lại thì lọc theo vai trò là bít đường — `motKhach` trả "không tìm thấy",
+   * và nhân viên nghỉ việc không còn cách nào khoá ngoài xoá cứng, đúng cái
+   * phần này sinh ra để tránh.
+   */
+  private khoi(chiKhach = true): string {
+    return `
     WITH GiaoDich AS (
       SELECT UserName AS u, MAX(NgayGhiNo) AS lanCuoi FROM CONGNO WHERE DaXoa = 0 GROUP BY UserName
       UNION ALL
@@ -146,6 +182,8 @@ export class TrangThaiKhachService {
              us.TrangThai, us.NgayDoiTrangThai, us.NguoiDoiTrangThai, us.LyDoTrangThai,
              c.lanCuoi,
              ISNULL(n.duNo, 0) AS duNo,
+             CASE WHEN EXISTS (SELECT 1 FROM AspNetUserRoles r WHERE r.UserId = us.Id)
+                  THEN 1 ELSE 0 END AS laNhanVien,
              CASE
                WHEN c.lanCuoi IS NULL THEN 'chua-giao-dich'
                WHEN c.lanCuoi >= :moc3  THEN 'hoat-dong'
@@ -156,13 +194,14 @@ export class TrangThaiKhachService {
       FROM AspNetUsers us
       LEFT JOIN Cuoi c ON c.u = us.UserName
       LEFT JOIN No   n ON n.u = us.UserName
-      WHERE NOT EXISTS (SELECT 1 FROM AspNetUserRoles r WHERE r.UserId = us.Id)
+      ${chiKhach ? 'WHERE NOT EXISTS (SELECT 1 FROM AspNetUserRoles r WHERE r.UserId = us.Id)' : ''}
     )`;
+  }
 
   /** Các con số để hiện lời nhắc trên màn danh sách khách. */
   async tongHop(): Promise<TongHopTrangThai> {
     const [r] = await this.hoi<any>(
-      `${this.KHOI_KHACH}
+      `${this.khoi()}
        SELECT
          COUNT(*) AS tongKhach,
          SUM(CASE WHEN nhomTuDong = 'hoat-dong'      THEN 1 ELSE 0 END) AS dangHoatDong,
@@ -219,12 +258,12 @@ export class TrangThaiKhachService {
     const p = { ...this.moc(), tuKhoa, offset: (page - 1) * limit, limit };
 
     const [dem] = await this.hoi<any>(
-      `${this.KHOI_KHACH} SELECT COUNT(*) AS total FROM Khach WHERE 1 = 1${locNhom}${locTuKhoa}`,
+      `${this.khoi()} SELECT COUNT(*) AS total FROM Khach WHERE 1 = 1${locNhom}${locTuKhoa}`,
       p,
     );
 
     const rows = await this.hoi<any>(
-      `${this.KHOI_KHACH}
+      `${this.khoi()}
        SELECT Id, UserName, HoTen, PhoneNumber, Email, TrangThai,
               NgayDoiTrangThai, NguoiDoiTrangThai, LyDoTrangThai,
               lanCuoi, duNo, nhomTuDong
@@ -243,17 +282,21 @@ export class TrangThaiKhachService {
     };
   }
 
-  /** Một khách — dùng khi mở hộp thoại đổi trạng thái. */
+  /**
+   * Một tài khoản — dùng khi mở hộp thoại đổi trạng thái.
+   *
+   * KHÔNG lọc theo vai trò: nhân viên nghỉ việc cũng phải đóng được.
+   */
   async motKhach(id: string): Promise<KhachKemTrangThai> {
     const [r] = await this.hoi<any>(
-      `${this.KHOI_KHACH}
+      `${this.khoi(false)}
        SELECT Id, UserName, HoTen, PhoneNumber, Email, TrangThai,
               NgayDoiTrangThai, NguoiDoiTrangThai, LyDoTrangThai,
-              lanCuoi, duNo, nhomTuDong
+              lanCuoi, duNo, nhomTuDong, laNhanVien
        FROM Khach WHERE Id = :id`,
       { ...this.moc(), id },
     );
-    if (!r) throw new NotFoundException('Không tìm thấy khách hàng này');
+    if (!r) throw new NotFoundException('Không tìm thấy tài khoản này');
     return this.doiDong(r);
   }
 
@@ -310,23 +353,55 @@ export class TrangThaiKhachService {
   }
 
   /**
-   * Khách này có dữ liệu giao dịch nào chưa — để chặn xoá cứng.
+   * Tài khoản này còn dính dữ liệu nào không — để chặn xoá cứng.
    *
-   * Dùng EXISTS thay vì COUNT: chỉ cần biết có hay không, EXISTS dừng ngay ở
-   * dòng đầu tìm thấy.
+   * `AspNetUsers` KHÔNG có khoá ngoại nào trỏ về (đã kiểm trên CSDL thật: 0
+   * foreign key). Nghĩa là `user.destroy()` luôn thành công, kể cả khi tài
+   * khoản đang gánh hàng nghìn dòng — CSDL không hề cản. Chốt duy nhất là chỗ
+   * này, nên nó phải đếm đủ.
+   *
+   * Dùng COUNT chứ không EXISTS: con số mới là thứ thuyết phục người bấm xoá
+   * dừng tay, "có dữ liệu" thì ai cũng nghĩ là vài dòng. Đo trên prod
+   * 09/10/2026: 318–969 ms cho một tài khoản, chấp nhận được cho một lần bấm.
    */
-  async coGiaoDich(userName: string): Promise<{ co: boolean; congNo: number; tracking: number; donHang: number }> {
+  async raSoatXoa(userName: string): Promise<RaSoatXoa> {
     const [r] = await this.hoi<any>(
       `SELECT
-         (SELECT COUNT(*) FROM CONGNO     WHERE DaXoa = 0 AND UserName = :u) AS congNo,
-         (SELECT COUNT(*) FROM tbTracking WHERE DaXoa = 0 AND UserName = :u) AS tracking,
-         (SELECT COUNT(*) FROM Don_Hang   WHERE ISNULL(DaXoa,0) = 0 AND username = :u) AS donHang`,
+         CASE WHEN EXISTS (SELECT 1 FROM AspNetUserRoles r
+                            JOIN AspNetUsers u2 ON u2.Id = r.UserId
+                           WHERE u2.UserName = :u) THEN 1 ELSE 0 END AS laNhanVien,
+         (SELECT COUNT(*) FROM CONGNO     WHERE DaXoa = 0 AND UserName = :u)           AS khachCongNo,
+         (SELECT COUNT(*) FROM tbTracking WHERE DaXoa = 0 AND UserName = :u)           AS khachTracking,
+         (SELECT COUNT(*) FROM Don_Hang   WHERE ISNULL(DaXoa,0) = 0 AND username = :u) AS khachDonHang,
+         (SELECT COUNT(*) FROM CONGNO     WHERE NguoiTao = :u)                         AS taoCongNo,
+         (SELECT COUNT(*) FROM tbTracking WHERE NguoiTao = :u)                         AS taoTracking,
+         (SELECT COUNT(*) FROM Don_Hang   WHERE usernamesave = :u)                     AS taoDonHang,
+         (SELECT SUM(ISNULL(DR,0)) - SUM(ISNULL(CR,0)) FROM CONGNO
+           WHERE DaXoa = 0 AND UserName = :u)                                          AS duNo`,
       { u: userName },
     );
-    const congNo = Number(r?.congNo ?? 0);
-    const tracking = Number(r?.tracking ?? 0);
-    const donHang = Number(r?.donHang ?? 0);
-    return { co: congNo + tracking + donHang > 0, congNo, tracking, donHang };
+    const n = (k: string) => Number(r?.[k] ?? 0);
+    const laKhach = {
+      congNo: n('khachCongNo'),
+      tracking: n('khachTracking'),
+      donHang: n('khachDonHang'),
+      tong: 0,
+    };
+    laKhach.tong = laKhach.congNo + laKhach.tracking + laKhach.donHang;
+    const daTao = {
+      congNo: n('taoCongNo'),
+      tracking: n('taoTracking'),
+      donHang: n('taoDonHang'),
+      tong: 0,
+    };
+    daTao.tong = daTao.congNo + daTao.tracking + daTao.donHang;
+    return {
+      chan: laKhach.tong + daTao.tong > 0,
+      laNhanVien: n('laNhanVien') === 1,
+      laKhach,
+      daTao,
+      duNo: Math.round(n('duNo') * 100) / 100,
+    };
   }
 
   // ----------------------------------------------------------------
@@ -376,6 +451,9 @@ export class TrangThaiKhachService {
       nguoiDoiTrangThai: r.NguoiDoiTrangThai ?? null,
       lyDoTrangThai: r.LyDoTrangThai ?? null,
       duNo: Math.round(Number(r.duNo ?? 0) * 100) / 100,
+      // Cột này chỉ có ở `motKhach` (bản không lọc vai trò); danh sách việc cần
+      // làm vốn đã loại hết nhân viên nên ở đó luôn là false.
+      laNhanVien: Number(r.laNhanVien ?? 0) === 1,
     };
   }
 }
