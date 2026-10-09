@@ -2506,11 +2506,13 @@ export const getTuoiNoChiTiet = async (khach: string): Promise<TuoiNoChiTiet[]> 
 // qua với mọi tài khoản khác — xem `backend/src/dashboard/khach-hang.service.ts`.
 
 export interface SoLieuKhach {
-  soKien: number;
-  soKien30Ngay: number;
+  /** Sản lượng = KG. Đây là thước đo chính. */
   soKg: number;
-  /** true khi có kiện nhưng chưa dòng nào được cân — để giao diện ghi rõ. */
-  kgThieuSo: boolean;
+  soKg30Ngay: number;
+  /** Số kiện — số phụ, đi kèm cho dễ hình dung. */
+  soKien: number;
+  /** Số dòng cân không đọc được kg. Khác 0 thì màn phải nói ra. */
+  soDongThieuKg: number;
   soTuyen: number;
   /** Âm nghĩa là khách đã trả trước. */
   duNo: number;
@@ -2521,15 +2523,15 @@ export interface SoLieuKhach {
 
 export interface TuyenCuaKhach {
   tenQuocGia: string;
-  soKien: number;
+  soKg: number;
   tyLe: number;
 }
 
 export interface ThangCuaKhach {
   /** yyyy-MM */
   thang: string;
-  soKien: number;
   soKg: number;
+  soKien: number;
   phatSinh: number;
   daTra: number;
   duNoCuoiThang: number;

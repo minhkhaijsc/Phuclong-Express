@@ -20,23 +20,26 @@ import { BarChartThang } from '@/app/components/bieu-do/bar-chart-thang';
  * tôi". Ô chọn khách chỉ hiện với tài khoản Admin, để CSKH xem đúng thứ khách
  * đang thấy khi khách gọi lên hỏi.
  *
- * THƯỚC ĐO là SỐ KIỆN, không phải kg — đo dữ liệu thật 09/10/2026: 131.594
- * kiện trong 12 tháng gần đủ tuyến (chỉ 4 kiện thiếu), còn cột kg
- * (CONGNO.SanLuong) mới điền từ tháng 6/2026 nên 5 tháng đầu sẽ bằng 0. Lấy kg
- * làm cột chính thì khách tưởng mình không gửi gì nửa đầu năm. Kg vẫn hiện,
- * nhưng là số phụ và có ghi chú.
+ * THƯỚC ĐO là KG — đây là cách bên vận hành hiểu chữ "sản lượng", và là thứ
+ * khách trả tiền theo. Số kiện vẫn hiện nhưng chỉ là số phụ.
+ *
+ * Lấy được kg không đơn giản: cột `CONGNO.SanLuong` mới có từ 06/2026, trước
+ * đó CSKH gõ kg vào ô ghi chú, lại dính vài dòng mất dấu thập phân. Toàn bộ
+ * luật đọc nằm ở `backend/src/dashboard/san-luong-kg.ts`. Màn này chỉ cần biết
+ * một điều: có `soDongThieuKg` dòng không đo được, và PHẢI nói ra con số đó.
  */
 
 const MAU = {
-  kien: '#14264b',
+  kg: '#14264b',
   phatSinh: '#dc2626',
   daTra: '#16a34a',
   duNo: '#f59e0b',
 };
 
 const tien = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
-const soKien = (v: number) => `${v.toLocaleString('vi-VN')} kiện`;
-const kg = (v: number) => `${v.toLocaleString('vi-VN', { maximumFractionDigits: 2 })} kg`;
+// Một chữ số lẻ là đủ: cân đến gram thì "1.729,18 kg" dài mà không ai dùng tới
+// số thứ hai; hoá đơn vẫn tính trên số gốc, đây chỉ là chỗ nhìn tổng quan.
+const kg = (v: number) => `${v.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} kg`;
 
 const CHON_THANG = [
   { gt: 6, nhan: '6 tháng' },
@@ -68,17 +71,10 @@ export default function TongQuanPage() {
   const sl = d?.soLieu;
 
   const duLieuTuyen = useMemo(
-    () => (d?.theoTuyen ?? []).map((t) => ({ nhan: t.tenQuocGia, giaTri: t.soKien })),
+    () => (d?.theoTuyen ?? []).map((t) => ({ nhan: t.tenQuocGia, giaTri: t.soKg })),
     [d?.theoTuyen],
   );
 
-  /**
-   * Chỉ vẽ cột kg khi THẬT CÓ số kg.
-   *
-   * Biểu đồ kg toàn 0 ở nửa đầu rồi mới nhô lên không phải là "khách gửi ít
-   * hơn", mà là cột dữ liệu mới có từ tháng 6/2026. Vẽ ra là nói sai.
-   */
-  const coSoKg = useMemo(() => (d?.theoThang ?? []).some((t) => t.soKg > 0), [d?.theoThang]);
 
   const duNo = sl?.duNo ?? 0;
   const traTruoc = duNo < 0;
@@ -152,14 +148,14 @@ export default function TongQuanPage() {
       {/* ---- Bốn ô số ---- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <OSo
-          nhan={`Kiện đã gửi (${soThang} tháng)`}
-          giaTri={q.isLoading ? '…' : (sl?.soKien ?? 0).toLocaleString('vi-VN')}
-          phu={coSoKg && sl ? kg(sl.soKg) : undefined}
+          nhan={`Sản lượng (${soThang} tháng)`}
+          giaTri={q.isLoading ? '…' : kg(sl?.soKg ?? 0)}
+          phu={sl ? `${sl.soKien.toLocaleString('vi-VN')} kiện` : undefined}
           icon={<FiPackage />}
         />
         <OSo
-          nhan="Kiện 30 ngày gần nhất"
-          giaTri={q.isLoading ? '…' : (sl?.soKien30Ngay ?? 0).toLocaleString('vi-VN')}
+          nhan="Sản lượng 30 ngày gần nhất"
+          giaTri={q.isLoading ? '…' : kg(sl?.soKg30Ngay ?? 0)}
           icon={<FiTrendingUp />}
         />
         <OSo
@@ -189,30 +185,34 @@ export default function TongQuanPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
         <Khoi
           tieuDe="Sản lượng theo tuyến"
-          moTa={`Số kiện mỗi tuyến trong ${soThang} tháng gần nhất`}
+          moTa={`Số kg mỗi tuyến trong ${soThang} tháng gần nhất`}
         >
           <BarChartNgang
             data={duLieuTuyen}
-            valueFormatter={soKien}
+            valueFormatter={kg}
             hienTyTrong
             loading={q.isLoading}
-            emptyMessage="Chưa có kiện nào trong khoảng này"
+            emptyMessage="Chưa có hàng nào được cân trong khoảng này"
           />
         </Khoi>
 
-        <Khoi tieuDe="Sản lượng tổng theo tháng" moTa="Tổng số kiện từng tháng">
+        <Khoi tieuDe="Sản lượng tổng theo tháng" moTa="Tổng số kg từng tháng">
           <BarChartThang
             data={(d?.theoThang ?? []) as any}
-            cot={[{ key: 'soKien', nhan: 'Số kiện', mau: MAU.kien }]}
-            dinhDang={soKien}
+            cot={[{ key: 'soKg', nhan: 'Sản lượng', mau: MAU.kg }]}
+            dinhDang={kg}
             hienSoTrenCot
             dangTai={q.isLoading}
           />
-          {coSoKg && (
-            <p className="mt-2 text-xs text-gray-400 flex items-start gap-1.5">
+          {/*
+            Nói thẳng khi có dòng không đo được, thay vì lặng lẽ cộng thiếu.
+            Toàn hệ có 9,3% dòng cân không ghi kg ở đâu cả.
+          */}
+          {!!sl?.soDongThieuKg && (
+            <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-600">
               <FiInfo className="mt-0.5 shrink-0" />
-              Số kg chỉ có từ tháng 6/2026 trở đi nên không vẽ thành cột; xem kg từng
-              tháng ở bảng cân đối công nợ.
+              {sl.soDongThieuKg} dòng cân chưa ghi số kg nên không tính vào tổng. Cần đối
+              chiếu thì xem bảng cân đối công nợ hoặc báo nhân viên phụ trách.
             </p>
           )}
         </Khoi>

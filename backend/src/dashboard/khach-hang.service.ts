@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
+import { KG_CROSS_APPLY, TONG_KG, TUYEN_CROSS_APPLY, TUYEN_ID, STYLE_CAN_KG, KG } from './san-luong-kg';
 
 /**
  * Số liệu tổng quan cho TÀI KHOẢN KHÁCH HÀNG (màn /tong-quan).
@@ -9,32 +10,37 @@ import { Sequelize } from 'sequelize-typescript';
  * JWT rồi truyền xuống. Nếu để khách tự truyền `?khach=` thì khách A xem được
  * công nợ của khách B, mà công nợ là thứ nhạy cảm nhất trong hệ này.
  *
- * CHỌN THƯỚC ĐO — đo dữ liệu thật ngày 09/10/2026 rồi mới chọn:
+ * THƯỚC ĐO:
  *
- *   • "Sản lượng" = SỐ KIỆN, lấy từ tbTracking. Lý do: 131.594 kiện trong 12
- *     tháng, chỉ 4 kiện thiếu tuyến (0,003%) → chia theo tuyến tin được.
- *   • KG chỉ là số phụ, KHÔNG dùng làm thước đo chính: CONGNO.SanLuong mới
- *     được điền từ 06/2026, cả 12 tháng chỉ 7.856/55.677 dòng có số. Lấy kg
- *     làm cột chính thì khách nhìn 5 tháng đầu tưởng mình không gửi gì.
+ *   • "Sản lượng" = SỐ KG. Đây là cách bên vận hành hiểu từ này, và là thứ
+ *     khách trả tiền theo. Cách lấy kg từ dữ liệu khá lắt léo (cột mới chỉ có
+ *     từ 06/2026, trước đó nằm trong ô ghi chú, lại dính vài dòng mất dấu
+ *     thập phân) — toàn bộ nằm ở `san-luong-kg.ts`, đọc ở đó.
+ *   • Số KIỆN vẫn lấy từ tbTracking và vẫn hiện, nhưng là số phụ: nó trả lời
+ *     "bao nhiêu gói", còn kg mới là sản lượng.
  *   • Công nợ: DR = phát sinh, CR = đã trả. Dư nợ = Σ DR − Σ CR từ đầu, giống
  *     đúng cách bảng "Cân đối công nợ" đang tính (SP_BaoCao_ChiTietCongNo1 với
  *     @TuKyID=-1 cho số đầu kỳ = 0).
  *
- * Số dư ÂM là chuyện bình thường (khách trả trước — HP3028 đang âm 12,9 tr),
- * nên bên giao diện phải đổi nhãn theo dấu, đừng hiện "Dư nợ: -12.906.335đ".
+ * Số dư ÂM là chuyện bình thường (khách trả trước — HP3028 đang dư 13 triệu),
+ * nên bên giao diện phải đổi nhãn theo dấu, đừng hiện "Dư nợ: -13.021.336đ".
  */
 
 /** Tài khoản kho gom hàng chưa khớp chủ — không phải khách thật. */
 const KHO_CHUA_CO_CHU = 'CHECKKHACH';
 
 export interface SoLieuKhach {
-  /** Tổng kiện trong khoảng đang xem. */
-  soKien: number;
-  /** Kiện của 30 ngày gần nhất — để khách thấy nhịp hiện tại. */
-  soKien30Ngay: number;
-  /** Kg đã cân được; `kgThieuSo` = true khi có kiện mà chưa có kg nào. */
+  /** Tổng kg trong khoảng đang xem — thước đo chính. */
   soKg: number;
-  kgThieuSo: boolean;
+  /** Kg của 30 ngày gần nhất — để khách thấy nhịp hiện tại. */
+  soKg30Ngay: number;
+  /** Số kiện (tbTracking) — số phụ, đi kèm cho dễ hình dung. */
+  soKien: number;
+  /**
+   * Số dòng cân KHÔNG đọc được kg trong khoảng xem. Khác 0 thì giao diện phải
+   * nói ra, đừng để khách tưởng tổng kg là đầy đủ.
+   */
+  soDongThieuKg: number;
   soTuyen: number;
   /** Σ DR − Σ CR TỪ ĐẦU (không theo khoảng ngày) — số dư thật hôm nay. */
   duNo: number;
@@ -45,15 +51,15 @@ export interface SoLieuKhach {
 
 export interface TuyenCuaKhach {
   tenQuocGia: string;
-  soKien: number;
+  soKg: number;
   tyLe: number;
 }
 
 export interface ThangCuaKhach {
   /** yyyy-MM */
   thang: string;
-  soKien: number;
   soKg: number;
+  soKien: number;
   phatSinh: number;
   daTra: number;
   /** Dư nợ tích luỹ đến hết tháng đó. */
@@ -92,20 +98,35 @@ export class KhachHangService {
   async soLieu(username: string, soThang?: number): Promise<SoLieuKhach> {
     const p = { khach: username, tu: this.tuNgay(this.chuanHoaSoThang(soThang)) };
 
+    // Sản lượng: kg từ CONGNO, kèm số dòng không đọc được để màn nói thật.
+    const [sl] = await this.hoi<any>(
+      `SELECT ${TONG_KG} AS soKg,
+              SUM(CASE WHEN c.NgayGhiNo >= DATEADD(day,-30,GETDATE()) THEN ISNULL(${KG},0) ELSE 0 END) AS soKg30Ngay,
+              SUM(CASE WHEN ${KG} IS NULL THEN 1 ELSE 0 END) AS soDongThieuKg
+       FROM CONGNO c ${KG_CROSS_APPLY}
+       WHERE c.DaXoa = 0 AND c.style = ${STYLE_CAN_KG}
+         AND c.UserName = :khach AND c.NgayGhiNo >= :tu`,
+      p,
+    );
+
+    // Số kiện và lần gửi gần nhất: tbTracking.
     const [kien] = await this.hoi<any>(
-      `SELECT COUNT(*) AS soKien,
-              COUNT(DISTINCT t.QuocGiaID) AS soTuyen,
-              SUM(CASE WHEN t.NgayTao >= DATEADD(day,-30,GETDATE()) THEN 1 ELSE 0 END) AS soKien30Ngay,
-              MAX(t.NgayTao) AS lanGuiGanNhat
+      `SELECT COUNT(*) AS soKien, MAX(t.NgayTao) AS lanGuiGanNhat
        FROM tbTracking t
        WHERE t.DaXoa = 0 AND t.UserName = :khach AND t.NgayTao >= :tu`,
       p,
     );
 
-    const [kg] = await this.hoi<any>(
-      `SELECT SUM(ISNULL(c.SanLuong,0)) AS soKg
-       FROM CONGNO c
-       WHERE c.DaXoa = 0 AND c.UserName = :khach AND c.NgayGhiNo >= :tu`,
+    // Số tuyến đếm từ CHÍNH nguồn vẽ biểu đồ tuyến (CONGNO), không đếm từ
+    // tbTracking: hai bảng không khớp nhau (HP3028 có 1 kiện đi Mỹ trong
+    // tracking nhưng không có dòng cân nào cho tuyến đó), nên đếm chéo nguồn
+    // thì ô số ghi "2 tuyến" mà biểu đồ ngay bên dưới chỉ vẽ 1.
+    const [tuyen] = await this.hoi<any>(
+      `SELECT COUNT(DISTINCT ${TUYEN_ID}) AS soTuyen
+       FROM CONGNO c ${KG_CROSS_APPLY} ${TUYEN_CROSS_APPLY}
+       WHERE c.DaXoa = 0 AND c.style = ${STYLE_CAN_KG}
+         AND c.UserName = :khach AND c.NgayGhiNo >= :tu
+         AND ${KG} IS NOT NULL AND ${TUYEN_ID} IS NOT NULL`,
       p,
     );
 
@@ -118,17 +139,15 @@ export class KhachHangService {
       { khach: username },
     );
 
-    const soKien = Number(kien?.soKien ?? 0);
-    const soKg = Number(kg?.soKg ?? 0);
     const tongPhatSinh = Number(no?.tongPhatSinh ?? 0);
     const tongDaTra = Number(no?.tongDaTra ?? 0);
 
     return {
-      soKien,
-      soKien30Ngay: Number(kien?.soKien30Ngay ?? 0),
-      soKg: Math.round(soKg * 100) / 100,
-      kgThieuSo: soKien > 0 && soKg <= 0,
-      soTuyen: Number(kien?.soTuyen ?? 0),
+      soKg: Math.round(Number(sl?.soKg ?? 0) * 100) / 100,
+      soKg30Ngay: Math.round(Number(sl?.soKg30Ngay ?? 0) * 100) / 100,
+      soDongThieuKg: Number(sl?.soDongThieuKg ?? 0),
+      soKien: Number(kien?.soKien ?? 0),
+      soTuyen: Number(tuyen?.soTuyen ?? 0),
       duNo: Math.round((tongPhatSinh - tongDaTra) * 100) / 100,
       tongPhatSinh,
       tongDaTra,
@@ -136,32 +155,34 @@ export class KhachHangService {
     };
   }
 
-  /** Sản lượng chia theo tuyến — để vẽ sơ đồ tròn/thanh. */
+  /** Sản lượng (kg) chia theo tuyến — để vẽ sơ đồ. */
   async theoTuyen(username: string, soThang?: number): Promise<TuyenCuaKhach[]> {
     const rows = await this.hoi<any>(
-      `SELECT ISNULL(q.TenQuocGia, N'(chưa gán tuyến)') AS tenQuocGia, COUNT(*) AS soKien
-       FROM tbTracking t
-       LEFT JOIN tbQuocGia q ON q.QuocGiaID = t.QuocGiaID
-       WHERE t.DaXoa = 0 AND t.UserName = :khach AND t.NgayTao >= :tu
+      `SELECT ISNULL(q.TenQuocGia, N'(chưa rõ tuyến)') AS tenQuocGia, ${TONG_KG} AS soKg
+       FROM CONGNO c ${KG_CROSS_APPLY} ${TUYEN_CROSS_APPLY}
+       LEFT JOIN tbQuocGia q ON q.QuocGiaID = ${TUYEN_ID}
+       WHERE c.DaXoa = 0 AND c.style = ${STYLE_CAN_KG}
+         AND c.UserName = :khach AND c.NgayGhiNo >= :tu
+         AND ${KG} IS NOT NULL
        GROUP BY q.TenQuocGia
        ORDER BY 2 DESC`,
       { khach: username, tu: this.tuNgay(this.chuanHoaSoThang(soThang)) },
     );
-    const tong = rows.reduce((s, r) => s + Number(r.soKien ?? 0), 0);
+    const tong = rows.reduce((s, r) => s + Number(r.soKg ?? 0), 0);
     return rows.map((r) => ({
       tenQuocGia: String(r.tenQuocGia),
-      soKien: Number(r.soKien ?? 0),
-      tyLe: tong > 0 ? Math.round((Number(r.soKien ?? 0) / tong) * 1000) / 10 : 0,
+      soKg: Math.round(Number(r.soKg ?? 0) * 100) / 100,
+      tyLe: tong > 0 ? Math.round((Number(r.soKg ?? 0) / tong) * 1000) / 10 : 0,
     }));
   }
 
   /**
    * Chuỗi theo tháng: sản lượng và công nợ cạnh nhau.
    *
-   * Hai nguồn (tbTracking cho kiện, CONGNO cho tiền) được gộp Ở ĐÂY chứ không
-   * FULL JOIN trong SQL: tháng có tiền mà không có kiện (khách chỉ trả nợ cũ)
-   * và tháng có kiện mà chưa ghi nợ đều tồn tại thật, FULL JOIN trên SQL Server
-   * 2014 viết ra dài mà vẫn phải vá tháng trống bằng JS.
+   * Ba nguồn (kg và tiền từ CONGNO, kiện từ tbTracking) được gộp Ở ĐÂY chứ
+   * không FULL JOIN trong SQL: tháng có tiền mà không có hàng (khách chỉ trả nợ
+   * cũ) và tháng có hàng mà chưa ghi nợ đều tồn tại thật, FULL JOIN trên SQL
+   * Server 2014 viết ra dài mà vẫn phải vá tháng trống bằng JS.
    *
    * Tháng KHÔNG có dữ liệu vẫn được trả về với số 0 — thiếu tháng thì biểu đồ
    * nối thẳng hai cột cách nhau 3 tháng, nhìn như liên tiếp.
@@ -170,22 +191,22 @@ export class KhachHangService {
     const n = this.chuanHoaSoThang(soThang);
     const p = { khach: username, tu: this.tuNgay(n) };
 
+    const tien = await this.hoi<any>(
+      `SELECT CONVERT(char(7), c.NgayGhiNo, 126) AS thang,
+              SUM(ISNULL(c.DR,0)) AS phatSinh,
+              SUM(ISNULL(c.CR,0)) AS daTra,
+              ${TONG_KG} AS soKg
+       FROM CONGNO c ${KG_CROSS_APPLY}
+       WHERE c.DaXoa = 0 AND c.UserName = :khach AND c.NgayGhiNo >= :tu
+       GROUP BY CONVERT(char(7), c.NgayGhiNo, 126)`,
+      p,
+    );
+
     const kien = await this.hoi<any>(
       `SELECT CONVERT(char(7), t.NgayTao, 126) AS thang, COUNT(*) AS soKien
        FROM tbTracking t
        WHERE t.DaXoa = 0 AND t.UserName = :khach AND t.NgayTao >= :tu
        GROUP BY CONVERT(char(7), t.NgayTao, 126)`,
-      p,
-    );
-
-    const tien = await this.hoi<any>(
-      `SELECT CONVERT(char(7), c.NgayGhiNo, 126) AS thang,
-              SUM(ISNULL(c.DR,0)) AS phatSinh,
-              SUM(ISNULL(c.CR,0)) AS daTra,
-              SUM(ISNULL(c.SanLuong,0)) AS soKg
-       FROM CONGNO c
-       WHERE c.DaXoa = 0 AND c.UserName = :khach AND c.NgayGhiNo >= :tu
-       GROUP BY CONVERT(char(7), c.NgayGhiNo, 126)`,
       p,
     );
 
@@ -213,8 +234,8 @@ export class KhachHangService {
       luyKe += phatSinh - daTra;
       kq.push({
         thang,
-        soKien: mKien.get(thang) ?? 0,
         soKg: Math.round(Number(t?.soKg ?? 0) * 100) / 100,
+        soKien: mKien.get(thang) ?? 0,
         phatSinh,
         daTra,
         duNoCuoiThang: Math.round(luyKe * 100) / 100,
@@ -234,6 +255,7 @@ export class KhachHangService {
     let dau = 0;
     while (
       dau < kq.length - 1 &&
+      kq[dau].soKg === 0 &&
       kq[dau].soKien === 0 &&
       kq[dau].phatSinh === 0 &&
       kq[dau].daTra === 0 &&

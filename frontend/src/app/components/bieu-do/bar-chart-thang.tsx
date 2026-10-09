@@ -65,7 +65,9 @@ const rutGon = (v: number): string => {
   if (n >= 1e9) return `${(v / 1e9).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tỷ`;
   if (n >= 1e6) return `${(v / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tr`;
   if (n >= 1e3) return `${(v / 1e3).toLocaleString('vi-VN', { maximumFractionDigits: 1 })}k`;
-  return v.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+  // Một chữ số lẻ, khớp với cách các ô số đầu màn hiện kg. Hai chữ số ("181,74
+  // kg") vừa dài vừa không ai dùng tới, mà lại lệch với ô số ngay phía trên.
+  return v.toLocaleString('vi-VN', { maximumFractionDigits: 1 });
 };
 
 export function BarChartThang({

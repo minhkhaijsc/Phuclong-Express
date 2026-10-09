@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
+import { KG, KG_CROSS_APPLY, STYLE_CAN_KG, TONG_KG, TUYEN_CROSS_APPLY, TUYEN_ID } from './san-luong-kg';
 import { formatSqlDate, formatSqlEndOfDay, parseVietnameseDate } from '../helpers/sql-date.helper';
 
 /**
@@ -115,8 +116,15 @@ export class DashboardService {
    * Viết thẳng SQL thay vì thêm một SP: trên máy chủ thật phải chạy migration
    * mới có SP, mà phần lớn logic ở đây lại trùng với SP đã có.
    *
-   * Tuyến trống (QuocGiaID NULL) vẫn hiện thành "Chưa gán tuyến" — giấu đi thì
-   * cộng các dòng lại không bằng tổng, người xem tưởng báo cáo sai.
+   * Tuyến trống vẫn hiện thành "Chưa gán tuyến" — giấu đi thì cộng các dòng lại
+   * không bằng tổng, người xem tưởng báo cáo sai.
+   *
+   * KG lấy qua `san-luong-kg.ts`, KHÔNG đọc thẳng `CONGNO.SanLuong`. Cách cũ
+   * (`SUM(ISNULL(SanLuong,0))`) báo 0 kg cho bảy tháng từ 10/2025 đến 4/2026 vì
+   * cột ấy chưa tồn tại, và báo 57.016 kg cho tháng 6/2026 trong khi thật ra là
+   * 10.342 kg — vài dòng mất dấu thập phân (19354 vốn là 19,354 kg) đủ sức thổi
+   * cả tháng lên 5,5 lần. Tuyến cũng lấy qua đó: `CONGNO.QuocGiaID` chỉ có ở
+   * 22% số dòng cân.
    */
   async getOutputByRoute(
     fromDate?: string,
@@ -132,10 +140,11 @@ export class DashboardService {
            GROUP BY QuocGiaID, FORMAT(ngaymuahang, 'yyyy-MM')
          ),
          KgTheoTuyen AS (
-           SELECT QuocGiaID, FORMAT(NgayGhiNo, 'yyyy-MM') AS Thang, SUM(ISNULL(SanLuong, 0)) AS SanLuongKg
-           FROM dbo.CONGNO
-           WHERE DaXoa = 0 AND SanLuong IS NOT NULL AND NgayGhiNo BETWEEN :tuNgay AND :denNgay
-           GROUP BY QuocGiaID, FORMAT(NgayGhiNo, 'yyyy-MM')
+           SELECT ${TUYEN_ID} AS QuocGiaID, FORMAT(c.NgayGhiNo, 'yyyy-MM') AS Thang, ${TONG_KG} AS SanLuongKg
+           FROM dbo.CONGNO c ${KG_CROSS_APPLY} ${TUYEN_CROSS_APPLY}
+           WHERE c.DaXoa = 0 AND c.style = ${STYLE_CAN_KG}
+             AND ${KG} IS NOT NULL AND c.NgayGhiNo BETWEEN :tuNgay AND :denNgay
+           GROUP BY ${TUYEN_ID}, FORMAT(c.NgayGhiNo, 'yyyy-MM')
          ),
          Gop AS (
            SELECT ISNULL(d.QuocGiaID, k.QuocGiaID) AS QuocGiaID,

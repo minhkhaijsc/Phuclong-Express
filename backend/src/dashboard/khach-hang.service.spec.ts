@@ -4,6 +4,9 @@ import { KhachHangService } from './khach-hang.service';
 /**
  * Mỗi phép kiểm dưới đây ứng với một cách dữ liệu thật làm màn tổng quan nói sai.
  * Các con số lấy từ khách HP3028 và HP220 (đo 09/10/2026).
+ *
+ * "Sản lượng" ở đây là KG. Luật đọc kg nằm ở `san-luong-kg.ts`; phần kiểm
+ * riêng cho các luật đó ở `san-luong-kg.spec.ts`.
  */
 describe('KhachHangService', () => {
   let service: KhachHangService;
@@ -18,20 +21,21 @@ describe('KhachHangService', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  /** Thứ tự gọi query trong soLieu(): kiện → kg → nợ. */
-  const dungSoLieu = (kien: any, kg: any, no: any) => {
+  /** Thứ tự gọi query trong soLieu(): kg → kiện → số tuyến → nợ. */
+  const dungSoLieu = (kg: any, kien: any, no: any, tuyen: any = { soTuyen: 1 }) => {
     mockSequelize.query
-      .mockResolvedValueOnce([kien])
       .mockResolvedValueOnce([kg])
+      .mockResolvedValueOnce([kien])
+      .mockResolvedValueOnce([tuyen])
       .mockResolvedValueOnce([no]);
   };
 
   describe('soLieu', () => {
     it('khoá cứng username vào MỌI truy vấn — không có đường nào xem được khách khác', async () => {
-      dungSoLieu({ soKien: 379, soTuyen: 2, soKien30Ngay: 122 }, { soKg: 1454.76 }, {});
+      dungSoLieu({ soKg: 1794.38, soKg30Ngay: 775.7 }, { soKien: 379, soTuyen: 2 }, {});
       await service.soLieu('HP3028', 12);
 
-      expect(mockSequelize.query).toHaveBeenCalledTimes(3);
+      expect(mockSequelize.query).toHaveBeenCalledTimes(4);
       for (const [sql, opts] of mockSequelize.query.mock.calls) {
         expect(opts.replacements.khach).toBe('HP3028');
         expect(sql).toContain(':khach');
@@ -41,33 +45,47 @@ describe('KhachHangService', () => {
     it('dư nợ KHÔNG bị giới hạn theo khoảng ngày', async () => {
       // Số dư là số tích luỹ. Cắt theo khoảng xem thì con số lệch khỏi bảng
       // cân đối công nợ, khách gọi lên hỏi vì sao hai màn khác nhau.
-      dungSoLieu({ soKien: 1 }, { soKg: 0 }, { tongPhatSinh: 444595352.45, tongDaTra: 457501688 });
+      dungSoLieu({ soKg: 1 }, { soKien: 1 }, { tongPhatSinh: 444595352.45, tongDaTra: 457616688 });
       await service.soLieu('HP3028', 6);
 
-      const [sqlNo, optsNo] = mockSequelize.query.mock.calls[2];
+      const [sqlNo, optsNo] = mockSequelize.query.mock.calls[3];
       expect(sqlNo).not.toContain(':tu');
       expect(optsNo.replacements).toEqual({ khach: 'HP3028' });
     });
 
     it('trả dư nợ ÂM khi khách trả trước, không kẹp về 0', async () => {
-      dungSoLieu({ soKien: 379 }, { soKg: 0 }, { tongPhatSinh: 444595352.45, tongDaTra: 457501688 });
+      dungSoLieu({ soKg: 0 }, { soKien: 379 }, { tongPhatSinh: 444595352.45, tongDaTra: 457616688 });
       const kq = await service.soLieu('HP3028');
-      expect(kq.duNo).toBeCloseTo(-12906335.55, 2);
+      expect(kq.duNo).toBeCloseTo(-13021335.55, 2);
     });
 
-    it('báo kgThieuSo khi có kiện mà chưa cân — để giao diện đừng hiện "0 kg"', async () => {
-      dungSoLieu({ soKien: 15 }, { soKg: 0 }, {});
-      expect((await service.soLieu('HP220')).kgThieuSo).toBe(true);
+    it('đếm số dòng cân KHÔNG đọc được kg và trả ra ngoài', async () => {
+      // Màn phải nói ra con số này. Im lặng thì khách tưởng tổng kg là đầy đủ,
+      // trong khi 9,3% dòng cân toàn hệ không ghi kg ở đâu cả.
+      dungSoLieu({ soKg: 120.5, soDongThieuKg: 7 }, { soKien: 15 }, {});
+      expect((await service.soLieu('HP220')).soDongThieuKg).toBe(7);
+    });
 
-      jest.clearAllMocks();
-      dungSoLieu({ soKien: 0 }, { soKg: 0 }, {});
-      // Không kiện thì không kg là đương nhiên, đừng cảnh báo.
-      expect((await service.soLieu('HP220')).kgThieuSo).toBe(false);
+    it('số tuyến đếm từ CÙNG nguồn với biểu đồ tuyến', async () => {
+      // Đếm chéo nguồn (tracking vs công nợ) thì ô số ghi "2 tuyến" mà biểu đồ
+      // ngay bên dưới chỉ vẽ 1 — HP3028 đúng là như vậy.
+      dungSoLieu({ soKg: 1794.38 }, { soKien: 379 }, {}, { soTuyen: 1 });
+      expect((await service.soLieu('HP3028')).soTuyen).toBe(1);
+      expect(mockSequelize.query.mock.calls[2][0]).toContain('CONGNO');
+    });
+
+    it('chỉ đếm dòng CÂN KG, không đụng dòng thanh toán', async () => {
+      // 1.166 dòng thanh toán (style 2) mang GhiChu là số tài khoản ngân hàng.
+      // Không chặn style thì mấy con số đó cộng thẳng vào sản lượng.
+      dungSoLieu({ soKg: 1 }, { soKien: 1 }, {});
+      await service.soLieu('HP3028');
+      expect(mockSequelize.query.mock.calls[0][0]).toContain('c.style = 8');
     });
 
     it('thiếu dòng dữ liệu thì ra 0, không ra NaN', async () => {
       mockSequelize.query.mockResolvedValue([]);
       const kq = await service.soLieu('KHACH_MOI');
+      expect(kq.soKg).toBe(0);
       expect(kq.soKien).toBe(0);
       expect(kq.duNo).toBe(0);
       expect(kq.lanGuiGanNhat).toBeNull();
@@ -76,16 +94,24 @@ describe('KhachHangService', () => {
   });
 
   describe('theoTuyen', () => {
-    it('tính tỷ trọng trên tổng của chính khách đó', async () => {
+    it('chia theo KG và tính tỷ trọng trên tổng của chính khách đó', async () => {
       mockSequelize.query.mockResolvedValueOnce([
-        { tenQuocGia: 'Anh', soKien: 378 },
-        { tenQuocGia: 'Mỹ', soKien: 1 },
+        { tenQuocGia: 'Anh', soKg: 1729.18 },
+        { tenQuocGia: '(chưa rõ tuyến)', soKg: 65.2 },
       ]);
       const kq = await service.theoTuyen('HP3028');
       expect(kq).toEqual([
-        { tenQuocGia: 'Anh', soKien: 378, tyLe: 99.7 },
-        { tenQuocGia: 'Mỹ', soKien: 1, tyLe: 0.3 },
+        { tenQuocGia: 'Anh', soKg: 1729.18, tyLe: 96.4 },
+        { tenQuocGia: '(chưa rõ tuyến)', soKg: 65.2, tyLe: 3.6 },
       ]);
+    });
+
+    it('bỏ dòng không đọc được kg khỏi bảng tuyến', async () => {
+      // Cộng NULL thành 0 rồi vẫn hiện tên tuyến thì tuyến đó trông như không
+      // gửi gì, trong khi thật ra là không đo được.
+      mockSequelize.query.mockResolvedValueOnce([]);
+      await service.theoTuyen('HP3028');
+      expect(mockSequelize.query.mock.calls[0][0]).toContain('IS NOT NULL');
     });
 
     it('không có tuyến nào thì tỷ trọng là 0, không chia cho 0', async () => {
@@ -95,11 +121,11 @@ describe('KhachHangService', () => {
   });
 
   describe('theoThang', () => {
-    /** Thứ tự gọi: kiện → tiền → dư đầu kỳ. */
+    /** Thứ tự gọi: tiền+kg → kiện → dư đầu kỳ. */
     const dungThang = (kien: any[], tien: any[], duDauKy = 0) => {
       mockSequelize.query
-        .mockResolvedValueOnce(kien)
         .mockResolvedValueOnce(tien)
+        .mockResolvedValueOnce(kien)
         .mockResolvedValueOnce([{ duDauKy }]);
     };
 
