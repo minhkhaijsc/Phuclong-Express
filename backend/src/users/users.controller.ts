@@ -16,6 +16,10 @@ import {
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { TrangThaiKhachService, RaSoatXoa } from './trang-thai-khach.service';
+import { DuLieuTaiKhoanService } from './du-lieu-tai-khoan.service';
+// `import type`: kiểu này nằm trong chữ ký có decorator, để import thường thì
+// `emitDecoratorMetadata` cố sinh siêu dữ liệu cho một thứ không tồn tại lúc chạy.
+import type { YeuCauXuLy } from './du-lieu-tai-khoan.service';
 import { User } from './entities/user.entity';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -41,6 +45,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly trangThaiKhachService: TrangThaiKhachService,
+    private readonly duLieuTaiKhoanService: DuLieuTaiKhoanService,
   ) {}
 
   /**
@@ -100,6 +105,19 @@ export class UsersController {
   }
 
   /**
+   * GET /users/tim-nhanh?q=&nhom=
+   * Gợi ý mã nhận cho ô "chuyển sang". Phải khai TRƯỚC `@Get(':id')` — để sau thì "tim-nhanh" bị bắt làm giá trị
+   * của :id và luôn trả "không tìm thấy".
+   */
+  @Get('tim-nhanh')
+  async timNhanh(@Query('q') q?: string, @Query('nhom') nhom?: string) {
+    return this.duLieuTaiKhoanService.timNhanh(
+      q ?? '',
+      nhom === 'khach' || nhom === 'nhap' ? nhom : undefined,
+    );
+  }
+
+  /**
    * PUT /users/trang-thai/:id
    * CSKH chốt trạng thái: hoat-dong | tam-nghi | dong-ma (đóng mã phải có lý do).
    */
@@ -133,6 +151,32 @@ export class UsersController {
   @Post()
   async create(@Body() userData: Partial<User>, @Request() req: any): Promise<User> {
     return this.usersService.create(userData, req.user?.username || 'system');
+  }
+
+  // ---------------- KIỂM KÊ / CHUYỂN / XOÁ ----------------
+
+  /**
+   * GET /users/:id/kiem-ke
+   *
+   * Tài khoản này còn dính bao nhiêu dòng, ở những bảng nào, còn nợ bao nhiêu.
+   * Hộp thoại xoá gọi đường này TRƯỚC khi hỏi "có chắc không" — hỏi mà không
+   * cho người ta thấy hậu quả thì câu hỏi ấy vô nghĩa.
+   */
+  @Get(':id/kiem-ke')
+  async kiemKe(@Param('id') id: string) {
+    return this.duLieuTaiKhoanService.kiemKe(id);
+  }
+
+  /**
+   * POST /users/:id/xu-ly
+   *
+   * Chuyển dữ liệu sang mã khác và/hoặc xoá hẳn tài khoản, trong MỘT giao dịch.
+   * Thay cho `DELETE /users/:id` ở màn danh sách: đường DELETE không có chỗ nào
+   * để nói "chuyển đơn sang ai", nên nó chỉ còn là lối chặn cho mọi nơi gọi cũ.
+   */
+  @Post(':id/xu-ly')
+  async xuLy(@Param('id') id: string, @Body() body: YeuCauXuLy, @Request() req: any) {
+    return this.duLieuTaiKhoanService.xuLy(id, body ?? {}, req.user?.username || 'system');
   }
 
   /**
@@ -212,6 +256,10 @@ export class UsersController {
             'đăng nhập được nữa mà dữ liệu cũ vẫn tra được.'
         : 'Khách ngừng giao dịch thì đổi trạng thái sang "Đã đóng mã", đừng xoá.',
     );
+    // Đường DELETE này giờ chỉ còn là lối chặn cho những nơi gọi cũ; nút Xoá ở
+    // màn danh sách đi qua `POST /users/:id/xu-ly`, nơi có kiểm kê và ô chọn mã
+    // nhận. Nói ra chỗ đó, đừng để người ta tưởng là hết đường.
+    dong.push('Cần xoá thật thì bấm nút Xoá ở màn Danh sách User — ở đó xem được tài khoản còn giữ những gì và chuyển dữ liệu sang mã khác trước.');
 
     return dong.join(' ');
   }

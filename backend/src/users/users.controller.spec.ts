@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { TrangThaiKhachService, RaSoatXoa } from './trang-thai-khach.service';
+import { DuLieuTaiKhoanService } from './du-lieu-tai-khoan.service';
 
 /**
  * Câu TỪ CHỐI XOÁ chính là thứ người dùng nhìn thấy, nên nó được kiểm như một
@@ -48,6 +49,8 @@ describe('UsersController — chặn xoá tài khoản còn dữ liệu', () => 
       providers: [
         { provide: UsersService, useValue: usersService },
         { provide: TrangThaiKhachService, useValue: trangThai },
+        // Đường DELETE không dùng tới nó, nhưng controller vẫn nhận ở hàm dựng.
+        { provide: DuLieuTaiKhoanService, useValue: {} },
       ],
     }).compile();
     controller = mod.get(UsersController);

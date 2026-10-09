@@ -2641,6 +2641,72 @@ export const getMotTrangThaiKhach = async (id: string): Promise<KhachKemTrangTha
   return res.data;
 };
 
+// ---------------- KIỂM KÊ / CHUYỂN / XOÁ TÀI KHOẢN ----------------
+
+export interface MucKiemKe {
+  bang: string;
+  cot: string;
+  nhan: string;
+  so: number;
+  /** Dòng tính theo cặp (kỳ, mã) — gộp hai mã thì một kỳ có hai dòng. */
+  canhBaoGop?: boolean;
+}
+
+export interface KiemKeTaiKhoan {
+  id: string;
+  userName: string;
+  hoTen: string | null;
+  vaiTro: string[];
+  laNhanVien: boolean;
+  duNo: number;
+  lanGiaoDichCuoi: string | null;
+  /** Dữ liệu THUỘC VỀ mã này. */
+  khach: MucKiemKe[];
+  /** Dấu vết "ai đã nhập". */
+  nhap: MucKiemKe[];
+  tongKhach: number;
+  tongNhap: number;
+  /** Nhật ký hệ thống — luôn giữ nguyên. */
+  nhatKy: number;
+}
+
+export interface KetQuaXuLyTaiKhoan {
+  daChuyen: { bang: string; cot: string; nhom: 'khach' | 'nhap'; so: number }[];
+  tongDaChuyen: number;
+  conMoCoi: number;
+  daXoaTaiKhoan: boolean;
+  daDonBangPhu: number;
+}
+
+export const getKiemKeTaiKhoan = async (id: string): Promise<KiemKeTaiKhoan> => {
+  const res = await apiClient.get(`/users/${id}/kiem-ke`);
+  return res.data;
+};
+
+export const timNhanhTaiKhoan = async (
+  q: string,
+  nhom?: 'khach' | 'nhap',
+): Promise<{ userName: string; hoTen: string | null; laNhanVien: boolean }[]> => {
+  const p = new URLSearchParams({ q });
+  if (nhom) p.set('nhom', nhom);
+  const res = await apiClient.get(`/users/tim-nhanh?${p}`);
+  return res.data;
+};
+
+export const xuLyTaiKhoan = async (
+  id: string,
+  body: {
+    chuyenKhachSang?: string;
+    chuyenNhapSang?: string;
+    xoaTaiKhoan?: boolean;
+    lyDo: string;
+    xacNhan?: string;
+  },
+): Promise<KetQuaXuLyTaiKhoan> => {
+  const res = await apiClient.post(`/users/${id}/xu-ly`, body);
+  return res.data;
+};
+
 export const datTrangThaiKhach = async (
   id: string,
   trangThai: TrangThaiKhach,

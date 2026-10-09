@@ -22,6 +22,7 @@ import {
   type KhachKemTrangThai,
 } from '@/lib/api';
 import { HopDoiTrangThai } from '@/app/components/hop-doi-trang-thai';
+import { HopXoaTaiKhoan } from '@/app/components/hop-xoa-tai-khoan';
 
 interface User {
   Id: string;
@@ -43,7 +44,8 @@ export default function ListUserPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  /** Tài khoản đang mở hộp "Xoá tài khoản". Hộp tự kiểm kê rồi hỏi. */
+  const [dangXoa, setDangXoa] = useState<string | null>(null);
   /**
    * Lời nhắc đóng mã. Nạp rời khỏi danh sách user vì truy vấn này quét cả
    * CONGNO / tbTracking / Don_Hang (~1,5 giây) — gộp vào thì danh sách user
@@ -97,27 +99,6 @@ export default function ListUserPage() {
       alert(e?.response?.data?.message || 'Không mở được trạng thái của tài khoản này');
     } finally {
       setDangMoTrangThai(null);
-    }
-  };
-
-  const handleDelete = async (id: string, username: string) => {
-    if (!confirm(`Bạn có chắc muốn xóa user "${username}"?`)) return;
-    setDeletingId(id);
-    try {
-      await apiClient.delete(`/users/${id}`);
-      setUsers(prev => prev.filter(u => u.Id !== id));
-    } catch (e: any) {
-      // PHẢI hiện câu của máy chủ. Backend chặn xoá mã còn dữ liệu và câu trả
-      // về nói rõ còn bao nhiêu dòng công nợ, bao nhiêu kiện, ai là người nhập,
-      // và phải làm gì thay thế. Nuốt đi rồi hiện "Xóa thất bại" là bỏ mất toàn
-      // bộ chỗ hữu ích — đúng cái đã xảy ra hôm 09/10/2026.
-      const cau = e?.response?.data?.message;
-      alert(cau || 'Xóa thất bại');
-      // Bị chặn thì mở luôn hộp đổi trạng thái: câu trên vừa khuyên "đóng mã
-      // thay vì xoá", bắt người ta tự đi tìm chỗ làm việc đó là bỏ dở câu nói.
-      if (e?.response?.status === 400 && cau) await moTrangThai(id);
-    } finally {
-      setDeletingId(null);
     }
   };
 
@@ -335,12 +316,11 @@ export default function ListUserPage() {
                           <FiLock className={`h-4 w-4 ${dangMoTrangThai === user.Id ? 'animate-pulse' : ''}`} />
                         </button>
                         <button
-                          onClick={() => handleDelete(user.Id, user.UserName)}
-                          disabled={deletingId === user.Id}
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 cursor-pointer"
+                          onClick={() => setDangXoa(user.Id)}
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 cursor-pointer"
                         >
                           <FiTrash2 className="h-4 w-4" />
-                          {deletingId === user.Id ? '...' : 'Xóa'}
+                          Xóa
                         </button>
                       </div>
                     </td>
@@ -351,6 +331,20 @@ export default function ListUserPage() {
           </div>
         )}
       </div>
+
+      {dangXoa && (
+        <HopXoaTaiKhoan
+          id={dangXoa}
+          dong={() => setDangXoa(null)}
+          xong={() => {
+            setDangXoa(null);
+            fetchUsers(keyword);
+            getTongHopTrangThaiKhach()
+              .then((t) => setCanDongMa({ canDongMa: t.canDongMa, canDongMaConNo: t.canDongMaConNo }))
+              .catch(() => undefined);
+          }}
+        />
+      )}
 
       {dangSuaTrangThai && (
         <HopDoiTrangThai
