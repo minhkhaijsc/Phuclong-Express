@@ -11,6 +11,8 @@ import { useAuthStore } from '@/hooks/use-auth';
 import { Order, QueryParams } from '@/types/order';
 import { OrderStatus, OrderStatusConfig } from '@/types/order-status';
 import EditOrderDetailModal from './edit-order-detail-modal';
+import { bangXuatDonHang, tenTepXuatDonHang } from './xuat-don-hang';
+import { useQuyen } from '@/hooks/use-quyen';
 
 // Note Modal Component
 function NoteModal({
@@ -432,6 +434,8 @@ function ConfirmModal({
 export default function EditOrderListPage() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  // Quyết định bản xuất Excel có kèm 7 cột nhà cung cấp + lãi/lỗ hay không.
+  const { xemGiaNcc } = useQuyen();
   const currentUsername = user?.username || '';
 
   // Role-based visibility (convert từ EditOrder.aspx.cs)
@@ -824,115 +828,41 @@ export default function EditOrderListPage() {
     return d.toLocaleDateString('vi-VN');
   };
 
-  // Handle export current page to CSV
-  const handleExportCurrentPage = () => {
-    if (!data?.data) return;
-
-    const lines: string[] = [];
-    const headers = [
-      'Mã ĐH', 'OrderNumber', 'Website', 'Username', 'Ngày ĐH', 'Ngày Save',
-      'Quốc gia', 'Link', 'Màu', 'Size', 'Số lượng',
-      'Giá web', '%Công', '%SaleOff', 'Phụ thu', 'ShipUS', 'Tax',
-      'Công VNĐ', 'Tổng VNĐ', 'Tỷ giá', 'Loại tiền',
-      'Vùng miền', 'Ghi chú', 'Trạng thái', 'Đợt hàng', 'Ngày complete'
-    ];
-    lines.push(headers.join(','));
-
-    for (const order of data.data) {
-      const values = [
-        order.id,
-        order.orderNumber || '',
-        order.websiteName || '',
-        order.username || '',
-        formatDate(order.ngayMuaHang),
-        formatDate(order.ngaySaveLink),
-        order.tenQuocGia || '',
-        (order.linkWeb || '').replace(/,/g, ';'),
-        order.color || '',
-        order.size || '',
-        order.soLuong || 0,
-        order.donGiaWeb || 0,
-        order.cong || 0,
-        order.saleOff || 0,
-        order.phuThu || 0,
-        order.shipUsa || 0,
-        order.tax || 0,
-        order.tienCongVnd || 0,
-        order.tongTienVnd || 0,
-        order.tyGia || 0,
-        order.loaiTien || 'USD',
-        order.vungMien || '',
-        (order.ghiChu || '').replace(/,/g, ';'),
-        order.trangThaiOrder || '',
-        order.tenDotHang || '',
-        order.ngayHoanThanh ? formatDate(order.ngayHoanThanh as any) : ''
-      ];
-      lines.push(values.join(','));
-    }
-
-    const csv = '\uFEFF' + lines.join('\r\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `DanhSachDonHang_${new Date().toISOString().slice(0, 16).replace(/[-T:]/g, '')}.csv`;
-    link.click();
+  const xuatExcel = async (don: Order[], hau: string) => {
+    const { downloadDataAsExcel } = await import('@/lib/excel-download');
+    // KHÔNG truyền `textColumns`: tham số đó ép định dạng chữ cho 500 dòng đầu,
+    // đúng cho TỆP MẪU để người ta gõ vào, nhưng với bản xuất thì nó tạo ra mấy
+    // trăm dòng trống phía dưới dữ liệu thật. Mã đơn vốn đã là chuỗi trong JS
+    // nên ExcelJS ghi thành ô chữ, số 0 đứng đầu không mất.
+    downloadDataAsExcel(
+      bangXuatDonHang(don, xemGiaNcc),
+      tenTepXuatDonHang(hau),
+      undefined,
+      undefined,
+      undefined,
+      'Danh sách đơn hàng',
+    );
   };
 
-  // Handle export by filter - fetch ALL matching records (no pagination) then download CSV
+  // Xuất đúng trang đang xem
+  const handleExportCurrentPage = () => {
+    if (!data?.data?.length) {
+      alert('Trang này chưa có đơn nào để xuất.');
+      return;
+    }
+    xuatExcel(data.data, '');
+  };
+
+  // Xuất TẤT CẢ đơn khớp bộ lọc hiện tại (không phân trang)
   const handleExportByFilter = async () => {
-    // Fetch all records matching current filters (limit=99999 to get all)
-    const exportFilters = { ...filters, page: 1, limit: 99999 };
     try {
-      const result = await getOrders(exportFilters);
+      const result = await getOrders({ ...filters, page: 1, limit: 99999 });
       const allOrders = result?.data || [];
-
-      const lines: string[] = [];
-      const headers = [
-        'Mã ĐH', 'OrderNumber', 'Website', 'Username', 'Ngày ĐH', 'Ngày Save',
-        'Quốc gia', 'Link', 'Màu', 'Size', 'Số lượng',
-        'Giá web', '%Công', '%SaleOff', 'Phụ thu', 'ShipUS', 'Tax',
-        'Công VNĐ', 'Tổng VNĐ', 'Tỷ giá', 'Loại tiền',
-        'Vùng miền', 'Ghi chú', 'Trạng thái', 'Đợt hàng'
-      ];
-      lines.push(headers.join(','));
-
-      for (const order of allOrders) {
-        const values = [
-          order.id,
-          order.orderNumber || '',
-          order.websiteName || '',
-          order.username || '',
-          formatDate(order.ngayMuaHang),
-          formatDate(order.ngaySaveLink),
-          order.tenQuocGia || '',
-          (order.linkWeb || '').replace(/,/g, ';'),
-          order.color || '',
-          order.size || '',
-          order.soLuong || 0,
-          order.donGiaWeb || 0,
-          order.cong || 0,
-          order.saleOff || 0,
-          order.phuThu || 0,
-          order.shipUsa || 0,
-          order.tax || 0,
-          order.tienCongVnd || 0,
-          order.tongTienVnd || 0,
-          order.tyGia || 0,
-          order.loaiTien || 'USD',
-          order.vungMien || '',
-          (order.ghiChu || '').replace(/,/g, ';'),
-          order.trangThaiOrder || '',
-          order.tenDotHang || ''
-        ];
-        lines.push(values.join(','));
+      if (!allOrders.length) {
+        alert('Bộ lọc hiện tại không ra đơn nào để xuất.');
+        return;
       }
-
-      const csv = '\uFEFF' + lines.join('\r\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `DanhSachDonHang_Filter_${new Date().toISOString().slice(0, 16).replace(/[-T:]/g, '')}.csv`;
-      link.click();
+      await xuatExcel(allOrders, '_Filter');
     } catch (err) {
       alert('Không thể xuất file: ' + (err as Error).message);
     }
