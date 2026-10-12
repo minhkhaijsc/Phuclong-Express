@@ -4,6 +4,7 @@ import { QueryDebtReportDto, UpdateDebtDto, ExportDebtReportDto, QueryDebtReport
 import { QueryDebtManagementDto, CreateDebtDto, UpdateDebtManagementDto, ImportCreateDebtDto } from './dto/debt-management.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen, Quyen } from '../auth/quyen/quyen.decorator';
 /**
  * Debt Reports Controller
  *
@@ -11,17 +12,36 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  */
 @Controller('debt-reports')
 @UseGuards(JwtAuthGuard)
+@MienQuyen('baoCao')
 export class DebtReportsController {
   constructor(private readonly debtReportsService: DebtReportsService) {}
+
+  /**
+   * Ép `username` về chính người đang gọi nếu đó là khách hàng.
+   *
+   * Mấy route dưới đây nhận `username` từ phía gọi và đưa thẳng xuống SP. Trước
+   * khi có lớp phân quyền thì chúng chỉ đòi "đã đăng nhập", nên khách A chỉ cần
+   * truyền mã của khách B là đọc được công nợ của người ta — và với route tạo
+   * thì ghi được một dòng công nợ đứng tên người ta. Nhân viên vẫn truyền tự do
+   * vì tra cứu hộ khách là việc của họ.
+   *
+   * `!== false` chứ không phải `=== true`: thiếu `req.quyen` thì coi là khách,
+   * tức là siết chứ không nới.
+   */
+  private cuaAi(req: any, username?: string): string | undefined {
+    const laKhach = req.quyen?.laKhach !== false;
+    return laKhach ? (req.user?.username ?? '') : username;
+  }
 
   /**
    * Get detailed debt report with filters and pagination
    * Matches: LoadBaoCaoChiTietCongNo() in C#
    */
+  @MienQuyen('congNo')
   @Get()
-  async getDebtReports(@Query() query: QueryDebtReportDto) {
+  async getDebtReports(@Query() query: QueryDebtReportDto, @Request() req: any) {
     return this.debtReportsService.getDebtReports(
-      query.username,
+      this.cuaAi(req, query.username),
       query.fromKyId,
       query.toKyId,
       query.page,
@@ -77,6 +97,7 @@ export class DebtReportsController {
    * Export customer debt report to Excel
    * Matches: btExportToExcel_Click() -> ExportToExcel() in C#
    */
+  @Quyen('baoCao.xem')
   @Post('customer/export')
   async exportCustomerDebtReport() {
     return this.debtReportsService.exportCustomerDebtReport();
@@ -86,6 +107,7 @@ export class DebtReportsController {
    * Export debt report to Excel (all data with filter)
    * Matches: btExportToExcelAllWithFilter_Click() in C#
    */
+  @Quyen('baoCao.xem')
   @Post('export')
   async exportDebtReport(@Body() exportDto: ExportDebtReportDto) {
     return this.debtReportsService.exportDebtReport(
@@ -111,6 +133,7 @@ export class DebtReportsController {
    * Export debt report by lot to Excel
    * Matches: btExportToExcel_Click() -> ExportToExcel() in C#
    */
+  @Quyen('baoCao.xem')
   @Post('by-lot/export')
   async exportDebtReportByLot(@Body() query: QueryDebtReportByLotDto) {
     return this.debtReportsService.exportDebtReportByLot(
@@ -137,6 +160,7 @@ export class DebtReportsController {
    * Export debt report by shipment lot to Excel
    * Matches: btExportToExcel_Click() -> ExportToExcel() in BaoCao_CongNoTheoDotHang.cs
    */
+  @Quyen('baoCao.xem')
   @Post('by-shipment-lot/export')
   async exportDebtReportByShipmentLot(@Body() query: QueryDebtReportByLotDto) {
     return this.debtReportsService.exportDebtReportByShipmentLot(
@@ -197,6 +221,7 @@ export class DebtReportsController {
    * Export debt reconciliation report to Excel
    * Matches: btExportToExcel_Click() -> ExportToExcel() in BaoCao_DoiChieuCongNo.cs
    */
+  @Quyen('baoCao.xem')
   @Post('reconciliation/export')
   async exportDebtReconciliation(@Body() query: QueryDebtReconciliationDto) {
     return this.debtReportsService.exportDebtReconciliationReport(
@@ -240,6 +265,7 @@ export class DebtReportsController {
    * Export total debt by user to Excel
    * Matches: btExportToExcel_Click() -> ExportToExcel() in BaoCao_TongCongNoTheoUser.cs
    */
+  @Quyen('baoCao.xem')
   @Post('debt-by-user/export')
   async exportDebtByUser(@Body() query: QueryDebtByUserDto) {
     return this.debtReportsService.exportTotalDebtByUser(
@@ -267,6 +293,7 @@ export class DebtReportsController {
    * Export profit/loss by lot to Excel
    * Matches: btExportToExcel_Click() -> ExportToExcel() in BaoCao_PhanTichLaiLoTheoLoHang.cs
    */
+  @Quyen('baoCao.xem')
   @Post('profit-loss-by-lot/export')
   async exportProfitLossByLot(@Body() query: QueryProfitLossByLotDto) {
     return this.debtReportsService.exportProfitLossByLot(
@@ -295,10 +322,14 @@ export class DebtReportsController {
    * Get debt management list with filters
    * Matches: LoadDanhSachCongNo() in ManageCongNo.cs
    */
+  @MienQuyen('congNo')
   @Get('management/list')
-  async getDebtManagementList(@Query() query: QueryDebtManagementDto) {
+  async getDebtManagementList(
+    @Query() query: QueryDebtManagementDto,
+    @Request() req: any,
+  ) {
     return this.debtReportsService.getDebtManagementList(
-      query.username,
+      this.cuaAi(req, query.username),
       query.status,
       query.loaiPhatSinh,
       query.bankAccount,
@@ -316,13 +347,14 @@ export class DebtReportsController {
    * Create new debt record
    * Matches: btDongY_Click() -> Insert_CongNo() in ManageCongNo.cs
    */
+  @Quyen('baoChuyenKhoan')
   @Post('management')
   async createDebt(
     @Body() createDto: CreateDebtDto,
     @Request() req: any,
   ) {
     return this.debtReportsService.createDebt(
-      createDto,
+      { ...createDto, username: this.cuaAi(req, createDto.username) ?? '' },
       req.user?.username || 'system',
     );
   }
@@ -331,6 +363,7 @@ export class DebtReportsController {
    * Bulk-create debt records from a parsed Excel import ("Thêm mới công nợ" mode)
    * Matches: ManageCongNo_Import.cs in C# (add-new mode only)
    */
+  @MienQuyen('congNo')
   @Post('management/import')
   async importCreateDebts(
     @Body() importDto: ImportCreateDebtDto,
@@ -346,6 +379,7 @@ export class DebtReportsController {
    * Update debt record
    * Matches: gvCongNo_RowUpdating() -> CapNhatCongNo() in ManageCongNo.cs
    */
+  @MienQuyen('congNo')
   @Put('management/:id')
   async updateDebtManagement(
     @Param('id') id: number,
@@ -363,6 +397,7 @@ export class DebtReportsController {
    * Delete debt record
    * Matches: gvCongNo_RowDeleting() -> XoaCongNo() in ManageCongNo.cs
    */
+  @MienQuyen('congNo')
   @Delete('management/:id')
   async deleteDebt(
     @Param('id') id: number,
@@ -378,6 +413,7 @@ export class DebtReportsController {
    * Approve debt record
    * Matches: gvCongNo_RowCommand() -> ApproveCongNo() in ManageCongNo.cs
    */
+  @Quyen('duyetCongNo')
   @Post('management/:id/approve')
   async approveDebt(
     @Param('id') id: number,
@@ -393,6 +429,7 @@ export class DebtReportsController {
    * Get bank accounts for dropdown
    * Matches: LoadDanhSachTaiKhoanNganHang() in ManageCongNo.cs
    */
+  @MienQuyen('congNo')
   @Get('management/bank-accounts')
   async getBankAccounts() {
     return this.debtReportsService.getBankAccounts();
@@ -402,9 +439,15 @@ export class DebtReportsController {
    * Get batches by username
    * Matches: LoadDanhSachLoHangTheoUser() in ManageCongNo.cs
    */
+  @MienQuyen('congNo')
   @Get('management/batches')
-  async getBatchesByUsername(@Query('username') username: string) {
-    return this.debtReportsService.getBatchesByUsername(username);
+  async getBatchesByUsername(
+    @Query('username') username: string,
+    @Request() req: any,
+  ) {
+    return this.debtReportsService.getBatchesByUsername(
+      this.cuaAi(req, username) ?? '',
+    );
   }
 
   /**
@@ -413,8 +456,14 @@ export class DebtReportsController {
    * Matches: ChuyenKhoan.cs -> bLL.LayDanhSachCongNo(username, 0, 2)
    * SP: SP_Lay_CongNo @status=0, @style=2
    */
+  @MienQuyen('congNo')
   @Get('user/chuyen-khoan')
-  async getChuyenKhoanPendingList(@Query('username') username: string) {
-    return this.debtReportsService.getChuyenKhoanPendingList(username);
+  async getChuyenKhoanPendingList(
+    @Query('username') username: string,
+    @Request() req: any,
+  ) {
+    return this.debtReportsService.getChuyenKhoanPendingList(
+      this.cuaAi(req, username) ?? '',
+    );
   }
 }

@@ -3,7 +3,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BankAccountsService } from './bank-accounts.service';
 import type { CreateBankAccountDto, UpdateBankAccountDto } from './bank-accounts.service';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 @Controller('bank-accounts')
+@MienQuyen('danhMuc')
 export class BankAccountsController {
   constructor(private readonly bankAccountsService: BankAccountsService) {}
 

@@ -33,6 +33,7 @@ import { QueryQLDatHangDto, QLDatHangResponseDto } from './dto/query-qldathang.d
 import { CreateQuickOrderDto, CreateQuickOrdersDto } from './dto/create-quick-order.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen, Quyen } from '../auth/quyen/quyen.decorator';
 /**
  * Orders Controller
  *
@@ -40,7 +41,19 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  */
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
+@MienQuyen('muaHang')
 export class OrdersController {
+  /**
+   * Người gọi có xem được khối nhà cung cấp không.
+   *
+   * `req.quyen` do QuyenGuard gắn vào. Dùng `=== true` chứ không phải khác
+   * undefined: thiếu `req.quyen` (route nào đó chưa qua guard) thì coi là KHÔNG
+   * có quyền — siết, chứ không nới.
+   */
+  private coGiaNcc(req: any): boolean {
+    return req?.quyen?.quyen?.includes('giaNcc') === true;
+  }
+
   constructor(private readonly ordersService: OrdersService) {}
 
   // ========== SPECIAL ROUTES FIRST (before :id routes) ==========
@@ -140,6 +153,7 @@ export class OrdersController {
    * POST /orders/calculate-shipping
    * Calculate shipping fee based on weight, product type, currency, and user
    */
+  @Quyen('muaHang.xem')
   @Post('calculate-shipping')
   @HttpCode(HttpStatus.OK)
   async calculateShipping(
@@ -190,6 +204,7 @@ export class OrdersController {
    *
    * Body: { loaiTien: string, donGiaWeb: number, username: string }
    */
+  @Quyen('muaHang.xem')
   @Post('calculate-fee')
   @HttpCode(HttpStatus.OK)
   async getGiaTienCong(
@@ -203,17 +218,24 @@ export class OrdersController {
    * List orders with filters and pagination
    */
   @Get()
-  async findAll(@Query() query: QueryOrderDto): Promise<{ data: Order[]; total: number; page: number; limit: number }> {
-    return this.ordersService.findAll(query);
+  async findAll(
+    @Query() query: QueryOrderDto,
+    @Request() req: any,
+  ): Promise<{ data: Order[]; total: number; page: number; limit: number }> {
+    return this.ordersService.findAll(query, this.coGiaNcc(req));
   }
 
   /**
    * POST /orders/list
    * List orders with filters and pagination (POST method for complex filters)
    */
+  @Quyen('muaHang.xem')
   @Post('list')
-  async findAllPost(@Body() query: QueryOrderListDto): Promise<{ data: Order[]; total: number; page: number; limit: number }> {
-    return this.ordersService.findAll(query as QueryOrderDto);
+  async findAllPost(
+    @Body() query: QueryOrderListDto,
+    @Request() req: any,
+  ): Promise<{ data: Order[]; total: number; page: number; limit: number }> {
+    return this.ordersService.findAll(query as QueryOrderDto, this.coGiaNcc(req));
   }
 
   /**
@@ -226,9 +248,13 @@ export class OrdersController {
    * - danhSachDonHang: list of orders
    * - page, limit: pagination
    */
+  @Quyen('muaHang.xem')
   @Post('qldathang-list')
-  async getQLDatHangList(@Body() query: QueryQLDatHangDto): Promise<QLDatHangResponseDto> {
-    return this.ordersService.getQLDatHangList(query);
+  async getQLDatHangList(
+    @Body() query: QueryQLDatHangDto,
+    @Request() req: any,
+  ): Promise<QLDatHangResponseDto> {
+    return this.ordersService.getQLDatHangList(query, this.coGiaNcc(req));
   }
 
   /**
@@ -271,6 +297,7 @@ export class OrdersController {
    * Calculate service fee for QLDatHang_Them footer form
    * Converted from: QLDatHang_Them.cs - giaTienCong calculation
    */
+  @Quyen('muaHang.xem')
   @Post('quick/calculate')
   @HttpCode(HttpStatus.OK)
   async calculateTienCong(
@@ -475,9 +502,10 @@ export class OrdersController {
   @Get(':id')
   async findOne(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
     @Query('includeDeleted') includeDeleted?: string,
   ): Promise<Order> {
-    return this.ordersService.findOne(id, includeDeleted === 'true');
+    return this.ordersService.findOne(id, includeDeleted === 'true', this.coGiaNcc(req));
   }
 
   /**
@@ -574,9 +602,10 @@ export class OrdersController {
   @Get(':id/details')
   async findDetails(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
     @Query('includeDeleted') includeDeleted?: string,
   ): Promise<Order> {
-    return this.ordersService.findOne(id, includeDeleted === 'true');
+    return this.ordersService.findOne(id, includeDeleted === 'true', this.coGiaNcc(req));
   }
 
   /**
@@ -655,7 +684,12 @@ export class OrdersController {
     @Body() body: any,
     @Request() req: any,
   ): Promise<{ success: boolean; error?: string }> {
-    return this.ordersService.updateOrderDetail(id, body, req.user?.username || 'system');
+    return this.ordersService.updateOrderDetail(
+      id,
+      body,
+      req.user?.username || 'system',
+      this.coGiaNcc(req),
+    );
   }
 
   /**
@@ -663,6 +697,7 @@ export class OrdersController {
    * Search orders by order number OR tracking number (TrackingNumber.aspx)
    * Calls BLL.LayDanhSachListOrder with both parameters
    */
+  @Quyen('muaHang.xem')
   @Post('search-by-tracking')
   async searchByOrderOrTracking(
     @Body() body: { orderNumber?: string; trackingNumber?: string; page?: number; limit?: number },

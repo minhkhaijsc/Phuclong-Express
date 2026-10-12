@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
@@ -24,11 +25,15 @@ import { ServiceFeesModule } from './service-fees/service-fees.module';
 import { InStockItemsModule } from './in-stock-items/in-stock-items.module';
 import { PurchasedItemsModule } from './purchased-items/purchased-items.module';
 import { ShippersModule } from './shippers/shippers.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 import { QnaModule } from './qna/qna.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ArticlesModule } from './articles/articles.module';
 import { CommonModule } from './common/common.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { QuyenModule } from './auth/quyen/quyen.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { QuyenGuard } from './auth/guards/quyen.guard';
 
 @Module({
   imports: [
@@ -38,6 +43,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     }),
     ScheduleModule.forRoot(),
     DatabaseModule,
+    QuyenModule,
     AuthModule,
     CommonModule,
     UsersModule,
@@ -59,12 +65,29 @@ import { DashboardModule } from './dashboard/dashboard.module';
     InStockItemsModule,
     PurchasedItemsModule,
     ShippersModule,
+    SuppliersModule,
     QnaModule,
     NotificationsModule,
     ArticlesModule,
     DashboardModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    /**
+     * Hai guard này chạy cho MỌI route, theo đúng thứ tự: đăng nhập trước,
+     * phân quyền sau.
+     *
+     * Trước đây guard được gắn lẻ trên từng controller, và bốn controller bị
+     * bỏ sót hoàn toàn — batches (19 route), shipments (10), roles (3),
+     * ty-gia (1). GET /api/roles trả 200 cho người không đăng nhập, còn
+     * DELETE /api/roles/:id thì xoá được vai trò Admin, kéo theo mọi dòng
+     * trong AspNetUserRoles. Gắn ở tầng ứng dụng thì không còn chỗ nào lọt.
+     *
+     * Route cố ý mở cho người chưa đăng nhập phải đánh dấu @Public().
+     */
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: QuyenGuard },
+  ],
 })
 export class AppModule {}

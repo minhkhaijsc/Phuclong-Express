@@ -3,7 +3,9 @@ import { PeriodsService } from './periods.service';
 import type { CreatePeriodDto, UpdatePeriodDto, QueryPeriodDetailDto } from './periods.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 @Controller('periods')
+@MienQuyen('danhMuc')
 export class PeriodsController {
   constructor(private readonly periodsService: PeriodsService) {}
 

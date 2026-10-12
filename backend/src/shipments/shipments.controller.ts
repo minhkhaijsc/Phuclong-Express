@@ -19,6 +19,7 @@ import { UpdateShipmentDto } from './dto/update-shipment.dto';
 import { QueryShipmentDto } from './dto/query-shipment.dto';
 import { Order } from '../orders/entities/order.entity';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 /**
  * Shipments Controller
  *
@@ -34,6 +35,7 @@ import { Order } from '../orders/entities/order.entity';
  * - POST /shipments/:id/complete - Mark shipment as completed
  */
 @Controller('shipments')
+@MienQuyen('vanChuyen')
 export class ShipmentsController {
   constructor(private readonly shipmentsService: ShipmentsService) {}
 

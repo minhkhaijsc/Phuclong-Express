@@ -3,6 +3,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { SystemLogsService } from '../system-logs/system-logs.service';
+import { QuyenService } from './quyen/quyen.service';
 
 /**
  * Phần kiểm này canh ĐÚNG MỘT VIỆC: "đóng mã" phải chặn được đường vào.
@@ -44,6 +45,7 @@ describe('AuthService — chặn đăng nhập khi đã đóng mã', () => {
     const mod: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
+        QuyenService,
         { provide: 'SEQUELIZE', useValue: mockSequelize },
         { provide: JwtService, useValue: { sign: () => 'the-gia' } },
         { provide: SystemLogsService, useValue: mockLogs },

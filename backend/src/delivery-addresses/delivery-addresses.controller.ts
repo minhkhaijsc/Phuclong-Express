@@ -3,7 +3,9 @@ import { DeliveryAddressesService } from './delivery-addresses.service';
 import type { QueryDeliveryAddressDto, CreateDeliveryAddressDto, UpdateDeliveryAddressDto } from './delivery-addresses.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 @Controller('delivery-addresses')
+@MienQuyen('diaChi')
 export class DeliveryAddressesController {
   constructor(private readonly deliveryAddressesService: DeliveryAddressesService) {}
 

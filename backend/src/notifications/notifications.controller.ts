@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { NotificationsService } from './notifications.service';
 import { NotificationsQueryDto } from './dto/notifications-query.dto';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 /**
  * Notifications Controller
  *
@@ -11,6 +12,7 @@ import { NotificationsQueryDto } from './dto/notifications-query.dto';
  */
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
+@MienQuyen('rieng')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 

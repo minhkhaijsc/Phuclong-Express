@@ -4,6 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { ArticlesController } from './articles.controller';
 import { ArticlesService } from './articles.service';
 import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator';
+import { QuyenService } from '../auth/quyen/quyen.service';
 
 describe('ArticlesController', () => {
   let controller: ArticlesController;
@@ -23,8 +24,16 @@ describe('ArticlesController', () => {
   };
 
   /** Khách hàng đăng ký qua web không có dòng nào trong AspNetUserRoles */
-  const customer = { user: { username: 'khach1', roles: [] } };
-  const staff = { user: { username: 'nhanvien1', roles: ['admin'] } };
+  // `quyen` do QuyenGuard gắn vào request lúc chạy thật; dựng y như vậy ở đây
+  // để bài kiểm tra đi đúng đường mã nguồn, không phải một nhánh riêng.
+  // Vai trò viết đúng chữ 'Admin' như trong AspNetRoles — 'admin' chữ thường
+  // không khớp bộ phận nào nên sẽ bị tính là khách.
+  const reqGia = (username: string, roles: string[]) => ({
+    user: { username, roles },
+    quyen: new QuyenService().tinh(roles),
+  });
+  const customer = reqGia('khach1', []);
+  const staff = reqGia('nhanvien1', ['Admin']);
   /** Token cũ / lỗi đọc vai trò — phải bị từ chối, không được mở mặc định */
   const unknown = { user: { username: 'ai-do' } };
 

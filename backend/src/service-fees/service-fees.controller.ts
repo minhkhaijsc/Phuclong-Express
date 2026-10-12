@@ -20,6 +20,7 @@ import { UpdateServiceFeeDto } from './dto/update-service-fee.dto';
 import { QueryServiceFeeDto } from './dto/query-service-fee.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 /**
  * Service Fees Controller
  *
@@ -33,6 +34,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  * - DELETE /service-fees/:id - Delete service fee
  */
 @Controller('service-fees')
+@MienQuyen('danhMuc')
 export class ServiceFeesController {
   constructor(private readonly serviceFeesService: ServiceFeesService) {}
 

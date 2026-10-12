@@ -19,6 +19,7 @@ import { UpdateShipmentGroupDto } from './dto/update-shipment-group.dto';
 import { QueryShipmentGroupDto } from './dto/query-shipment-group.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 /**
  * Shipment Groups Controller
  *
@@ -35,6 +36,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  * - PUT /shipment-groups/:username/:tenDotHang/complete - Mark as complete
  */
 @Controller('shipment-groups')
+@MienQuyen('vanChuyen')
 export class ShipmentGroupsController {
   constructor(private readonly shipmentGroupsService: ShipmentGroupsService) {}
 

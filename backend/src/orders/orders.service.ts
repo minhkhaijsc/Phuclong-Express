@@ -15,6 +15,13 @@ import { QueryQLDatHangDto, QLDatHangResponseDto } from './dto/query-qldathang.d
 import { SystemLogsService } from '../system-logs/system-logs.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ImageUploadService } from '../common/services/image-upload.service';
+import {
+  cheNcc,
+  cheNccDanhSach,
+  docThanNcc,
+  ganNcc,
+  nhatKyNcc,
+} from './ncc-don-hang';
 
 /**
  * Orders Service
@@ -562,7 +569,35 @@ export class OrdersService {
    * Find all orders with filters and pagination
    * Uses SP_Lay_DonHang stored procedure (matching C# DBConnect.LayDanhSachDonHang)
    */
-  async findAll(query: QueryOrderDto): Promise<{ data: any[]; total: number; page: number; limit: number }> {
+  /**
+   * Bản đồ NhaCungCapID -> tên, nạp MỘT LẦN cho cả trang danh sách.
+   *
+   * Không join tbNhaCungCap vào `SP_Lay_DonHang`: SP đó là bản ASP cũ, trang
+   * web ASP vẫn đang gọi chính nó, nên sửa SP là sửa cho hai hệ cùng lúc.
+   * Danh mục NCC chỉ vài chục dòng, đọc cả bảng rẻ hơn hẳn một lần đổi SP.
+   *
+   * Lỗi đọc KHÔNG được làm vỡ danh sách đơn: nếu bảng chưa tồn tại (migration
+   * chưa chạy) thì trả bản đồ rỗng, các dòng hiện "chưa rõ" chứ không 500.
+   */
+  private async banDoTenNcc(): Promise<Map<number, string>> {
+    try {
+      const rows = await this.sequelize.query<{ NhaCungCapID: number; TenNhaCungCap: string }>(
+        `SELECT NhaCungCapID, TenNhaCungCap FROM dbo.tbNhaCungCap`,
+        { type: QueryTypes.SELECT },
+      );
+      return new Map(rows.map((r) => [Number(r.NhaCungCapID), r.TenNhaCungCap]));
+    } catch (error: any) {
+      console.error('banDoTenNcc:', error?.message || error);
+      return new Map();
+    }
+  }
+
+  /**
+   * `coGiaNcc` = người gọi có quyền lẻ `giaNcc`. MẶC ĐỊNH false, cố ý: SP dùng
+   * `SELECT DH.*` nên sáu cột NCC_* tự chảy ra ngoài ngay khi migration chạy.
+   * Mặc định mở thì mỗi chỗ gọi mới quên truyền là một chỗ lộ giá nhập.
+   */
+  async findAll(query: QueryOrderDto, coGiaNcc = false): Promise<{ data: any[]; total: number; page: number; limit: number }> {
     const { website, username, status, statuses, search, startDate, endDate, page = 1, limit = 20, includeDeleted = false, quocGiaId, ids } = query;
 
     // Cap limit to 500 max to match @Max(500) validation
@@ -685,10 +720,25 @@ export class OrdersService {
         vungMien: row.VungMien,
         nguoiTao: row.nguoiTao,
         isDeleted: row.DaXoa,
+        // Khối nhà cung cấp giữ NGUYÊN tên cột CSDL (NCC_*) chứ không đổi sang
+        // camelCase như các trường trên. Cố ý: `cheNcc` xoá theo đúng danh sách
+        // khoá đó, nên một tên duy nhất cho cả `GET /orders/:id` (trả dòng thô)
+        // và đường này là thứ bảo đảm không có khoá nào sót lại chưa được che.
+        NCC_ID: row.NCC_ID ?? null,
+        NCC_NgoaiTe: row.NCC_NgoaiTe ?? null,
+        NCC_Cong: row.NCC_Cong ?? null,
+        NCC_TyGia: row.NCC_TyGia ?? null,
+        NCC_TongPhaiTra: row.NCC_TongPhaiTra ?? null,
+        NCC_Tracking: row.NCC_Tracking ?? null,
       }));
 
+      if (!coGiaNcc) {
+        return { data: cheNccDanhSach(mappedData), total, page, limit: safeLimit };
+      }
+
+      const tenNcc = await this.banDoTenNcc();
       return {
-        data: mappedData,
+        data: mappedData.map((r) => ganNcc(r, tenNcc)),
         total,
         page,
         limit: safeLimit,
@@ -707,7 +757,7 @@ export class OrdersService {
   /**
    * Find order by ID using stored procedure
    */
-  async findOne(id: number, includeDeleted = false): Promise<any> {
+  async findOne(id: number, includeDeleted = false, coGiaNcc = false): Promise<any> {
     try {
       const [result]: any[] = await this.sequelize.query(
         `EXEC SP_Lay_DonHangByID @ID=${id}`
@@ -723,7 +773,11 @@ export class OrdersService {
         throw new NotFoundException(`Order with ID ${id} not found`);
       }
 
-      return order;
+      // SP trả `SELECT DH.*` nên sáu cột NCC_* có sẵn trong dòng này. Người
+      // không có quyền `giaNcc` phải nhận dòng ĐÃ XOÁ các khoá đó — ẩn ô trên
+      // web là không đủ, mở tab Network ra là đọc được giá nhập.
+      if (!coGiaNcc) return cheNcc(order);
+      return ganNcc(order, await this.banDoTenNcc());
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -746,7 +800,7 @@ export class OrdersService {
    * @param query - Query parameters matching QLDatHang_LietKe filters
    * @returns QLDatHangResponseDto - { totalItem, danhSachDonHang, page, limit }
    */
-  async getQLDatHangList(query: QueryQLDatHangDto): Promise<QLDatHangResponseDto> {
+  async getQLDatHangList(query: QueryQLDatHangDto, coGiaNcc = false): Promise<QLDatHangResponseDto> {
     const {
       website,
       username,
@@ -867,11 +921,23 @@ export class OrdersService {
         tenQuocGia: row.TenQuocGia,
         linkTaiKhoanMang: row.LinkTaiKhoanMang,
         vungMien: row.VungMien,
+        // Xem ghi chú cùng chỗ trong `findAll` về việc giữ tên cột NCC_*.
+        NCC_ID: row.NCC_ID ?? null,
+        NCC_NgoaiTe: row.NCC_NgoaiTe ?? null,
+        NCC_Cong: row.NCC_Cong ?? null,
+        NCC_TyGia: row.NCC_TyGia ?? null,
+        NCC_TongPhaiTra: row.NCC_TongPhaiTra ?? null,
+        NCC_Tracking: row.NCC_Tracking ?? null,
       }));
 
+      if (!coGiaNcc) {
+        return { totalItem, danhSachDonHang: cheNccDanhSach(danhSachDonHang), page, limit };
+      }
+
+      const tenNcc = await this.banDoTenNcc();
       return {
         totalItem,
-        danhSachDonHang,
+        danhSachDonHang: danhSachDonHang.map((r: any) => ganNcc(r, tenNcc)),
         page,
         limit,
       };
@@ -2326,8 +2392,16 @@ export class OrdersService {
       quocGiaId?: number;
       usernamesave?: string;
       nguoiTao: string;
+      /** Khối nhà cung cấp — xem `ncc-don-hang.ts`. Chỉ ghi khi `coGiaNcc`. */
+      NCC_ID?: number | null;
+      NCC_NgoaiTe?: number | null;
+      NCC_Cong?: number | null;
+      NCC_TyGia?: number | null;
+      NCC_TongPhaiTra?: number | null;
+      NCC_Tracking?: string | null;
     },
     actorUsername = 'system',
+    coGiaNcc = false,
   ): Promise<{ success: boolean; error?: string }> {
     const {
       username,
@@ -2512,13 +2586,61 @@ export class OrdersService {
       }
     }
 
+    // Step 3.6: KHỐI NHÀ CUNG CẤP.
+    //
+    // Cập nhật RIÊNG, không nhồi vào SP_CapNhatDonHang: SP đó là bản sinh từ
+    // trang ASP cũ và trang ASP vẫn đang gọi chính nó. Thêm tham số vào SP là
+    // sửa chung cho hai hệ, mà bên kia không ai dựng lại được để thử.
+    //
+    // HAI ĐIỀU KIỆN, cả hai đều cần:
+    //   • `coGiaNcc` — người gọi có quyền. Thiếu thì BỎ QUA im lặng chứ không
+    //     báo lỗi: biểu mẫu của CSKH không hiện khối này nên họ không cố ghi,
+    //     ném lỗi chỉ làm họ không lưu được những sửa đổi hợp lệ khác.
+    //   • `docThanNcc` khác null — thân yêu cầu CÓ ít nhất một khoá NCC. Đây
+    //     là chỗ dễ sai nhất: nếu coi "thân không có khoá" là "đặt về null"
+    //     thì một người CÓ quyền mở đơn ra, sửa ghi chú rồi bấm Cập nhật là
+    //     xoá sạch giá nhập, vì biểu mẫu nào không gửi khối đó cũng thành lệnh
+    //     xoá.
+    let noiDungNcc = '';
+    const thanNcc = coGiaNcc ? docThanNcc(updateData as any) : null;
+    if (thanNcc) {
+      try {
+        await this.sequelize.query(
+          `UPDATE dbo.DON_HANG
+           SET    NCC_ID = :nccId,
+                  NCC_NgoaiTe = :ngoaiTe,
+                  NCC_Cong = :cong,
+                  NCC_TyGia = :tyGia,
+                  NCC_TongPhaiTra = :tongPhaiTra,
+                  NCC_Tracking = :tracking
+           WHERE  ID = :id`,
+          {
+            replacements: {
+              id,
+              nccId: thanNcc.NCC_ID,
+              ngoaiTe: thanNcc.NCC_NgoaiTe,
+              cong: thanNcc.NCC_Cong,
+              tyGia: thanNcc.NCC_TyGia,
+              tongPhaiTra: thanNcc.NCC_TongPhaiTra,
+              tracking: thanNcc.NCC_Tracking,
+            },
+            type: QueryTypes.UPDATE,
+          },
+        );
+        noiDungNcc = `; ${nhatKyNcc(thanNcc)}`;
+      } catch (error) {
+        console.error('updateOrderDetail NCC error:', error);
+        // Không chặn luồng chính — Step 3 đã lưu xong phần đơn hàng.
+      }
+    }
+
     // Step 4: Log to SystemLogs
     await this.systemLogsService.create({
       nguoiTao: logUsername,
       nguon: 'EditOrderDetail:CapNhatDonHang',
       hanhDong: 'Chinh sua',
       doiTuong: String(id),
-      noiDung: `ID: ${id}; ${noiDung}`,
+      noiDung: `ID: ${id}; ${noiDung}${noiDungNcc}`,
     });
 
     // Step 5: Update ngayVeVN using SP_CapNhat_NgayVeVN if provided.

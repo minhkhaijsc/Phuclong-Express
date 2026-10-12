@@ -17,6 +17,8 @@ import {
 import { UsersService } from './users.service';
 import { TrangThaiKhachService, RaSoatXoa } from './trang-thai-khach.service';
 import { DuLieuTaiKhoanService } from './du-lieu-tai-khoan.service';
+import { TaoTaiKhoanService } from './tao-tai-khoan.service';
+import type { YeuCauTaoTaiKhoan } from './tao-tai-khoan.service';
 // `import type`: kiểu này nằm trong chữ ký có decorator, để import thường thì
 // `emitDecoratorMetadata` cố sinh siêu dữ liệu cho một thứ không tồn tại lúc chạy.
 import type { YeuCauXuLy } from './du-lieu-tai-khoan.service';
@@ -24,6 +26,7 @@ import { User } from './entities/user.entity';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen, Quyen } from '../auth/quyen/quyen.decorator';
 /**
  * Users Controller
  *
@@ -41,17 +44,20 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  */
 @Controller('users')
 @UseGuards(JwtAuthGuard)
+@MienQuyen('taiKhoan')
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly trangThaiKhachService: TrangThaiKhachService,
     private readonly duLieuTaiKhoanService: DuLieuTaiKhoanService,
+    private readonly taoTaiKhoanService: TaoTaiKhoanService,
   ) {}
 
   /**
    * GET /users
    * List all users
    */
+  @Quyen('taiKhoan.xem', 'xemDanhSachKhach')
   @Get()
   async findAll(@Query('keyword') keyword?: string): Promise<User[]> {
     return this.usersService.findAll(keyword);
@@ -146,11 +152,19 @@ export class UsersController {
 
   /**
    * POST /users
-   * Create new user
+   *
+   * Tạo tài khoản. Phải nói ngay trong cùng một lần gửi là KHÁCH HÀNG hay
+   * NHÂN VIÊN — nhân viên thì kèm bộ phận, và vai trò được gán trong cùng giao
+   * dịch với lúc tạo. Xem `tao-tai-khoan.service.ts` để biết vì sao không để
+   * mặc định.
    */
   @Post()
-  async create(@Body() userData: Partial<User>, @Request() req: any): Promise<User> {
-    return this.usersService.create(userData, req.user?.username || 'system');
+  async create(@Body() body: YeuCauTaoTaiKhoan, @Request() req: any): Promise<User> {
+    return this.taoTaiKhoanService.tao(
+      body ?? {},
+      req.quyen,
+      req.user?.username || 'system',
+    );
   }
 
   // ---------------- KIỂM KÊ / CHUYỂN / XOÁ ----------------
@@ -174,6 +188,7 @@ export class UsersController {
    * Thay cho `DELETE /users/:id` ở màn danh sách: đường DELETE không có chỗ nào
    * để nói "chuyển đơn sang ai", nên nó chỉ còn là lối chặn cho mọi nơi gọi cũ.
    */
+  @Quyen('taiKhoan.sua', 'quanLyRole')
   @Post(':id/xu-ly')
   async xuLy(@Param('id') id: string, @Body() body: YeuCauXuLy, @Request() req: any) {
     return this.duLieuTaiKhoanService.xuLy(id, body ?? {}, req.user?.username || 'system');
@@ -189,6 +204,7 @@ export class UsersController {
     @Body() userData: Partial<User>,
     @Request() req: any,
   ): Promise<User> {
+    await this.taoTaiKhoanService.chanNeuLaNhanVien(id, req.quyen);
     return this.usersService.update(id, userData, req.user?.username || 'system');
   }
 
@@ -196,6 +212,7 @@ export class UsersController {
    * DELETE /users/:id
    * Delete user
    */
+  @Quyen('taiKhoan.sua', 'quanLyRole')
   @Delete(':id')
   async remove(@Param('id') id: string, @Request() req: any): Promise<void> {
     // "Khách nghỉ, KHÔNG xoá": AspNetUsers bị xoá cứng (`user.destroy()`) trong
@@ -268,6 +285,7 @@ export class UsersController {
    * POST /users/clear-data
    * Clear all data for a specific user
    */
+  @Quyen('taiKhoan.sua', 'quanLyRole')
   @Post('clear-data')
   async clearUserData(@Body() body: { username: string }, @Request() req: any) {
     return this.usersService.clearUserData(body.username, req.user?.username || 'system');
@@ -277,6 +295,7 @@ export class UsersController {
    * POST /users/import/sheets
    * Get sheets from uploaded Excel file
    */
+  @Quyen('taiKhoan.sua', 'quanLyRole')
   @Post('import/sheets')
   @UseInterceptors(FileInterceptor('file'))
   async getSheets(@UploadedFile() file: Express.Multer.File) {
@@ -287,6 +306,7 @@ export class UsersController {
    * POST /users/import/validate
    * Validate Excel data before import
    */
+  @Quyen('taiKhoan.sua', 'quanLyRole')
   @Post('import/validate')
   @UseInterceptors(FileInterceptor('file'))
   async validateImport(
@@ -300,6 +320,7 @@ export class UsersController {
    * POST /users/import/execute
    * Execute the import
    */
+  @Quyen('taiKhoan.sua', 'quanLyRole')
   @Post('import/execute')
   @UseInterceptors(FileInterceptor('file'))
   async executeImport(
@@ -322,6 +343,7 @@ export class UsersController {
    * POST /users/:id/roles
    * Add role to user
    */
+  @Quyen('quanLyRole')
   @Post(':id/roles')
   async addRole(
     @Param('id') id: string,
@@ -335,6 +357,7 @@ export class UsersController {
    * DELETE /users/:id/roles/:roleName
    * Remove role from user
    */
+  @Quyen('quanLyRole')
   @Delete(':id/roles/:roleName')
   async removeRole(
     @Param('id') id: string,
@@ -354,6 +377,7 @@ export class UsersController {
     @Body() body: { password: string },
     @Request() req: any,
   ) {
+    await this.taoTaiKhoanService.chanNeuLaNhanVien(id, req.quyen);
     return this.usersService.resetPassword(id, body.password, req.user?.username || 'system');
   }
 }

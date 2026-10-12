@@ -17,6 +17,7 @@ import { CreateBatchDto } from './dto/create-batch.dto';
 import { UpdateBatchDto } from './dto/update-batch.dto';
 import { QueryBatchDto } from './dto/query-batch.dto';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 /**
  * Batches Controller
  *
@@ -35,6 +36,7 @@ import { QueryBatchDto } from './dto/query-batch.dto';
  * - DELETE /batches/:id/costs/:costId - Delete batch cost
  */
 @Controller('batches')
+@MienQuyen('vanChuyen')
 export class BatchesController {
   constructor(private readonly batchesService: BatchesService) {}
 

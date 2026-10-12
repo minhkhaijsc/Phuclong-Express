@@ -11,6 +11,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ImageUploadService } from '../services/image-upload.service';
 
+import { MienQuyen } from '../../auth/quyen/quyen.decorator';
 /**
  * Generic upload endpoints used across all modules.
  *
@@ -23,6 +24,7 @@ import { ImageUploadService } from '../services/image-upload.service';
  */
 @Controller('upload')
 @UseGuards(JwtAuthGuard)
+@MienQuyen('rieng')
 export class UploadController {
   constructor(private readonly imageUploadService: ImageUploadService) {}
 

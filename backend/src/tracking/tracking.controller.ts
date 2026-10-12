@@ -28,6 +28,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 interface AuthenticatedRequest {
   user?: {
     username?: string;
@@ -55,6 +56,7 @@ interface AuthenticatedRequest {
  */
 @UseGuards(JwtAuthGuard)
 @Controller('tracking')
+@MienQuyen('vanChuyen')
 export class TrackingController {
   constructor(private readonly trackingService: TrackingService) {}
 

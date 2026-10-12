@@ -19,6 +19,7 @@ import { UpdatePurchasedItemDto } from './dto/update-purchased-item.dto';
 import { QueryPurchasedItemDto, MassUpdatePurchasedItemDto, ShareOrdersDto } from './dto/query-purchased-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 /**
  * Purchased Items Controller
  *
@@ -33,6 +34,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  * - POST /purchased-items/share - Share orders with totals
  */
 @Controller('purchased-items')
+@MienQuyen('muaHang')
 export class PurchasedItemsController {
   constructor(private readonly purchasedItemsService: PurchasedItemsService) {}
 

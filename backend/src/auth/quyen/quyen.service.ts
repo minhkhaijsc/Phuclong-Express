@@ -1,0 +1,140 @@
+import { Injectable } from '@nestjs/common';
+import {
+  BANG_QUYEN,
+  BO_PHAN,
+  BoPhan,
+  CAP,
+  CAP_XEM_DASHBOARD,
+  Cap,
+  HanhDong,
+  LE_CUA_CAP,
+  LE_CUA_KHACH,
+  MaQuyen,
+  MIEN_CUA_KHACH,
+  Mien,
+  QUYEN_LE,
+  QuyenLe,
+  VAI_TRO_CU,
+  laBoPhan,
+  laCap,
+} from './bo-phan';
+
+/** Những gì một tài khoản được làm, đã tính xong. */
+export interface QuyenCuaToi {
+  /** Bộ phận sau khi đã quy đổi vai trò cũ. */
+  boPhan: BoPhan[];
+  cap: Cap[];
+  /** Không mang vai trò nào → khách hàng. */
+  laKhach: boolean;
+  /** `muaHang.xem`, `congNo.sua`, `giaNcc`… */
+  quyen: MaQuyen[];
+}
+
+@Injectable()
+export class QuyenService {
+  /**
+   * Quy đổi danh sách vai trò thô trong AspNetUserRoles thành bộ phận + cấp.
+   *
+   * Vai trò lạ (không phải bộ phận, không phải cấp, không có trong bảng quy đổi
+   * cũ) bị bỏ qua chứ không coi là khách: một tài khoản có vai trò rác vẫn là
+   * nhân viên, chỉ là chưa được gán bộ phận — và khi đó `quyen` rỗng nên không
+   * làm được gì ngoài việc riêng.
+   */
+  phanTich(vaiTroTho: readonly string[]): {
+    boPhan: BoPhan[];
+    cap: Cap[];
+    laKhach: boolean;
+  } {
+    const boPhan = new Set<BoPhan>();
+    const cap = new Set<Cap>();
+
+    for (const v of vaiTroTho ?? []) {
+      const ten = String(v ?? '').trim();
+      if (!ten) continue;
+      if (laBoPhan(ten)) {
+        boPhan.add(ten);
+        continue;
+      }
+      if (laCap(ten)) {
+        cap.add(ten);
+        continue;
+      }
+      const cu = VAI_TRO_CU[ten];
+      if (cu) boPhan.add(cu);
+    }
+
+    // 'user' là vai trò giả mà auth.service gán cho tài khoản tự đăng ký — nó
+    // không có trong AspNetUserRoles nên không tới được đây, nhưng nếu có thì
+    // cũng đã bị bỏ ở trên vì không khớp bộ phận nào.
+    return {
+      boPhan: [...boPhan],
+      cap: [...cap],
+      laKhach: boPhan.size === 0 && cap.size === 0,
+    };
+  }
+
+  /** Tính toàn bộ quyền từ danh sách vai trò thô. */
+  tinh(vaiTroTho: readonly string[]): QuyenCuaToi {
+    const { boPhan, cap, laKhach } = this.phanTich(vaiTroTho);
+    const quyen = new Set<MaQuyen>();
+
+    if (laKhach) {
+      for (const [mien, q] of Object.entries(MIEN_CUA_KHACH)) {
+        if (q?.xem) quyen.add(`${mien as Mien}.xem`);
+        if (q?.sua) quyen.add(`${mien as Mien}.sua`);
+      }
+      for (const l of LE_CUA_KHACH) quyen.add(l);
+      return { boPhan, cap, laKhach, quyen: [...quyen] };
+    }
+
+    for (const bp of boPhan) {
+      const mo = BANG_QUYEN[bp];
+      for (const [mien, q] of Object.entries(mo.mien)) {
+        if (q?.xem) quyen.add(`${mien as Mien}.xem`);
+        if (q?.sua) quyen.add(`${mien as Mien}.sua`);
+      }
+      for (const l of mo.le ?? []) quyen.add(l);
+    }
+
+    // Cấp Trưởng phòng / Giám đốc mở Dashboard, bất kể bộ phận nào.
+    if (cap.some((c) => CAP_XEM_DASHBOARD.includes(c))) {
+      quyen.add(`${'dashboard' as Mien}.xem`);
+    }
+
+    // Quyền lẻ của cấp — Giám đốc xem được giá NCC và công nợ phải trả, kể cả
+    // khi bộ phận của người đó không có hai quyền đó.
+    for (const c of cap) {
+      for (const l of LE_CUA_CAP[c] ?? []) quyen.add(l);
+    }
+
+    // Việc cá nhân thì ai đăng nhập cũng làm được.
+    quyen.add('rieng.xem');
+    quyen.add('rieng.sua');
+
+    return { boPhan, cap, laKhach, quyen: [...quyen] };
+  }
+
+  /** Có quyền này không. */
+  co(q: QuyenCuaToi, ma: MaQuyen): boolean {
+    return q.quyen.includes(ma);
+  }
+
+  coMien(q: QuyenCuaToi, mien: Mien, hanhDong: HanhDong): boolean {
+    return q.quyen.includes(`${mien}.${hanhDong}` as MaQuyen);
+  }
+
+  laAdmin(q: QuyenCuaToi): boolean {
+    return q.boPhan.includes(BO_PHAN.Admin);
+  }
+
+  /** Dùng cho thông báo lỗi: "Bộ phận Kho không có quyền sửa Quản lý công nợ". */
+  tenBoPhan(q: QuyenCuaToi): string {
+    if (q.laKhach) return 'Khách hàng';
+    const ten = q.boPhan.map((b) => BANG_QUYEN[b].nhan);
+    const capTen = q.cap.map((c) => (c === CAP.TruongPhong ? 'Trưởng phòng' : 'Giám đốc'));
+    return [...ten, ...capTen].join(' + ') || 'Chưa gán bộ phận';
+  }
+}
+
+export { QUYEN_LE };
+export type { QuyenLe };

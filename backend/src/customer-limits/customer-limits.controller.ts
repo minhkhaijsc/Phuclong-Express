@@ -3,7 +3,9 @@ import { CustomerLimitsService } from './customer-limits.service';
 import type { QueryCustomerLimitDto, CreateCustomerLimitDto, UpdateCustomerLimitDto } from './customer-limits.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 @Controller('customer-limits')
+@MienQuyen('congNo')
 export class CustomerLimitsController {
   constructor(private readonly customerLimitsService: CustomerLimitsService) {}
 

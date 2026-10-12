@@ -13,6 +13,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { SystemLogsService } from '../system-logs/system-logs.service';
+import { QuyenService } from './quyen/quyen.service';
 
 /**
  * Auth Service
@@ -28,6 +29,7 @@ export class AuthService {
     @Inject('SEQUELIZE') private sequelize: Sequelize,
     private jwtService: JwtService,
     private readonly systemLogsService: SystemLogsService,
+    private readonly quyenService: QuyenService,
   ) {
     if (!sequelize.models.User) {
       UserModel(sequelize);
@@ -254,6 +256,8 @@ export class AuthService {
         email: user.Email,
         hoTen: user.HoTen,
         roles: user.roles,
+        // Quyền tính sẵn để web khỏi phải gọi thêm một lượt sau khi đăng nhập.
+        ...this.quyenService.tinh(user.roles ?? []),
       },
     };
   }

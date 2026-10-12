@@ -1,4 +1,4 @@
-import { Controller, ForbiddenException, Get, Query, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { VanHanhService } from './van-hanh.service';
 import { TuoiNoService } from './tuoi-no.service';
@@ -6,6 +6,7 @@ import { KhachHangService } from './khach-hang.service';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen, Quyen } from '../auth/quyen/quyen.decorator';
 /**
  * Dashboard Controller
  *
@@ -14,6 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  */
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard)
+@MienQuyen('dashboard')
 export class DashboardController {
   constructor(
     private readonly dashboardService: DashboardService,
@@ -139,20 +141,30 @@ export class DashboardController {
    * bỏ qua chứ không báo lỗi, vì đây không phải lỗi của người dùng thật, mà nếu
    * báo lỗi thì lại thành cách để dò xem username nào tồn tại.
    */
+  @MienQuyen('rieng')
   @Get('khach-hang/tong-quan')
   async khachTongQuan(@Request() req: any, @Query('soThang') soThang?: string, @Query('khach') khach?: string) {
     return this.khachHangService.tongQuan(this.khachDuocXem(req, khach), Number(soThang) || undefined);
   }
 
-  /** Danh sách khách để Admin chọn khi xem hộ. Khách thường không được gọi. */
+  /** Danh sách khách để chọn khi xem hộ. Khách thường không được gọi. */
+  @Quyen('xemDanhSachKhach')
   @Get('khach-hang/danh-sach')
-  async khachDanhSach(@Request() req: any, @Query('tuKhoa') tuKhoa?: string) {
-    if (!this.laAdmin(req)) throw new ForbiddenException('Chỉ Admin được xem danh sách khách');
+  async khachDanhSach(@Query('tuKhoa') tuKhoa?: string) {
     return this.khachHangService.danhSachKhachCoDuLieu(tuKhoa);
   }
 
-  private laAdmin(req: any): boolean {
-    return Array.isArray(req?.user?.roles) && req.user.roles.includes('Admin');
+  /**
+   * Được xem tổng quan của khách khác hay không.
+   *
+   * Trước đây chỗ này đòi đúng vai trò 'Admin'. Nhưng người cần xem hộ nhiều
+   * nhất là CSKH — khách gọi lên hỏi "sao số của em lại thế này" thì CSKH phải
+   * mở đúng màn hình khách đang thấy. Nay dùng quyền `xemDanhSachKhach`, tức
+   * Admin và CSKH, khớp với yêu cầu "các bộ phận còn lại không được xem list tk
+   * khách hàng".
+   */
+  private xemHoDuoc(req: any): boolean {
+    return Array.isArray(req?.quyen?.quyen) && req.quyen.quyen.includes('xemDanhSachKhach');
   }
 
   /**
@@ -165,7 +177,7 @@ export class DashboardController {
   private khachDuocXem(req: any, khach?: string): string {
     const toi = String(req?.user?.username ?? '').trim();
     const chiDinh = (khach ?? '').trim();
-    if (chiDinh && this.laAdmin(req)) return chiDinh;
+    if (chiDinh && this.xemHoDuoc(req)) return chiDinh;
     return toi;
   }
 }

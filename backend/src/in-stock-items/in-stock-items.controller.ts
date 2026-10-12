@@ -20,6 +20,7 @@ import { UpdateInStockItemDto } from './dto/update-in-stock-item.dto';
 import { QueryInStockItemDto } from './dto/query-in-stock-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 /**
  * In-Stock Items Controller
  *
@@ -31,6 +32,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  * - DELETE /in-stock-items/:id - Delete in-stock item
  */
 @Controller('in-stock-items')
+@MienQuyen('muaHang')
 export class InStockItemsController {
   constructor(private readonly inStockItemsService: InStockItemsService) {}
 

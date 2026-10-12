@@ -2,7 +2,9 @@ import { Controller, Get, Query, Post, Body, UseGuards } from '@nestjs/common';
 import { SystemLogsService } from './system-logs.service';
 import type { QuerySystemLogsDto } from './system-logs.service';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 @Controller('system-logs')
+@MienQuyen('nhatKy')
 export class SystemLogsController {
   constructor(private readonly systemLogsService: SystemLogsService) {}
 

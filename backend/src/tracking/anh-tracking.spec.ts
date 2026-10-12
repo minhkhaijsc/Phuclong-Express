@@ -8,6 +8,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Parser } from 'node-sql-parser';
 import { AnhTrackingService } from './anh-tracking.service';
 import { laTenAnh, ungVienTracking } from './anh-tracking.helper';
+import { QuyenService } from '../auth/quyen/quyen.service';
 
 describe('ungVienTracking — tên file ra số tracking', () => {
   it('tên nguyên văn luôn đứng đầu', () => {
@@ -528,7 +529,12 @@ describe('AnhTrackingController.taiLen — lỗi từng ảnh nằm trong thân 
   // IIS trên server thay thân mọi 4xx bằng trang HTML, nên câu báo lỗi phải đi
   // trong thân 200 thì trang up ảnh mới hiện được.
   const { AnhTrackingController } = require('./anh-tracking.controller');
-  const nv = { user: { username: 'kho01', roles: ['Admin'] } };
+  // QuyenGuard gắn `quyen` vào request; dựng giống hệt để đi đúng đường mã.
+  const reqGia = (username: string, roles: string[]) => ({
+    user: { username, roles },
+    quyen: new QuyenService().tinh(roles),
+  });
+  const nv = reqGia('kho01', ['Admin']);
 
   it('ảnh không có tracking → { ok: false, loi } chứ không ném', async () => {
     const { service } = taoDb();
@@ -552,7 +558,7 @@ describe('AnhTrackingController.taiLen — lỗi từng ảnh nằm trong thân 
   it('khách (không vai trò) vẫn bị chặn bằng 403, lỗi hệ thống vẫn ném', async () => {
     const { service, upload } = taoDb();
     const c = new AnhTrackingController(service);
-    await expect(c.taiLen(file(), { tenFileGoc: 'TBA111111111.jpg' }, { user: { username: 'k', roles: [] } })).rejects.toThrow('Chỉ nhân viên');
+    await expect(c.taiLen(file(), { tenFileGoc: 'TBA111111111.jpg' }, reqGia('k', []) as never)).rejects.toThrow('Chỉ nhân viên');
     upload.luuAnhHang.mockRejectedValueOnce(new Error('đĩa đầy'));
     await expect(c.taiLen(file(), { tenFileGoc: 'TBA111111111.jpg' }, nv)).rejects.toThrow('đĩa đầy');
   });

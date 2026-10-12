@@ -3,6 +3,7 @@ import { QnaService } from './qna.service';
 import { QueryQnaDto, AnswerQnaDto, CreateQnaDto } from './dto/qna.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 /**
  * Q&A Controller
  *
@@ -10,6 +11,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  */
 @Controller('qna')
 @UseGuards(JwtAuthGuard)
+@MienQuyen('noiDung')
 export class QnaController {
   constructor(private readonly qnaService: QnaService) {}
 
@@ -17,13 +19,21 @@ export class QnaController {
    * Get Q&A list with filters
    * Matches: LoadDanhSachThacMac() in HoiDapAdmin.cs
    */
+  /**
+   * Khách chỉ thấy thắc mắc của chính mình; nhân viên lọc theo username nào
+   * cũng được, để trống là xem tất.
+   *
+   * CHỖ NÀY TỪNG RÒ: điều kiện cũ là `roles.length === 1 && roles[0] === 'user'`
+   * — nhưng tài khoản khách KHÔNG có dòng nào trong AspNetUserRoles, nên
+   * `roles` là mảng rỗng và điều kiện ấy luôn sai. Kết quả là mọi khách đăng
+   * nhập vào /hoi-dap đều đọc được thắc mắc của toàn bộ khách khác, và còn
+   * truyền `?username=` để xem đích danh một người. Vai trò 'user' chỉ tồn tại
+   * trong một đối tượng tạm ở auth.service, chưa bao giờ được ghi vào CSDL.
+   */
   @Get()
   async getQnaList(@Query() query: QueryQnaDto, @Request() req: any) {
-    // Regular users (role === 'user' only) can only view their own questions.
-    // Staff/admin roles can filter by any username or see all (empty = all).
-    const roles: string[] = req.user?.roles ?? [];
-    const isRegularUser = roles.length === 1 && roles[0] === 'user';
-    const usernameFilter = isRegularUser ? (req.user?.username ?? '') : (query.username ?? '');
+    const laKhach = req.quyen?.laKhach !== false;
+    const usernameFilter = laKhach ? (req.user?.username ?? '') : (query.username ?? '');
     return this.qnaService.getQnaList(usernameFilter, query.daTraLoi, query.page, query.limit);
   }
 

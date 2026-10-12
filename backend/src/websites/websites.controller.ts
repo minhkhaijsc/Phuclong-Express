@@ -3,7 +3,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { WebsitesService } from './websites.service';
 import type { CreateWebsiteDto, UpdateWebsiteDto } from './websites.service';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 @Controller('websites')
+@MienQuyen('danhMuc')
 export class WebsitesController {
   constructor(private readonly websitesService: WebsitesService) {}
 

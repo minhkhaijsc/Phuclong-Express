@@ -3,6 +3,7 @@ import { ShippersService } from './shippers.service';
 import { QueryShipperDto, CreateShipperDto, UpdateShipperDto } from './dto/shipper.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 /**
  * Shippers Controller
  *
@@ -10,6 +11,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  */
 @Controller('shippers')
 @UseGuards(JwtAuthGuard)
+@MienQuyen('vanChuyen')
 export class ShippersController {
   constructor(private readonly shippersService: ShippersService) {}
 

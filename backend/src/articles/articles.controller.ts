@@ -9,6 +9,7 @@ import {
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 
+import { MienQuyen, Quyen } from '../auth/quyen/quyen.decorator';
 /**
  * Articles Controller
  *
@@ -18,6 +19,7 @@ import { Public } from '../common/decorators/public.decorator';
  */
 @Controller('articles')
 @UseGuards(JwtAuthGuard)
+@MienQuyen('noiDung')
 export class ArticlesController {
   constructor(private readonly articlesService: ArticlesService) {}
 
@@ -30,8 +32,8 @@ export class ArticlesController {
    * Khong doc duoc vai trong thi tu choi, khong mo mac dinh.
    */
   private assertStaff(req: any) {
-    const roles: string[] = req.user?.roles ?? [];
-    if (roles.length === 0) {
+    // `req.quyen` do QuyenGuard tính; !== false để nếu thiếu thì coi như khách.
+    if (req.quyen?.laKhach !== false) {
       throw new ForbiddenException('Bạn không có quyền quản lý bài viết.');
     }
   }
@@ -80,6 +82,7 @@ export class ArticlesController {
   }
 
   /** Cham diem SEO cho bai dang soan, chua can luu */
+  @Quyen('noiDung.xem')
   @Post('seo-preview')
   @HttpCode(HttpStatus.OK) // Chi cham diem, khong tao gi - khong dung 201
   async seoPreview(@Body() dto: CreateArticleDto, @Request() req: any) {

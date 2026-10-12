@@ -20,6 +20,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AnhTrackingService } from './anh-tracking.service';
 
+import { MienQuyen } from '../auth/quyen/quyen.decorator';
 interface NguoiDung {
   user?: { username?: string; roles?: string[] };
 }
@@ -43,6 +44,7 @@ const TOI_DA_TEN_FILE = 2000;
  */
 @UseGuards(JwtAuthGuard)
 @Controller('tracking')
+@MienQuyen('vanChuyen')
 export class AnhTrackingController {
   constructor(private readonly anhTrackingService: AnhTrackingService) {}
 
@@ -52,7 +54,7 @@ export class AnhTrackingController {
    * /admin đang dùng.
    */
   private laNhanVien(req: NguoiDung) {
-    return (req.user?.roles ?? []).length > 0;
+    return (req as any).quyen?.laKhach === false;
   }
 
   private batBuocNhanVien(req: NguoiDung) {
