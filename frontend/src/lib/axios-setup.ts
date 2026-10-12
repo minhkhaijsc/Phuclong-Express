@@ -24,7 +24,7 @@ axios.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Handle 401/403 - redirect to login
+// 401 thì đăng xuất, 403 thì không — xem ghi chú dài trong `api-client.ts`.
 axios.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -34,20 +34,16 @@ axios.interceptors.response.use(
 
     console.log('[API Error]', { status, message, url });
 
-    // Check for auth errors
-    if (
+    const phienHong =
       status === 401 ||
-      status === 403 ||
       message?.includes('unauthorized') ||
-      message?.includes('invalid token') ||
-      message?.includes('Forbidden')
-    ) {
-      if (typeof window !== 'undefined') {
-        useAuthStore.getState().logout();
-        localStorage.removeItem('auth-storage');
-        document.cookie = 'accessToken=; path=/; max-age=0';
-        useLoginModalStore.getState().openModal();
-      }
+      message?.includes('invalid token');
+
+    if (phienHong && typeof window !== 'undefined') {
+      useAuthStore.getState().logout();
+      localStorage.removeItem('auth-storage');
+      document.cookie = 'accessToken=; path=/; max-age=0';
+      useLoginModalStore.getState().openModal();
     }
     return Promise.reject(error);
   },

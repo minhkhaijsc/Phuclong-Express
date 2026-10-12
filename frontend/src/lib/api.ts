@@ -77,26 +77,27 @@ const createApiClient = (): AxiosInstance => {
         error.message = Array.isArray(cauMayChu) ? cauMayChu.join('. ') : String(cauMayChu);
       }
 
-      // Check for any auth-related error and redirect to login
-      if (
+      // 401 = phiên hỏng, phải đăng nhập lại. 403 = KHÔNG ĐƯỢC LÀM VIỆC NÀY,
+      // phiên vẫn tốt — xem ghi chú dài trong `api-client.ts`. Đây là bản sao
+      // THỨ BA của cùng đoạn này (api-client.ts, axios-setup.ts, và đây), và là
+      // bản nặng nhất: nó `window.location.href` sang /login, tức là người dùng
+      // bị ném khỏi trang đang làm, mất cả dữ liệu đang nhập dở.
+      //
+      // Cũng bỏ `message?.includes('token')`: chuỗi 'token' khớp cả những câu
+      // chẳng liên quan gì tới phiên đăng nhập, ví dụ lỗi về mã vận đơn
+      // ('tracking_number') hay bất kỳ câu nào của máy chủ có chữ đó.
+      const phienHong =
         status === 401 ||
-        status === 403 ||
         message?.includes('unauthorized') ||
-        message?.includes('invalid token') ||
-        message?.includes('token') ||
         message?.includes('Unauthorized') ||
-        message?.includes('Forbidden')
-      ) {
-        if (typeof window !== 'undefined') {
-          console.log('[Auth] Redirecting to login due to auth error');
-          // Clear auth store (zustand)
-          useAuthStore.getState().logout();
-          // Also clear localStorage keys
-          localStorage.removeItem('auth-storage');
-          // Redirect to login page with full URL
-          const currentOrigin = window.location.origin;
-          window.location.href = `${currentOrigin}/login`;
-        }
+        message?.includes('invalid token');
+
+      if (phienHong && typeof window !== 'undefined') {
+        console.log('[Auth] Redirecting to login due to auth error');
+        useAuthStore.getState().logout();
+        localStorage.removeItem('auth-storage');
+        const currentOrigin = window.location.origin;
+        window.location.href = `${currentOrigin}/login`;
       }
       return Promise.reject(error);
     },
@@ -2713,5 +2714,110 @@ export const datTrangThaiKhach = async (
   lyDo?: string,
 ): Promise<KhachKemTrangThai> => {
   const res = await apiClient.put(`/users/trang-thai/${id}`, { trangThai, lyDo });
+  return res.data;
+};
+
+// ============================================================
+// NHÀ CUNG CẤP  (yêu cầu bên khách 12/10/2026)
+// ============================================================
+
+export interface NhaCungCap {
+  NhaCungCapID: number;
+  TenNhaCungCap: string;
+  GhiChu: string | null;
+  DaAn: boolean;
+  NgayTao: string;
+  NguoiTao: string | null;
+}
+
+/** `tatCa` = kể cả nhà cung cấp đã ẩn. Ô LỌC cần, ô NHẬP thì không. */
+export const layNhaCungCap = async (tatCa = false): Promise<NhaCungCap[]> => {
+  const res = await apiClient.get<{ data: NhaCungCap[] }>('/suppliers', {
+    params: tatCa ? { tatCa: 1 } : undefined,
+  });
+  return res.data?.data ?? [];
+};
+
+export const taoNhaCungCap = async (body: {
+  tenNhaCungCap: string;
+  ghiChu?: string | null;
+}): Promise<NhaCungCap> => {
+  const res = await apiClient.post<{ data: NhaCungCap }>('/suppliers', body);
+  return res.data.data;
+};
+
+export const suaNhaCungCap = async (
+  id: number,
+  body: { tenNhaCungCap: string; ghiChu?: string | null; daAn?: boolean },
+): Promise<NhaCungCap> => {
+  const res = await apiClient.put<{ data: NhaCungCap }>(`/suppliers/${id}`, body);
+  return res.data.data;
+};
+
+/** Ẩn, không xoá — đơn cũ vẫn giữ được tên nhà cung cấp. */
+export const anNhaCungCap = async (
+  id: number,
+): Promise<{ success: boolean; soDonDangDung: number }> => {
+  const res = await apiClient.delete(`/suppliers/${id}`);
+  return res.data;
+};
+
+export interface DongCongNoNcc {
+  ID: number;
+  ordernumber: string | null;
+  username: string | null;
+  ngayMua: string | null;
+  WebsiteName: string | null;
+  TenQuocGia: string | null;
+  linkweb: string | null;
+  loaitien: string | null;
+  soluong: number | null;
+  tongtienVND: number | null;
+  NCC_ID: number | null;
+  TenNhaCungCap: string | null;
+  NCC_NgoaiTe: number | null;
+  NCC_Cong: number | null;
+  NCC_TyGia: number | null;
+  NCC_TongPhaiTra: number | null;
+  NCC_Tracking: string | null;
+  NCC_LaiLo: number | null;
+  trangthaiOrder: string | null;
+}
+
+export interface TongTheoNcc {
+  NCC_ID: number | null;
+  TenNhaCungCap: string | null;
+  soDon: number;
+  tongNgoaiTe: number;
+  tongCong: number;
+  tongPhaiTra: number;
+  tongThuKhach: number;
+  laiLo: number;
+}
+
+export interface CongNoNccResponse {
+  tongHop: {
+    soDon: number;
+    tongNgoaiTe: number;
+    tongCong: number;
+    tongPhaiTra: number;
+    tongThuKhach: number;
+    laiLo: number;
+  };
+  theoNcc: TongTheoNcc[];
+  chiTiet: { data: DongCongNoNcc[]; total: number; page: number; limit: number };
+  /** Số đơn trong cùng khoảng CHƯA ai nhập giá NCC — để trang nói thật về độ phủ. */
+  soDonChuaNhap: number;
+}
+
+export const layCongNoNcc = async (loc: {
+  tuNgay?: string;
+  denNgay?: string;
+  nccId?: number;
+  trangThai?: 'con-no' | 'da-tra';
+  page?: number;
+  limit?: number;
+}): Promise<CongNoNccResponse> => {
+  const res = await apiClient.get<CongNoNccResponse>('/supplier-debt', { params: loc });
   return res.data;
 };
