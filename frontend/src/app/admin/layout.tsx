@@ -22,11 +22,19 @@ import {
 } from 'react-icons/fi';
 import { NotificationBell } from '@/app/components/notifications/notification-bell';
 import { useQnaBadgeCount } from '@/hooks/use-qna-badge-count';
+import { useQuyen } from '@/hooks/use-quyen';
 
 type NavSubItem = {
   href: string;
   label: string;
   type?: 'divider';
+  /**
+   * Mã quyền cần có để hiện mục này. Bỏ trống thì ai cũng thấy, y như trước.
+   *
+   * CHỈ ĐỂ BỚT BẤM. Chặn thật ở QuyenGuard phía máy chủ; ba trang NCC còn tự
+   * hiện "Không có quyền" khi vào bằng cách gõ đường dẫn.
+   */
+  canQuyen?: string;
 };
 
 type NavItem = {
@@ -54,6 +62,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const qnaBadgeCount = useQnaBadgeCount();
+  const { co } = useQuyen();
   const hasAdminAccess = isAuthenticated && (user?.roles?.length ?? 0) > 0;
 
   // Chỉ user đã đăng nhập và có ít nhất 1 role mới được vào khu vực admin.
@@ -79,6 +88,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { href: '/admin/orders/list', label: 'Mua hàng' },
         { href: '/admin/order-management-list', label: 'Nhận đơn hàng' },
         { href: '/admin/orders/deleted', label: 'Các đơn hàng đã xóa' },
+        { href: '/admin/suppliers', label: 'Nhà cung cấp', canQuyen: 'giaNcc' },
       ],
     },
     {
@@ -107,6 +117,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { href: '/admin/debt-reports/reconciliation', label: 'Kiểm tra đơn hàng mua' },
         { href: '/admin/debt-reports/customer', label: 'Công nợ khách hàng' },
         { href: '/admin/debt-reports/by-shipment-lot', label: 'Công nợ theo đợt hàng' },
+        {
+          href: '/admin/debt-reports/supplier',
+          label: 'Công nợ phải trả NCC',
+          canQuyen: 'congNoNcc',
+        },
       ],
     },
     {
@@ -282,7 +297,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {/* Submenu */}
                 {item.submenu && isOpen && !sidebarCollapsed && (
                   <div className="ml-4 mt-2 space-y-1 border-l border-white/10 pl-3">
-                    {item.submenu.map((subItem, idx) =>
+                    {item.submenu
+                      .filter((subItem) => !subItem.canQuyen || co(subItem.canQuyen))
+                      .map((subItem, idx) =>
                       subItem.type === 'divider' || !subItem.href ? (
                         <div key={idx} className="flex items-center gap-2 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">
                           <span className="h-px flex-1 bg-white/10" />
@@ -320,7 +337,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         {item.label}
                       </div>
                       <div className="space-y-1">
-                        {item.submenu.map((subItem, idx) =>
+                        {item.submenu
+                          .filter((subItem) => !subItem.canQuyen || co(subItem.canQuyen))
+                          .map((subItem, idx) =>
                           subItem.type === 'divider' || !subItem.href ? (
                             <div key={idx} className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">
                               {subItem.label}

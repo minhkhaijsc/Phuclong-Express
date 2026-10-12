@@ -22,7 +22,9 @@ import {
   getUsernames,
   uploadImage,
   calculateServiceFee,
+  layNhaCungCap,
 } from '@/lib/api';
+import { useQuyen } from '@/hooks/use-quyen';
 
 const STYLES = {
   input:
@@ -94,6 +96,34 @@ export default function EditOrderDetailModal({ orderId, onClose }: Props) {
   const isInitialLoad = useRef(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const { xemGiaNcc } = useQuyen();
+
+  /**
+   * KHỐI NHÀ CUNG CẤP giữ ở state RIÊNG, KHÔNG nhập vào `orderEditFormSchema`.
+   *
+   * Cố ý: schema kia có mấy trường bắt buộc là số, và `register` với
+   * `valueAsNumber` biến ô trống thành NaN. Nhét sáu ô NCC — vốn được phép để
+   * trống — vào cùng schema là thêm sáu đường làm cho nút Cập nhật lặng lẽ
+   * không ăn vì zod báo không hợp lệ ở một ô người dùng cố tình bỏ trống.
+   * Phần đơn hàng đang chạy đúng thì đừng chạm vào.
+   */
+  const [ncc, setNcc] = useState({
+    NCC_ID: '' as string,
+    NCC_NgoaiTe: '' as string,
+    NCC_Cong: '' as string,
+    NCC_TyGia: '' as string,
+    NCC_TongPhaiTra: '' as string,
+    NCC_Tracking: '' as string,
+  });
+  /**
+   * Người dùng đã tự sửa ô "Tổng phải trả" chưa.
+   *
+   * Trước khi sửa tay thì ô đó tự tính (Ngoại tệ + Công) × Tỷ giá. Sau khi sửa
+   * thì THÔI tự tính — hoá đơn NCC hay lệch vài đồng do họ làm tròn, mà con số
+   * đi vào công nợ phải là con số trên hoá đơn, không phải con số mình nhân ra.
+   */
+  const [tongPhaiTraSuaTay, setTongPhaiTraSuaTay] = useState(false);
+
   const open = orderId != null && orderId > 0;
 
   // Reset transient state when modal opens for a new order
@@ -144,6 +174,14 @@ export default function EditOrderDetailModal({ orderId, onClose }: Props) {
     queryKey: ['usernames'],
     queryFn: getUsernames,
     enabled: open,
+  });
+
+  // Không gọi khi không có quyền: route /suppliers trả 403, gọi chỉ để nhận lỗi.
+  const { data: dsNhaCungCap = [] } = useQuery({
+    queryKey: ['nha-cung-cap'],
+    queryFn: () => layNhaCungCap(false),
+    enabled: open && xemGiaNcc,
+    staleTime: 5 * 60 * 1000,
   });
 
   const {
@@ -295,7 +333,59 @@ export default function EditOrderDetailModal({ orderId, onClose }: Props) {
     });
 
     if (o.linkhinh || o.LinkHinh) setImagePreview(o.linkhinh || o.LinkHinh);
+
+    // Khối NCC. Người không có quyền `giaNcc` nhận dòng đơn ĐÃ bị xoá các khoá
+    // NCC_* ở máy chủ (`cheNcc`), nên ở đây chúng là undefined → ô rỗng, và
+    // `onSubmit` cũng không gửi gì → không ghi đè giá nhập của mua hàng.
+    const oNcc = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+    setNcc({
+      NCC_ID: oNcc(o.NCC_ID),
+      NCC_NgoaiTe: oNcc(o.NCC_NgoaiTe),
+      NCC_Cong: oNcc(o.NCC_Cong),
+      NCC_TyGia: oNcc(o.NCC_TyGia),
+      NCC_TongPhaiTra: oNcc(o.NCC_TongPhaiTra),
+      NCC_Tracking: oNcc(o.NCC_Tracking),
+    });
+    // Đơn đã có số tổng phải trả thì coi như số đã chốt — đừng tự tính lại rồi
+    // ghi đè con số kế toán đã nhập đúng theo hoá đơn.
+    setTongPhaiTraSuaTay(o.NCC_TongPhaiTra !== null && o.NCC_TongPhaiTra !== undefined);
   }, [order, reset]);
+
+  /**
+   * Tổng phải trả gợi ý = (Ngoại tệ + Công) × Tỷ giá.
+   *
+   * Cùng công thức với `tongPhaiTraGoiY` trong
+   * backend/src/orders/ncc-don-hang.ts. Lặp lại ở đây chứ không gọi API: đây là
+   * phép nhân chạy theo từng lần bấm bàn phím, gọi máy chủ cho việc đó là vô
+   * nghĩa. Đổi công thức thì phải sửa CẢ HAI chỗ.
+   */
+  const soNcc = (v: string): number => {
+    const n = Number(String(v).trim());
+    return Number.isFinite(n) ? n : 0;
+  };
+  const tongPhaiTraGoiY = Math.round(
+    (soNcc(ncc.NCC_NgoaiTe) + soNcc(ncc.NCC_Cong)) * soNcc(ncc.NCC_TyGia),
+  );
+
+  useEffect(() => {
+    if (!xemGiaNcc || tongPhaiTraSuaTay) return;
+    setNcc((t) => {
+      const moi = tongPhaiTraGoiY ? String(tongPhaiTraGoiY) : '';
+      return t.NCC_TongPhaiTra === moi ? t : { ...t, NCC_TongPhaiTra: moi };
+    });
+  }, [tongPhaiTraGoiY, tongPhaiTraSuaTay, xemGiaNcc]);
+
+  /**
+   * LÃI/LỖ — "số liệu giữa phần thông tin giá so với thông tin nhà cung cấp".
+   *
+   * Lấy `tongtienVND` đang hiện trên biểu mẫu (đã tính lại theo mọi ô người
+   * dùng vừa sửa) trừ tổng phải trả. `null` khi chưa nhập tổng phải trả: 0 là
+   * hoà vốn, còn chưa nhập thì chưa biết — hiện 0 ở đó là nói sai.
+   */
+  const laiLo: number | null =
+    String(ncc.NCC_TongPhaiTra).trim() === ''
+      ? null
+      : Math.round((Number(watch('tongtienVND')) || 0) - soNcc(ncc.NCC_TongPhaiTra));
 
   const updateOrderDetailMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => updateOrderDetail(id, data),
@@ -366,6 +456,20 @@ export default function EditOrderDetailModal({ orderId, onClose }: Props) {
           QuocGiaID: data.QuocGiaID,
           usernamesave: currentUser?.username || '',
           nguoiTao: currentUser?.username || '',
+          // CHỈ gửi khối NCC khi có quyền. Không có quyền thì không gửi khoá
+          // nào, và máy chủ (`docThanNcc` trả null) bỏ qua phần NCC thay vì
+          // đặt về null — tức là CSKH mở đơn bấm Cập nhật không xoá giá nhập.
+          ...(xemGiaNcc
+            ? {
+                NCC_ID: ncc.NCC_ID === '' ? null : Number(ncc.NCC_ID),
+                NCC_NgoaiTe: ncc.NCC_NgoaiTe === '' ? null : Number(ncc.NCC_NgoaiTe),
+                NCC_Cong: ncc.NCC_Cong === '' ? null : Number(ncc.NCC_Cong),
+                NCC_TyGia: ncc.NCC_TyGia === '' ? null : Number(ncc.NCC_TyGia),
+                NCC_TongPhaiTra:
+                  ncc.NCC_TongPhaiTra === '' ? null : Number(ncc.NCC_TongPhaiTra),
+                NCC_Tracking: ncc.NCC_Tracking || null,
+              }
+            : {}),
         },
       });
     } catch {
@@ -669,6 +773,142 @@ export default function EditOrderDetailModal({ orderId, onClose }: Props) {
                     </div>
                   </div>
                 </div>
+
+                {/*
+                  NHÀ CUNG CẤP — "ở dưới cùng, trên mục ghi chú" (yêu cầu bên
+                  khách 12/10/2026). Vị trí này là nguyên văn yêu cầu, đừng dọn
+                  lên trên cho gọn.
+
+                  Cả khối ẩn hoàn toàn với người không có quyền `giaNcc`. Ẩn ở
+                  đây chỉ để bớt bấm — máy chủ đã xoá sáu cột NCC_* khỏi JSON
+                  trả về, nên không có gì để xem kể cả khi mở tab Network.
+                */}
+                {xemGiaNcc && (
+                  <div className={STYLES.card}>
+                    <h3 className={STYLES.sectionTitle}>Nhà cung cấp</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                        <label className={STYLES.label}>Nhà cung cấp</label>
+                        <select
+                          value={ncc.NCC_ID}
+                          onChange={(e) => setNcc((t) => ({ ...t, NCC_ID: e.target.value }))}
+                          className={STYLES.select}
+                        >
+                          <option value="">— Chưa chọn —</option>
+                          {dsNhaCungCap.map((n) => (
+                            <option key={n.NhaCungCapID} value={n.NhaCungCapID}>
+                              {n.TenNhaCungCap}
+                            </option>
+                          ))}
+                        </select>
+                        {dsNhaCungCap.length === 0 && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Danh mục nhà cung cấp còn rỗng — thêm ở trang Danh mục &gt; Nhà cung cấp.
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className={STYLES.label}>
+                          Ngoại tệ{watchedLoaiTien ? ` (${watchedLoaiTien})` : ''}
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={ncc.NCC_NgoaiTe}
+                          onChange={(e) => setNcc((t) => ({ ...t, NCC_NgoaiTe: e.target.value }))}
+                          className={STYLES.input}
+                        />
+                      </div>
+
+                      <div>
+                        <label className={STYLES.label}>Công</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={ncc.NCC_Cong}
+                          onChange={(e) => setNcc((t) => ({ ...t, NCC_Cong: e.target.value }))}
+                          className={STYLES.input}
+                        />
+                      </div>
+
+                      <div>
+                        <label className={STYLES.label}>Tỷ giá</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={ncc.NCC_TyGia}
+                          onChange={(e) => setNcc((t) => ({ ...t, NCC_TyGia: e.target.value }))}
+                          placeholder={
+                            watch('tygia') ? `Tỷ giá bán khách: ${watch('tygia')}` : ''
+                          }
+                          className={STYLES.input}
+                        />
+                      </div>
+
+                      <div>
+                        <label className={STYLES.label}>Tổng phải trả (VNĐ)</label>
+                        <input
+                          type="number"
+                          step="1"
+                          value={ncc.NCC_TongPhaiTra}
+                          onChange={(e) => {
+                            setTongPhaiTraSuaTay(true);
+                            setNcc((t) => ({ ...t, NCC_TongPhaiTra: e.target.value }));
+                          }}
+                          className={STYLES.input}
+                        />
+                        {tongPhaiTraSuaTay ? (
+                          <button
+                            type="button"
+                            onClick={() => setTongPhaiTraSuaTay(false)}
+                            className="mt-1 text-xs text-cyan-700 underline"
+                          >
+                            Tính lại theo (Ngoại tệ + Công) × Tỷ giá
+                            {tongPhaiTraGoiY ? ` = ${tongPhaiTraGoiY.toLocaleString('vi-VN')}` : ''}
+                          </button>
+                        ) : (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Đang tự tính (Ngoại tệ + Công) × Tỷ giá. Sửa tay thì thôi tự tính.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className={STYLES.label}>Tracking</label>
+                        <input
+                          type="text"
+                          maxLength={100}
+                          value={ncc.NCC_Tracking}
+                          onChange={(e) => setNcc((t) => ({ ...t, NCC_Tracking: e.target.value }))}
+                          className={STYLES.input}
+                        />
+                      </div>
+
+                      {/* LÃI/LỖ — tự nhảy, không cho nhập. */}
+                      <div className="md:col-span-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-sm font-medium text-gray-700">Lãi / Lỗ</span>
+                          <span
+                            className={`text-lg font-bold ${
+                              laiLo === null
+                                ? 'text-gray-400'
+                                : laiLo < 0
+                                  ? 'text-red-600'
+                                  : 'text-emerald-700'
+                            }`}
+                          >
+                            {laiLo === null ? 'Chưa nhập giá NCC' : laiLo.toLocaleString('vi-VN')}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Tổng tiền thu khách ({(Number(watch('tongtienVND')) || 0).toLocaleString('vi-VN')})
+                          − Tổng phải trả NCC
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Notes */}
                 <div className={STYLES.card}>

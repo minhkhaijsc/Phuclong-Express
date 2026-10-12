@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FiArrowRight, FiBox, FiClipboard, FiCreditCard, FiFileText, FiHome, FiTruck, FiUsers } from 'react-icons/fi';
 import { KPICard } from '@/app/components/admin';
 import { useAuth } from '@/hooks/use-auth-context';
+import { useQuyen } from '@/hooks/use-quyen';
 
 const quickLinks = [
   {
@@ -32,7 +33,20 @@ const quickLinks = [
   },
 ];
 
-const sections = [
+/**
+ * `canQuyen` = mã quyền cần có để hiện link này.
+ *
+ * CHỈ ĐỂ BỚT BẤM vào chỗ không có quyền, không phải để chặn: gõ thẳng đường dẫn
+ * vào thanh địa chỉ thì trang vẫn mở nhưng tự hiện "Không có quyền", và API
+ * phía sau trả 403. Link nào không ghi `canQuyen` thì ai cũng thấy, y như trước.
+ */
+interface LienKet {
+  href: string;
+  label: string;
+  canQuyen?: string;
+}
+
+const sections: { title: string; icon: typeof FiClipboard; links: LienKet[] }[] = [
   {
     title: 'Mua hàng giúp',
     icon: FiClipboard,
@@ -41,6 +55,8 @@ const sections = [
       { href: '/admin/orders/list', label: 'Danh sách mua hàng' },
       { href: '/admin/orders/deleted', label: 'Đơn hàng đã xóa' },
       { href: '/admin/orders/new', label: 'Tạo đơn mới' },
+      // Mua hàng, Kế toán, Giám đốc, Admin.
+      { href: '/admin/suppliers', label: 'Nhà cung cấp', canQuyen: 'giaNcc' },
     ],
   },
   {
@@ -61,6 +77,12 @@ const sections = [
       { href: '/admin/customer-limits', label: 'Hạn mức khách hàng' },
       { href: '/admin/debt-reports', label: 'Chi tiết công nợ' },
       { href: '/admin/debt-reports/total-revenue', label: 'Tổng doanh thu' },
+      // Kế toán, Giám đốc, Admin. Xem ghi chú `canQuyen` dưới.
+      {
+        href: '/admin/debt-reports/supplier',
+        label: 'Công nợ phải trả NCC',
+        canQuyen: 'congNoNcc',
+      },
     ],
   },
   {
@@ -89,6 +111,7 @@ export const dynamic = 'force-dynamic';
 
 export default function AdminPage() {
   const { user } = useAuth();
+  const { co } = useQuyen();
   const firstRole = user?.roles?.[0] || 'Nhân sự';
 
   return (
@@ -208,7 +231,9 @@ export default function AdminPage() {
                 <h2 className="text-lg font-semibold text-slate-900">{section.title}</h2>
               </div>
               <div className="grid gap-3">
-                {section.links.map((link) => (
+                {section.links
+                  .filter((link) => !link.canQuyen || co(link.canQuyen))
+                  .map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
