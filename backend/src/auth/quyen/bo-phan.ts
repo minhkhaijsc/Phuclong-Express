@@ -275,10 +275,23 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
     le: [QUYEN_LE.giaNcc, QUYEN_LE.duyetCongNo, QUYEN_LE.baoChuyenKhoan],
   },
 
+  /**
+   * Kế toán mở được Dashboard — yêu cầu bên khách 15/10/2026, sau khi có màn
+   * "Báo cáo sản lượng khách hàng": họ hỏi trang đó cho kế toán xem luôn, mà
+   * trang đó nằm trong miền `dashboard`.
+   *
+   * Mở cả miền chứ không làm riêng một quyền lẻ cho đúng một báo cáo: miền
+   * `dashboard` toàn là số liệu CHỈ ĐỌC (doanh thu, khách mới, sản lượng, tuổi
+   * nợ, vận hành) — đúng thứ kế toán vẫn phải đối chiếu. Thêm một mã quyền mới
+   * cho một màn thì lần sau có màn nữa lại thêm mã nữa.
+   *
+   * XEM chứ không SUA: dashboard không có đường ghi nào, để SUA chỉ là mở rộng
+   * vô cớ.
+   */
   [BO_PHAN.KeToan]: {
     nhan: 'Kế toán',
     tienTo: ['KT', 'KETOAN'],
-    mien: moiMien(SUA),
+    mien: { ...moiMien(SUA), dashboard: XEM },
     le: [
       QUYEN_LE.giaNcc,
       QUYEN_LE.congNoNcc,

@@ -118,11 +118,21 @@ describe('QuyenService', () => {
     it('Giám đốc xem được', () =>
       expect(q(BO_PHAN.KeToan, CAP.GiamDoc).quyen).toContain('dashboard.xem'));
 
+    /**
+     * Kế toán được mở Dashboard từ 15/10/2026 — bên khách xin cho kế toán xem
+     * màn "Báo cáo sản lượng khách hàng", mà màn đó nằm trong miền này.
+     */
+    it('Kế toán xem được, không cần cấp', () =>
+      expect(q(BO_PHAN.KeToan).quyen).toContain('dashboard.xem'));
+
     it('nhân viên thường không xem được', () => {
-      for (const bp of [BO_PHAN.CSKH, BO_PHAN.Kho, BO_PHAN.KeToan, BO_PHAN.MKT]) {
+      for (const bp of [BO_PHAN.CSKH, BO_PHAN.Kho, BO_PHAN.KhoSG, BO_PHAN.MKT, BO_PHAN.VanChuyen]) {
         expect(q(bp).quyen).not.toContain('dashboard.xem');
       }
     });
+
+    it('Kế toán chỉ XEM dashboard, không có đường ghi', () =>
+      expect(q(BO_PHAN.KeToan).quyen).not.toContain('dashboard.sua'));
 
     it('cấp không tự mở thêm quyền nghiệp vụ nào khác', () => {
       // Trưởng phòng kho vẫn chỉ là kho, chỉ thêm Dashboard.
