@@ -2447,6 +2447,60 @@ export const getVanHanhTuyen = async (): Promise<KienTheoTuyen[]> => {
 };
 
 // ===================================================================
+// Báo cáo SẢN LƯỢNG KHÁCH HÀNG — màn con dưới Dashboard thống kê.
+//
+// Một dòng = một cặp (khách × tuyến). Doanh số tách hai cột theo chốt của bên
+// khách 15/10/2026: cước cân kg và phí mua hộ là hai thứ tiền khác nhau, gộp
+// lại thì không chia ra đơn giá đ/kg được nữa.
+// ===================================================================
+
+export interface DongSanLuongKhach {
+  maKh: string;
+  tenKhach: string | null;
+  tuyenId: number | null;
+  tuyen: string;
+  kg: number;
+  cuoc: number;
+  phiMua: number;
+  tong: number;
+}
+
+export interface BangSanLuongKhach {
+  dong: DongSanLuongKhach[];
+  tong: {
+    kg: number;
+    cuoc: number;
+    phiMua: number;
+    tong: number;
+    soKhach: number;
+    soDong: number;
+  };
+  canhBao: { dongThieuKg: number; kgChuaRoTuyen: number };
+}
+
+export const getSanLuongKhach = async (
+  fromDate?: string,
+  toDate?: string,
+  quocGiaId?: number,
+  khach?: string,
+): Promise<BangSanLuongKhach> => {
+  const res = await apiClient.get(
+    `/dashboard/san-luong-khach?${thamSoVanHanh(fromDate, toDate, quocGiaId, khach)}`,
+  );
+  return res.data;
+};
+
+export const getSanLuongKhachTuyen = async (
+  fromDate?: string,
+  toDate?: string,
+): Promise<{ id: number; ten: string }[]> => {
+  const res = await apiClient.get(
+    `/dashboard/san-luong-khach/tuyen?${thamSoVanHanh(fromDate, toDate)}`,
+  );
+  return res.data;
+};
+
+// ===================================================================
 // Báo cáo TUỔI NỢ
 //
 // PLE có 9 màn công nợ nhưng không màn nào hiện nợ GIÀ bao nhiêu.

@@ -79,6 +79,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       icon: FiGrid,
       submenu: [
         { href: '/admin/dashboard', label: 'Dashboard thống kê' },
+        { href: '/admin/dashboard/san-luong-khach', label: 'Sản lượng khách hàng' },
       ],
     },
     {

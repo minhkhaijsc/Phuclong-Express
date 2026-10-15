@@ -3,6 +3,7 @@ import { DashboardService } from './dashboard.service';
 import { VanHanhService } from './van-hanh.service';
 import { TuoiNoService } from './tuoi-no.service';
 import { KhachHangService } from './khach-hang.service';
+import { SanLuongKhachService } from './san-luong-khach.service';
 import { DashboardQueryDto } from './dto/dashboard-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -22,6 +23,7 @@ export class DashboardController {
     private readonly vanHanhService: VanHanhService,
     private readonly tuoiNoService: TuoiNoService,
     private readonly khachHangService: KhachHangService,
+    private readonly sanLuongKhachService: SanLuongKhachService,
   ) {}
 
   /** KH mới theo ngày. */
@@ -62,6 +64,28 @@ export class DashboardController {
     @Query() query: DashboardQueryDto,
   ) {
     return this.dashboardService.getOutputDetailByStaff(nhanVien || '', thang || '', query.quocGiaId);
+  }
+
+  // ---------------- BÁO CÁO SẢN LƯỢNG KHÁCH HÀNG ----------------
+  //
+  // Màn con dưới Dashboard thống kê, yêu cầu bên khách 15/10/2026. Một dòng là
+  // một cặp (khách × tuyến): kg, cước cân, phí mua hộ, tổng.
+
+  /** Bảng khách × tuyến. Lọc được theo khoảng ngày, tuyến, và một khách. */
+  @Get('san-luong-khach')
+  async sanLuongKhach(@Query() q: any) {
+    return this.sanLuongKhachService.bang(
+      q.fromDate,
+      q.toDate,
+      Number(q.quocGiaId) || undefined,
+      q.khach,
+    );
+  }
+
+  /** Tuyến CÓ dữ liệu trong kỳ — đổ vào ô lọc của chính màn đó. */
+  @Get('san-luong-khach/tuyen')
+  async sanLuongKhachTuyen(@Query() q: any) {
+    return this.sanLuongKhachService.tuyenCoDuLieu(q.fromDate, q.toDate);
   }
 
   // ---------------- VẬN HÀNH (mảng vận chuyển, tbTracking) ----------------
