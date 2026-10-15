@@ -49,6 +49,11 @@ export class User extends Model {
   declare LinkTaiKhoanMang: string;
   declare VungMien: string;
   /**
+   * Tên ĐĂNG NHẬP của CSKH phụ trách mã khách này (vd `CSKHMAILINH`), không
+   * phải họ tên. Thêm bởi `migrations/them-cskh-phu-trach.sql`.
+   */
+  declare CSKHPhuTrach: string | null;
+  /**
    * Trạng thái do CSKH/admin chốt: null | 'hoat-dong' | 'tam-nghi' | 'dong-ma'.
    * Thêm bởi `migrations/them-trang-thai-khach-hang.sql`.
    */
@@ -129,6 +134,9 @@ export const UserModel = (sequelize: Sequelize) => {
         type: DataTypes.STRING,
       },
       VungMien: {
+        type: DataTypes.STRING,
+      },
+      CSKHPhuTrach: {
         type: DataTypes.STRING,
       },
       // Bốn cột trạng thái. Phải khai ở đây, không chỉ để đọc cho đẹp:

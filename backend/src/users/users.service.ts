@@ -10,6 +10,9 @@ import bcrypt from 'bcrypt';
  *
  * Handles user CRUD operations using Sequelize.
  */
+/** Giá trị lọc đặc biệt: những mã chưa gán CSKH nào. */
+export const CHUA_GAN = '(chua-gan)';
+
 @Injectable()
 export class UsersService {
   private userModel: typeof User;
@@ -25,19 +28,54 @@ export class UsersService {
   }
 
   /**
-   * Find all users
+   * Danh sách tài khoản, lọc theo từ khoá và theo CSKH phụ trách.
+   *
+   * Hai mệnh đề lọc đều BIND tham số. Bản trước nối thẳng `keyword` vào chuỗi
+   * SQL — gõ một dấu nháy đơn vào ô tìm kiếm là câu lệnh vỡ, và gõ khéo hơn thì
+   * đọc được cả bảng khác. Dạng `(:x IS NULL OR ...)` phục vụ mọi tổ hợp lọc
+   * bằng một câu lệnh, không còn chỗ nào ghép chuỗi.
+   *
+   * `cskh = '(chua-gan)'` là lối riêng để lọc ra những mã CHƯA ai nhận — đó mới
+   * là danh sách việc cần làm của CSKH, chứ không phải danh sách khách của họ.
    */
-  async findAll(keyword?: string): Promise<User[]> {
-    const whereClause = keyword ? `WHERE UserName LIKE '%${keyword}%'` : '';
-    const [data] = await this.sequelize.query(`
-      SELECT Id, UserName, Email, PhoneNumber,
-             HoTen, DiaChi, TinhThanh, SoTaiKhoan,
-             HinhThucNhanHang, KhachBuon, LinkTaiKhoanMang, VungMien
-      FROM dbo.AspNetUsers
-      ${whereClause}
-      ORDER BY UserName
-    `);
+  async findAll(keyword?: string, cskh?: string): Promise<User[]> {
+    const tuKhoa = keyword?.trim() ? `%${keyword.trim()}%` : null;
+    const loc = cskh?.trim() || null;
+
+    const [data] = await this.sequelize.query(
+      `SELECT Id, UserName, Email, PhoneNumber,
+              HoTen, DiaChi, TinhThanh, SoTaiKhoan,
+              HinhThucNhanHang, KhachBuon, LinkTaiKhoanMang, VungMien,
+              CSKHPhuTrach
+         FROM dbo.AspNetUsers
+        WHERE (:tuKhoa IS NULL OR UserName LIKE :tuKhoa)
+          AND (:loc IS NULL
+               OR (:loc = '${CHUA_GAN}' AND CSKHPhuTrach IS NULL)
+               OR CSKHPhuTrach = :loc)
+        ORDER BY UserName`,
+      { replacements: { tuKhoa, loc } },
+    );
     return data as User[];
+  }
+
+  /**
+   * Danh sách CSKH để đổ vào ô chọn "CSKH phụ trách".
+   *
+   * Chỉ lấy người ĐANG LÀM: tài khoản đã đóng mã thì không nên hiện ra để gán
+   * thêm khách mới. Mã khách cũ vẫn giữ nguyên tên người đã nghỉ — màn hình
+   * hiện nguyên tên đăng nhập chứ không xoá, vì xoá là mất dấu ai từng phụ trách.
+   */
+  async danhSachCskh(): Promise<{ username: string; hoTen: string }[]> {
+    const [data] = await this.sequelize.query(
+      `SELECT u.UserName AS username, ISNULL(u.HoTen, u.UserName) AS hoTen
+         FROM dbo.AspNetUsers u
+         JOIN dbo.AspNetUserRoles ur ON ur.UserId = u.Id
+         JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
+        WHERE r.Name = 'CSKH'
+          AND ISNULL(u.TrangThai, '') <> 'dong-ma'
+        ORDER BY u.UserName`,
+    );
+    return data as { username: string; hoTen: string }[];
   }
 
   /**

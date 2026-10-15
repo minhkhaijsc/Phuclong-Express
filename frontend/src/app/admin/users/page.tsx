@@ -23,6 +23,7 @@ import {
 } from '@/lib/api';
 import { HopDoiTrangThai } from '@/app/components/hop-doi-trang-thai';
 import { HopXoaTaiKhoan } from '@/app/components/hop-xoa-tai-khoan';
+import { getDanhSachCskh } from '@/lib/api';
 
 interface User {
   Id: string;
@@ -37,10 +38,15 @@ interface User {
   KhachBuon: boolean;
   LinkTaiKhoanMang: string;
   VungMien: string;
+  /** Tên đăng nhập của CSKH phụ trách. Null = chưa gán. */
+  CSKHPhuTrach: string | null;
 }
 
 export default function ListUserPage() {
   const [keyword, setKeyword] = useState('');
+  /** Lọc theo CSKH phụ trách. '' = tất cả, CHUA_GAN = những mã chưa ai nhận. */
+  const [locCskh, setLocCskh] = useState('');
+  const [dsCskh, setDsCskh] = useState<{ username: string; hoTen: string }[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -64,11 +70,13 @@ export default function ListUserPage() {
   const [dangSuaTrangThai, setDangSuaTrangThai] = useState<KhachKemTrangThai | null>(null);
   const [dangMoTrangThai, setDangMoTrangThai] = useState<string | null>(null);
 
-  const fetchUsers = useCallback(async (kw: string) => {
+  const fetchUsers = useCallback(async (kw: string, cskh = '') => {
     setLoading(true);
     setError('');
     try {
-      const params = kw ? { keyword: kw } : {};
+      const params: Record<string, string> = {};
+      if (kw) params.keyword = kw;
+      if (cskh) params.cskh = cskh;
       const { data } = await apiClient.get('/users', { params });
       setUsers(Array.isArray(data) ? data : []);
     } catch {
@@ -83,13 +91,24 @@ export default function ListUserPage() {
   }, [fetchUsers]);
 
   useEffect(() => {
+    // Im lặng nếu hỏng: ô lọc phụ, không được chặn danh sách.
+    getDanhSachCskh().then(setDsCskh).catch(() => undefined);
+  }, []);
+
+  /** Hiện "Họ tên"; tra không ra thì hiện nguyên tên đăng nhập. */
+  const tenCskh = (u?: string | null): string => {
+    if (!u) return '';
+    return dsCskh.find((x) => x.username === u)?.hoTen ?? u;
+  };
+
+  useEffect(() => {
     // Hỏng thì im lặng: đây là lời nhắc phụ, không được chặn màn danh sách.
     getTongHopTrangThaiKhach()
       .then((t) => setCanDongMa({ canDongMa: t.canDongMa, canDongMaConNo: t.canDongMaConNo }))
       .catch(() => undefined);
   }, []);
 
-  const handleSearch = () => fetchUsers(keyword);
+  const handleSearch = () => fetchUsers(keyword, locCskh);
 
   const moTrangThai = async (id: string) => {
     setDangMoTrangThai(id);
@@ -103,9 +122,9 @@ export default function ListUserPage() {
   };
 
   const handleExport = () => {
-    const headers = ['ID', 'UserName', 'HoTen', 'DiaChi', 'Email', 'PhoneNumber', 'TinhThanh', 'SoTaiKhoan', 'HinhThucNhanHang', 'KhachBuon', 'LinkTaiKhoanMang'];
+    const headers = ['ID', 'UserName', 'HoTen', 'CSKH phụ trách', 'DiaChi', 'Email', 'PhoneNumber', 'TinhThanh', 'SoTaiKhoan', 'HinhThucNhanHang', 'KhachBuon', 'LinkTaiKhoanMang'];
     const rows = users.map(u => [
-      u.Id, u.UserName || '', u.HoTen || '', u.DiaChi || '', u.Email || '',
+      u.Id, u.UserName || '', u.HoTen || '', tenCskh(u.CSKHPhuTrach), u.DiaChi || '', u.Email || '',
       u.PhoneNumber || '', u.TinhThanh || '', u.SoTaiKhoan || '',
       u.HinhThucNhanHang || '', u.KhachBuon ? 'true' : 'false', u.LinkTaiKhoanMang || '',
     ]);
@@ -184,6 +203,20 @@ export default function ListUserPage() {
             className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm text-slate-700 shadow-sm placeholder:text-slate-400 focus:border-[#14264b] focus:outline-none focus:ring-2 focus:ring-[#14264b]/20 transition-all"
           />
         </div>
+        <select
+          value={locCskh}
+          onChange={e => {
+            setLocCskh(e.target.value);
+            fetchUsers(keyword, e.target.value);
+          }}
+          className="cursor-pointer rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-8 text-sm text-slate-700 shadow-sm focus:border-[#14264b] focus:outline-none focus:ring-2 focus:ring-[#14264b]/20 transition-all"
+        >
+          <option value="">CSKH: tất cả</option>
+          <option value="(chua-gan)">— Chưa gán CSKH —</option>
+          {dsCskh.map(c => (
+            <option key={c.username} value={c.username}>{c.hoTen}</option>
+          ))}
+        </select>
         <button
           onClick={handleSearch}
           disabled={loading}
@@ -245,6 +278,7 @@ export default function ListUserPage() {
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tỉnh</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Địa chỉ</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Số TK</th>
+                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">CSKH</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nhận hàng</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">K.Buôn</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">FB</th>
@@ -263,6 +297,9 @@ export default function ListUserPage() {
                     <td className="px-3 py-2.5 truncate text-slate-600" title={user.TinhThanh || ''}>{user.TinhThanh || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-2.5 truncate text-slate-600" title={user.DiaChi || ''}>{user.DiaChi || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-2.5 truncate text-slate-600">{user.SoTaiKhoan || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-3 py-2.5 truncate text-slate-600" title={user.CSKHPhuTrach || ''}>
+                      {user.CSKHPhuTrach ? tenCskh(user.CSKHPhuTrach) : <span className="text-slate-300">—</span>}
+                    </td>
                     <td className="px-3 py-2.5 truncate text-slate-600" title={user.HinhThucNhanHang || ''}>{user.HinhThucNhanHang || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-2.5 text-center">
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -338,7 +375,7 @@ export default function ListUserPage() {
           dong={() => setDangXoa(null)}
           xong={() => {
             setDangXoa(null);
-            fetchUsers(keyword);
+            fetchUsers(keyword, locCskh);
             getTongHopTrangThaiKhach()
               .then((t) => setCanDongMa({ canDongMa: t.canDongMa, canDongMaConNo: t.canDongMaConNo }))
               .catch(() => undefined);

@@ -1875,7 +1875,20 @@ export interface RegisterParams {
   khachBuon?: boolean;
   linkTaiKhoanMang?: string;
   vungMien?: string;
+  /** Tên đăng nhập của CSKH phụ trách mã khách này, vd `CSKHMAILINH`. */
+  cskhPhuTrach?: string;
 }
+
+/**
+ * Danh sách CSKH để đổ vào ô chọn "CSKH phụ trách".
+ *
+ * Chỉ gồm người đang làm việc — tài khoản đã đóng mã không hiện ra để gán thêm
+ * khách mới, nhưng mã khách cũ vẫn giữ nguyên tên người đã nghỉ.
+ */
+export const getDanhSachCskh = async (): Promise<{ username: string; hoTen: string }[]> => {
+  const res = await apiClient.get('/users/cskh');
+  return res.data;
+};
 
 /**
  * Login user

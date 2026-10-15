@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   FiArrowLeft,
@@ -19,7 +19,8 @@ import {
   FiTag,
   FiCreditCard,
 } from 'react-icons/fi';
-import { register } from '@/lib/api';
+import { getDanhSachCskh, register } from '@/lib/api';
+import { useAuthStore } from '@/hooks/use-auth';
 
 const VIETNAM_CITIES = [
   '', 'An Giang', 'Bà Rịa-Vũng Tàu', 'Bạc Liêu', 'Bắc Kạn', 'Bắc Giang', 'Bắc Ninh',
@@ -66,7 +67,30 @@ export default function CreateUserPage() {
     hinhThucNhanHang: '',
     khachBuon: false,
     linkTaiKhoanMang: '',
+    cskhPhuTrach: '',
   });
+
+  /**
+   * Danh sách CSKH cho ô "CSKH phụ trách".
+   *
+   * Hỏng thì im lặng để ô thành danh sách rỗng — tạo mã khách là việc gấp, không
+   * được chặn chỉ vì một ô phụ không tải được.
+   */
+  const [dsCskh, setDsCskh] = useState<{ username: string; hoTen: string }[]>([]);
+  const toiLaAi = useAuthStore((st) => st.user?.username) ?? '';
+
+  useEffect(() => {
+    getDanhSachCskh()
+      .then((ds) => {
+        setDsCskh(ds);
+        // CSKH tự tạo mã cho khách của mình là trường hợp thường gặp nhất, nên
+        // điền sẵn tên họ. Vẫn đổi được sang người khác.
+        if (ds.some((x) => x.username === toiLaAi)) {
+          setFormData((cu) => (cu.cskhPhuTrach ? cu : { ...cu, cskhPhuTrach: toiLaAi }));
+        }
+      })
+      .catch(() => undefined);
+  }, [toiLaAi]);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
@@ -116,6 +140,7 @@ export default function CreateUserPage() {
         khachBuon: formData.khachBuon,
         linkTaiKhoanMang: formData.linkTaiKhoanMang,
         vungMien: formData.vungMien,
+        cskhPhuTrach: formData.cskhPhuTrach || undefined,
       });
       setSuccess(true);
       setTimeout(() => { window.location.href = '/admin/users'; }, 1500);
@@ -343,6 +368,22 @@ export default function CreateUserPage() {
                     >
                       {VUNG_MIEN.map(v => (
                         <option key={v} value={v}>{v || '-- Chọn --'}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <FieldLabel htmlFor="cskhPhuTrach">CSKH phụ trách</FieldLabel>
+                    <select
+                      id="cskhPhuTrach"
+                      value={formData.cskhPhuTrach}
+                      onChange={e => handleChange('cskhPhuTrach', e.target.value)}
+                      className={`${INPUT_BASE} cursor-pointer`}
+                    >
+                      <option value="">-- Chưa gán --</option>
+                      {dsCskh.map(c => (
+                        <option key={c.username} value={c.username}>
+                          {c.hoTen} ({c.username})
+                        </option>
                       ))}
                     </select>
                   </div>

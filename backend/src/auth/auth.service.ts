@@ -195,6 +195,7 @@ export class AuthService {
       KhachBuon: registerDto.khachBuon || false,
       LinkTaiKhoanMang: registerDto.linkTaiKhoanMang,
       VungMien: registerDto.vungMien,
+      CSKHPhuTrach: registerDto.cskhPhuTrach || null,
       roles: ['user'],
     });
 
@@ -203,7 +204,7 @@ export class AuthService {
       nguon: 'Auth:Register',
       hanhDong: 'Them moi',
       doiTuong: user.get('Id') as string,
-      noiDung: `UserName: ${registerDto.username}; Email: ${registerDto.email}; HoTen: ${registerDto.hoTen || ''}`,
+      noiDung: `UserName: ${registerDto.username}; Email: ${registerDto.email}; HoTen: ${registerDto.hoTen || ''}; CSKH: ${registerDto.cskhPhuTrach || '(chua gan)'}`,
     }).catch((err) => console.error('[SystemLog]', err?.message ?? err));
 
     return this.generateAuthResponse(user);

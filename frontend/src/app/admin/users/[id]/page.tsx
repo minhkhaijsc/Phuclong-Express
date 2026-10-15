@@ -19,6 +19,7 @@ import {
   FiSave,
 } from 'react-icons/fi';
 import apiClient from '@/lib/api-client';
+import { getDanhSachCskh } from '@/lib/api';
 
 interface User {
   Id: string;
@@ -32,6 +33,8 @@ interface User {
   KhachBuon: boolean;
   LinkTaiKhoanMang: string;
   VungMien: string;
+  /** Tên đăng nhập của CSKH phụ trách, vd `CSKHMAILINH`. Null = chưa gán. */
+  CSKHPhuTrach: string | null;
 }
 
 interface Role {
@@ -72,6 +75,19 @@ export default function UserDetailPage() {
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<User>>({});
+
+  /** Danh sách CSKH cho ô chọn. Hỏng thì im lặng, không chặn màn chi tiết. */
+  const [dsCskh, setDsCskh] = useState<{ username: string; hoTen: string }[]>([]);
+  useEffect(() => {
+    getDanhSachCskh().then(setDsCskh).catch(() => undefined);
+  }, []);
+
+  /** Hiện "Họ tên (TENDANGNHAP)"; tra không ra thì hiện nguyên tên đăng nhập. */
+  const tenCskh = (u?: string | null): string => {
+    if (!u) return '';
+    const c = dsCskh.find((x) => x.username === u);
+    return c ? `${c.hoTen} (${c.username})` : u;
+  };
   const [saving, setSaving] = useState(false);
 
   const [password, setPassword] = useState('');
@@ -156,6 +172,7 @@ export default function UserDetailPage() {
       HinhThucNhanHang: user.HinhThucNhanHang,
       KhachBuon: user.KhachBuon,
       LinkTaiKhoanMang: user.LinkTaiKhoanMang,
+      CSKHPhuTrach: user.CSKHPhuTrach ?? '',
     });
     setEditing(true);
   };
@@ -325,6 +342,7 @@ export default function UserDetailPage() {
                 <InfoRow label="Hình thức nhận hàng" value={user.HinhThucNhanHang} />
                 <InfoRow label="Khách buôn" value={user.KhachBuon} />
                 <InfoRow label="Link FB" value={user.LinkTaiKhoanMang} />
+                <InfoRow label="CSKH phụ trách" value={tenCskh(user.CSKHPhuTrach)} />
               </div>
             ) : (
               <div className="px-6 py-4 space-y-4">
@@ -348,6 +366,33 @@ export default function UserDetailPage() {
                     />
                   </div>
                 ))}
+                {/*
+                  Ô này là CHỌN chứ không phải gõ: gõ tay thì "CSKHMAILINH",
+                  "cskhmailinh" và "Mai Linh" thành ba người khác nhau, và sau
+                  này gộp doanh số theo CSKH là ra ba dòng.
+                */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">CSKH phụ trách</label>
+                  <select
+                    value={(editForm as Record<string, string>).CSKHPhuTrach ?? ''}
+                    onChange={e => setEditForm(f => ({ ...f, CSKHPhuTrach: e.target.value }))}
+                    className="w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#14264b] focus:outline-none focus:ring-2 focus:ring-[#14264b]/20 transition-all"
+                  >
+                    <option value="">-- Chưa gán --</option>
+                    {dsCskh.map(c => (
+                      <option key={c.username} value={c.username}>
+                        {c.hoTen} ({c.username})
+                      </option>
+                    ))}
+                    {/* Người đã nghỉ không còn trong danh sách, nhưng mã cũ vẫn
+                        phải giữ được tên họ — không thì mở ra sửa một thứ khác
+                        là vô tình xoá mất người phụ trách. */}
+                    {user.CSKHPhuTrach &&
+                      !dsCskh.some(c => c.username === user.CSKHPhuTrach) && (
+                        <option value={user.CSKHPhuTrach}>{user.CSKHPhuTrach} (đã nghỉ)</option>
+                      )}
+                  </select>
+                </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-500">Khách buôn</label>
                   <select

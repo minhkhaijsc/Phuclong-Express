@@ -59,8 +59,11 @@ export class UsersController {
    */
   @Quyen('taiKhoan.xem', 'xemDanhSachKhach')
   @Get()
-  async findAll(@Query('keyword') keyword?: string): Promise<User[]> {
-    return this.usersService.findAll(keyword);
+  async findAll(
+    @Query('keyword') keyword?: string,
+    @Query('cskh') cskh?: string,
+  ): Promise<User[]> {
+    return this.usersService.findAll(keyword, cskh);
   }
 
   // ---------------- TRẠNG THÁI KHÁCH HÀNG ----------------
@@ -75,6 +78,19 @@ export class UsersController {
   @Get('trang-thai/tong-hop')
   async trangThaiTongHop() {
     return this.trangThaiKhachService.tongHop();
+  }
+
+  /**
+   * GET /users/cskh
+   * Danh sách CSKH để đổ vào ô chọn "CSKH phụ trách".
+   *
+   * Cùng mức quyền với danh sách khách: ai mở được màn khách thì mới cần ô này.
+   * Trả về tên đăng nhập + họ tên, không kèm gì khác.
+   */
+  @Quyen('taiKhoan.xem', 'xemDanhSachKhach')
+  @Get('cskh')
+  async danhSachCskh(): Promise<{ username: string; hoTen: string }[]> {
+    return this.usersService.danhSachCskh();
   }
 
   /**
