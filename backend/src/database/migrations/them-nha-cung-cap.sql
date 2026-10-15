@@ -43,13 +43,17 @@
 --   NCC_NgoaiTe      số tiền NCC báo, bằng ngoại tệ (bên khách: "là giá tiền
 --                    đô, cứ để ngoại tệ, nhân viên tự nhập"). KHÔNG lưu mã
 --                    tiền riêng: lấy theo `loaitien` của chính dòng đơn.
---   NCC_Cong         tiền công NCC thu, cùng đơn vị với NCC_NgoaiTe
+--   NCC_Cong         PHẦN TRĂM công NCC thu — nhập 3 nghĩa là 3%, KHÔNG phải
+--                    số tiền. (Lúc tạo cột 12/10/2026 đây là số tiền; bên khách
+--                    đính chính 15/10/2026: "sửa lại giúp em là % công = % ×
+--                    ngoại tệ". Tiền công = NCC_NgoaiTe × NCC_Cong / 100.)
 --   NCC_TyGia        tỷ giá dùng lúc chốt với NCC. Lưu riêng, KHÔNG dùng lại
 --                    `tygia` của đơn: tỷ giá bán cho khách và tỷ giá quy đổi
 --                    tiền trả NCC là hai con số khác nhau, và đây là thứ phải
 --                    giữ nguyên theo thời điểm chốt nợ.
 --   NCC_TongPhaiTra  tổng phải trả, VNĐ. Phía web điền sẵn
---                    (NCC_NgoaiTe + NCC_Cong) * NCC_TyGia nhưng cho sửa tay —
+--                    (NCC_NgoaiTe + NCC_NgoaiTe * NCC_Cong / 100) * NCC_TyGia
+--                    nhưng cho sửa tay —
 --                    hoá đơn NCC hay lệch vài đồng do họ làm tròn, mà con số
 --                    đi vào công nợ phải là con số trên hoá đơn.
 --   NCC_Tracking     mã vận đơn phía NCC. Dài 100 cho bằng `SoVanDon` sẵn có.

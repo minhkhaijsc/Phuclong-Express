@@ -65,7 +65,7 @@ export default function TrangCongNoNcc() {
       [
         [
           'Mã ĐH', 'OrderNumber', 'Ngày mua', 'Khách', 'Nhà cung cấp', 'Website',
-          'Tuyến', 'Ngoại tệ', 'Công', 'Tỷ giá', 'Tổng phải trả (VNĐ)',
+          'Tuyến', 'Ngoại tệ', '% Công', 'Tỷ giá', 'Tổng phải trả (VNĐ)',
           'Tổng thu khách (VNĐ)', 'Lãi/Lỗ (VNĐ)', 'Tracking NCC', 'Trạng thái',
         ],
         ...rows.map((r) => [
@@ -221,7 +221,7 @@ export default function TrangCongNoNcc() {
               <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Nhà cung cấp</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Số đơn</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Ngoại tệ</th>
-              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Công</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Tiền công</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Phải trả</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Thu khách</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Lãi/Lỗ</th>
@@ -288,7 +288,7 @@ export default function TrangCongNoNcc() {
         <table className="min-w-full divide-y divide-gray-100 text-xs">
           <thead className="bg-gray-50">
             <tr>
-              {['Mã ĐH', 'Ngày mua', 'Khách', 'Nhà cung cấp', 'Tuyến', 'Ngoại tệ', 'Công', 'Tỷ giá', 'Phải trả', 'Thu khách', 'Lãi/Lỗ', 'Tracking NCC', 'Trạng thái'].map((h) => (
+              {['Mã ĐH', 'Ngày mua', 'Khách', 'Nhà cung cấp', 'Tuyến', 'Ngoại tệ', '% Công', 'Tỷ giá', 'Phải trả', 'Thu khách', 'Lãi/Lỗ', 'Tracking NCC', 'Trạng thái'].map((h) => (
                 <th key={h} className="px-3 py-2.5 text-left font-semibold text-gray-500">{h}</th>
               ))}
             </tr>
@@ -306,7 +306,9 @@ export default function TrangCongNoNcc() {
                 <td className="px-3 py-2 text-right">
                   {soVn(r.NCC_NgoaiTe)} {r.loaitien || ''}
                 </td>
-                <td className="px-3 py-2 text-right">{soVn(r.NCC_Cong)}</td>
+                <td className="px-3 py-2 text-right">
+                  {r.NCC_Cong === null || r.NCC_Cong === undefined ? '-' : `${soVn(r.NCC_Cong)}%`}
+                </td>
                 <td className="px-3 py-2 text-right">{soVn(r.NCC_TyGia)}</td>
                 <td className="px-3 py-2 text-right font-semibold">{soVn(r.NCC_TongPhaiTra)}</td>
                 <td className="px-3 py-2 text-right">{soVn(r.tongtienVND)}</td>
