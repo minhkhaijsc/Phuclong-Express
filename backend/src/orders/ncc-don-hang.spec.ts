@@ -5,6 +5,7 @@ import {
   ganNcc,
   laiLo,
   nhatKyNcc,
+  tienCongNcc,
   tongPhaiTraGoiY,
 } from './ncc-don-hang';
 
@@ -41,9 +42,30 @@ describe('laiLo', () => {
   });
 });
 
+describe('tienCongNcc', () => {
+  it('là PHẦN TRĂM của ngoại tệ, không phải số tiền nhập thẳng', () => {
+    // 5 nghĩa là 5%, tức 5 trên 100 ngoại tệ.
+    expect(tienCongNcc(100, 5)).toBe(5);
+    expect(tienCongNcc(88.2, 3)).toBeCloseTo(2.646, 6);
+  });
+
+  it('ô trống tính là 0', () => {
+    expect(tienCongNcc(100, null)).toBe(0);
+    expect(tienCongNcc(null, 5)).toBe(0);
+  });
+});
+
 describe('tongPhaiTraGoiY', () => {
-  it('(ngoại tệ + công) × tỷ giá', () => {
+  it('(ngoại tệ + ngoại tệ × %công) × tỷ giá', () => {
+    // 100 + 5% của 100 = 105 → × 26.000
     expect(tongPhaiTraGoiY(100, 5, 26_000)).toBe(2_730_000);
+  });
+
+  it('phần trăm KHÁC HẲN số tiền — đây là chỗ bên khách báo sai 15/10/2026', () => {
+    // Cách cũ cộng thẳng 3 vào ngoại tệ: (88,2 + 3) × 26.700 = 2.435.040.
+    // Cách đúng cộng 3% của 88,2: (88,2 + 2,646) × 26.700 = 2.425.588.
+    expect(tongPhaiTraGoiY(88.2, 3, 26_700)).toBe(2_425_588);
+    expect(tongPhaiTraGoiY(88.2, 3, 26_700)).not.toBe(2_435_040);
   });
 
   it('ô trống tính là 0', () => {
@@ -57,6 +79,11 @@ describe('tongPhaiTraGoiY', () => {
 
   it('chữ không phải số thì coi là 0, không ra NaN', () => {
     expect(tongPhaiTraGoiY('abc', 0, 26_000)).toBe(0);
+    expect(tongPhaiTraGoiY(100, 'abc', 26_000)).toBe(2_600_000);
+  });
+
+  it('công 100% là trả gấp đôi, không phải cộng thêm 100 ngoại tệ', () => {
+    expect(tongPhaiTraGoiY(50, 100, 25_000)).toBe(2_500_000);
   });
 });
 

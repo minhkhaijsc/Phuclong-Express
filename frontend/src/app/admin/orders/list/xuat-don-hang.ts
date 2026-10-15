@@ -46,7 +46,7 @@ export const COT_XUAT_DON_HANG = [
  * người không có quyền (`cheNcc`), nên với họ mấy cột này rỗng kể cả nếu lỡ bật.
  */
 export const COT_XUAT_NCC = [
-  'Nhà cung cấp', 'NCC ngoại tệ', 'NCC công', 'NCC tỷ giá',
+  'Nhà cung cấp', 'NCC ngoại tệ', 'NCC % công', 'NCC tỷ giá',
   'NCC tổng phải trả (VNĐ)', 'NCC tracking', 'Lãi/Lỗ (VNĐ)',
 ] as const;
 

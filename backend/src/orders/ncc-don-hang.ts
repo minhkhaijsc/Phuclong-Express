@@ -60,19 +60,40 @@ export const laiLo = (row: {
 };
 
 /**
+ * Tiền công trả nhà cung cấp, tính từ PHẦN TRĂM.
+ *
+ *   Tiền công = Ngoại tệ × % Công / 100
+ *
+ * `NCC_Cong` là một CON SỐ PHẦN TRĂM (nhập 3 nghĩa là 3%), không phải số tiền.
+ * Sửa ngày 15/10/2026 theo bên khách: "mục Công đang sai, sửa lại giúp em là
+ * % công (= % × ngoại tệ)". Giống hệt cách cột `cong` ở phía bán cho khách vẫn
+ * hiểu từ trước tới nay — xem nhãn '%Công' trong bản xuất Excel — nên hai bên
+ * giờ cùng một nghĩa, đỡ phải nhớ chỗ nào là tiền chỗ nào là phần trăm.
+ */
+export const tienCongNcc = (ngoaiTe: unknown, phanTramCong: unknown): number =>
+  ((so(ngoaiTe) ?? 0) * (so(phanTramCong) ?? 0)) / 100;
+
+/**
  * Tổng phải trả GỢI Ý, dùng để điền sẵn ô nhập ở phía web:
  *
- *   (Ngoại tệ + Công) × Tỷ giá
+ *   (Ngoại tệ + Ngoại tệ × %Công / 100) × Tỷ giá
  *
  * Người nhập SỬA ĐƯỢC con số này. Hoá đơn nhà cung cấp hay lệch vài đồng vì họ
  * làm tròn theo cách của họ, mà con số đi vào công nợ phải là con số trên hoá
  * đơn, không phải con số mình tự nhân ra.
+ *
+ * KHÔNG tính lại cho đơn đã có số: màn hình chỉ tự điền khi ô Tổng phải trả còn
+ * trống. Nhờ vậy đổi công thức hôm nay không âm thầm sửa con số của mấy đơn đã
+ * nhập trước đó.
  */
 export const tongPhaiTraGoiY = (
   ngoaiTe: unknown,
-  cong: unknown,
+  phanTramCong: unknown,
   tyGia: unknown,
-): number => Math.round(((so(ngoaiTe) ?? 0) + (so(cong) ?? 0)) * (so(tyGia) ?? 0));
+): number =>
+  Math.round(
+    ((so(ngoaiTe) ?? 0) + tienCongNcc(ngoaiTe, phanTramCong)) * (so(tyGia) ?? 0),
+  );
 
 /**
  * Bỏ MỌI khoá NCC khỏi một dòng đơn trước khi trả về cho người không có quyền
