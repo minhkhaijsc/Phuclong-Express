@@ -306,10 +306,22 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
     mien: { ...moiMien(XEM), rieng: SUA },
   },
 
+  /**
+   * MKT mở được Dashboard — yêu cầu bên khách 15/10/2026, cùng đợt với Kế toán.
+   *
+   * Khớp với ghi chú họ viết ngay trên bảng phân bộ phận cho tài khoản
+   * MKT_LUYEN: "cho xem hết để e có thể nhận thông tin từ các bộ phận sửa web".
+   * Bộ phận này vốn đã là CHỈ XEM ở mọi miền, nên thêm `dashboard` là đi đúng
+   * mạch đó chứ không phải nới quyền.
+   *
+   * Vẫn KHÔNG có `giaNcc`: "xem hết" ở đây là xem số liệu vận hành, còn giá
+   * nhập và Lãi/Lỗ thì yêu cầu 12/10 nói rõ chỉ mua hàng, kế toán, giám đốc.
+   * Hai thứ đó tách nhau, sửa chỗ này không đụng chỗ kia.
+   */
   [BO_PHAN.MKT]: {
     nhan: 'MKT',
     tienTo: ['MKT'],
-    mien: { ...moiMien(XEM), rieng: SUA },
+    mien: { ...moiMien(XEM), rieng: SUA, dashboard: XEM },
   },
 
   /**

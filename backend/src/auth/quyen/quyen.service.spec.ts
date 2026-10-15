@@ -125,8 +125,18 @@ describe('QuyenService', () => {
     it('Kế toán xem được, không cần cấp', () =>
       expect(q(BO_PHAN.KeToan).quyen).toContain('dashboard.xem'));
 
+    /** MKT mở được từ 15/10/2026 — bộ phận này vốn đã là chỉ-xem mọi miền. */
+    it('MKT xem được, không cần cấp', () =>
+      expect(q(BO_PHAN.MKT).quyen).toContain('dashboard.xem'));
+
+    it('MKT xem Dashboard nhưng VẪN không thấy giá nhà cung cấp', () => {
+      expect(q(BO_PHAN.MKT).quyen).toContain('dashboard.xem');
+      expect(q(BO_PHAN.MKT).quyen).not.toContain('giaNcc');
+      expect(q(BO_PHAN.MKT).quyen).not.toContain('congNoNcc');
+    });
+
     it('nhân viên thường không xem được', () => {
-      for (const bp of [BO_PHAN.CSKH, BO_PHAN.Kho, BO_PHAN.KhoSG, BO_PHAN.MKT, BO_PHAN.VanChuyen]) {
+      for (const bp of [BO_PHAN.CSKH, BO_PHAN.Kho, BO_PHAN.KhoSG, BO_PHAN.VanChuyen]) {
         expect(q(bp).quyen).not.toContain('dashboard.xem');
       }
     });
