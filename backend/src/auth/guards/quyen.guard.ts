@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
-import { MIEN_KEY, QUYEN_KEY } from '../quyen/quyen.decorator';
+import { MIEN_KEY, QUYEN_KEY, QUYEN_MOT_KEY } from '../quyen/quyen.decorator';
 import { MaQuyen, Mien, NHAN_MIEN } from '../quyen/bo-phan';
 import { QuyenService } from '../quyen/quyen.service';
 
@@ -54,6 +54,16 @@ export class QuyenGuard implements CanActivate {
     const q = this.quyenService.tinh(vaiTro);
     // Để controller và service dùng lại, không phải tính lần hai.
     req.quyen = q;
+
+    // `@QuyenMot` xét trước: cần MỘT trong các mã là qua. Xem ghi chú ở
+    // decorator — dành cho đường phục vụ nhiều màn thuộc nhiều miền.
+    const motTrong = this.reflector.getAllAndOverride<MaQuyen[]>(QUYEN_MOT_KEY, dich);
+    if (motTrong?.length) {
+      if (motTrong.some((ma) => q.quyen.includes(ma))) return true;
+      throw new ForbiddenException(
+        `${this.quyenService.tenBoPhan(q)} không có quyền ${motTrong.map(moTa).join(' hoặc ')}.`,
+      );
+    }
 
     const can = this.cauHoi(context);
     if (can.length === 0) {

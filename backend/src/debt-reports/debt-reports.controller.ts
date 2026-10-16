@@ -4,7 +4,7 @@ import { QueryDebtReportDto, UpdateDebtDto, ExportDebtReportDto, QueryDebtReport
 import { QueryDebtManagementDto, CreateDebtDto, UpdateDebtManagementDto, ImportCreateDebtDto } from './dto/debt-management.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-import { MienQuyen, Quyen } from '../auth/quyen/quyen.decorator';
+import { MienQuyen, Quyen, QuyenMot } from '../auth/quyen/quyen.decorator';
 /**
  * Debt Reports Controller
  *
@@ -61,7 +61,15 @@ export class DebtReportsController {
   /**
    * Get all users for dropdown
    * Matches: LoadDataUser() in C#
+   *
+   * Ô chọn mã khách. Nuôi cả năm màn báo cáo lẫn màn Quản lý công nợ, nên KHÔNG
+   * để nguyên `baoCao` của lớp: bộ phận Kho và Kho SG ghi công nợ hằng ngày
+   * (`congNo.sua`) nhưng không có `baoCao`, để nguyên thì ô chọn mã khách của
+   * họ trống trơn — đúng lỗi bên khách báo ngày 16/10/2026 với tài khoản
+   * KHOTHUYANH. Cũng không hạ xuống `congNo.xem`, vì khách hàng có mã đó và sẽ
+   * đọc được tên đăng nhập của cả 985 tài khoản.
    */
+  @QuyenMot('baoCao.xem', 'congNo.sua')
   @Get('users')
   async getUsers() {
     return this.debtReportsService.getUsers();

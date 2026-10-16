@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { QuyenGuard } from './quyen.guard';
 import { QuyenService } from '../quyen/quyen.service';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
-import { MIEN_KEY, QUYEN_KEY } from '../quyen/quyen.decorator';
+import { MIEN_KEY, QUYEN_KEY, QUYEN_MOT_KEY } from '../quyen/quyen.decorator';
 import { BO_PHAN } from '../quyen/bo-phan';
 
 describe('QuyenGuard', () => {
@@ -129,5 +129,67 @@ describe('QuyenGuard', () => {
     expect(() => g.canActivate(boiCanh('POST', [BO_PHAN.MKT]).ctx)).toThrow(
       'MKT không có quyền sửa Quản lý công nợ.',
     );
+  });
+
+  /**
+   * `@QuyenMot` — cần MỘT trong các mã.
+   *
+   * Dựng đúng ca thật đang dùng nó: `GET /debt-reports/users`, ô chọn mã khách,
+   * gắn `baoCao.xem HOẶC congNo.sua`. Lỗi 16/10/2026: tài khoản KHOTHUYANH ghi
+   * công nợ mà ô chọn mã khách trống vì đường này nằm dưới nhãn `baoCao`.
+   */
+  describe('@QuyenMot — một trong các mã là đủ', () => {
+    const O_CHON_MA_KHACH = {
+      [MIEN_KEY]: 'baoCao',
+      [QUYEN_MOT_KEY]: ['baoCao.xem', 'congNo.sua'],
+    };
+
+    it('Kho qua bằng `congNo.sua` dù không có `baoCao`', () => {
+      const g = dungGuard(O_CHON_MA_KHACH);
+      const { ctx, req } = boiCanh('GET', [BO_PHAN.Kho]);
+      expect(g.canActivate(ctx)).toBe(true);
+      expect(req.quyen.quyen).not.toContain('baoCao.xem');
+    });
+
+    it('Kho SG cũng vậy', () => {
+      const g = dungGuard(O_CHON_MA_KHACH);
+      expect(g.canActivate(boiCanh('GET', [BO_PHAN.KhoSG]).ctx)).toBe(true);
+    });
+
+    it('MKT qua bằng `baoCao.xem` dù không có `congNo.sua`', () => {
+      const g = dungGuard(O_CHON_MA_KHACH);
+      const { ctx, req } = boiCanh('GET', [BO_PHAN.MKT]);
+      expect(g.canActivate(ctx)).toBe(true);
+      expect(req.quyen.quyen).not.toContain('congNo.sua');
+    });
+
+    for (const bp of [BO_PHAN.Admin, BO_PHAN.CSKH, BO_PHAN.MuaHang, BO_PHAN.KeToan, BO_PHAN.VanChuyen]) {
+      it(`${bp} vẫn qua`, () => {
+        const g = dungGuard(O_CHON_MA_KHACH);
+        expect(g.canActivate(boiCanh('GET', [bp]).ctx)).toBe(true);
+      });
+    }
+
+    it('KHÁCH HÀNG bị chặn — không được đọc tên đăng nhập của cả nghìn tài khoản', () => {
+      // Khách có `congNo.xem` nhưng không có `congNo.sua`, cũng không có `baoCao`.
+      const g = dungGuard(O_CHON_MA_KHACH);
+      expect(() => g.canActivate(boiCanh('GET', []).ctx)).toThrow(ForbiddenException);
+    });
+
+    it('ghi đè `@MienQuyen` của lớp: không rơi về `baoCao.xem`', () => {
+      const g = dungGuard(O_CHON_MA_KHACH);
+      // Kho sẽ trượt nếu guard vẫn hỏi nhãn miền của lớp.
+      expect(g.canActivate(boiCanh('GET', [BO_PHAN.Kho]).ctx)).toBe(true);
+    });
+
+    it('ghi đè cả `@Quyen` của lớp', () => {
+      const g = dungGuard({ [QUYEN_KEY]: ['quanLyRole'], [QUYEN_MOT_KEY]: ['congNo.sua'] });
+      expect(g.canActivate(boiCanh('GET', [BO_PHAN.Kho]).ctx)).toBe(true);
+    });
+
+    it('thiếu cả hai thì báo "hoặc", không báo "và"', () => {
+      const g = dungGuard(O_CHON_MA_KHACH);
+      expect(() => g.canActivate(boiCanh('GET', []).ctx)).toThrow(/hoặc/);
+    });
   });
 });

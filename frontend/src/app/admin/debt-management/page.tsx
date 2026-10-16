@@ -98,7 +98,14 @@ export default function DebtManagementPage() {
    * không còn cảnh bấm vào rồi nhận 403.
    */
   const { quyen, dangNap, co } = useQuyen();
-  const coXemCongNo = co('congNo.xem');
+  /**
+   * `!laKhach`: khách hàng CŨNG có `congNo.xem` (để xem công nợ của chính
+   * mình ở /bao-cao-cong-no) và `baoChuyenKhoan` (để báo đã chuyển khoản ở
+   * /chuyen-khoan). Thiếu vế này thì màn quản trị của nhân viên mở ra cho
+   * khách — họ chỉ thấy dòng của mình vì máy chủ tự ép theo tên đăng nhập,
+   * nhưng đó không phải màn của họ.
+   */
+  const coXemCongNo = co('congNo.xem') && quyen?.laKhach === false;
   /** Sửa, xoá, import. */
   const coSuaCongNo = co('congNo.sua');
   /** Thêm dòng mới: route POST gắn `baoChuyenKhoan`, không phải `congNo.sua`. */
