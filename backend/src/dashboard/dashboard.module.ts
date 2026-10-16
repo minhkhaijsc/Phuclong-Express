@@ -7,6 +7,7 @@ import { KhachHangService } from './khach-hang.service';
 import { SanLuongKhachService } from './san-luong-khach.service';
 import { DatabaseModule } from '../database/database.module';
 import { AuthModule } from '../auth/auth.module';
+import { SystemLogsModule } from '../system-logs/system-logs.module';
 
 /**
  * Dashboard Module — thống kê.
@@ -19,7 +20,8 @@ import { AuthModule } from '../auth/auth.module';
  * dưới Dashboard thống kê.
  */
 @Module({
-  imports: [DatabaseModule, AuthModule],
+  // SystemLogsModule: đặt tuổi nợ là đường GHI, phải ghi nhật ký ai đặt.
+  imports: [DatabaseModule, AuthModule, SystemLogsModule],
   controllers: [DashboardController],
   providers: [DashboardService, VanHanhService, TuoiNoService, KhachHangService, SanLuongKhachService],
   exports: [DashboardService, VanHanhService, TuoiNoService, KhachHangService, SanLuongKhachService],

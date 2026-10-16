@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Put, Query, Request, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { VanHanhService } from './van-hanh.service';
 import { TuoiNoService } from './tuoi-no.service';
@@ -150,6 +150,26 @@ export class DashboardController {
   @Get('tuoi-no/chi-tiet')
   async tuoiNoChiTiet(@Query('khach') khach: string) {
     return this.tuoiNoService.chiTiet(khach);
+  }
+
+  /**
+   * Đặt tuổi nợ cho một khách, ngay trên màn báo cáo.
+   *
+   * `@Quyen` GHI ĐÈ `@MienQuyen('dashboard')` của cả lớp — phải thế, vì
+   * `dashboard` của Kế toán chỉ là XEM, mà đây là đường GHI. Lấy `duyetCongNo`
+   * làm mốc: Admin, Kế toán, CSKH, Mua hàng có; Kho và Kho SG thì không, và
+   * khách thì càng không.
+   *
+   * `null`/chuỗi rỗng = xoá thoả thuận, quay về đếm từ ngày ghi nợ.
+   */
+  @Quyen('duyetCongNo')
+  @Put('tuoi-no/:khach')
+  async datTuoiNo(
+    @Param('khach') khach: string,
+    @Body() body: { tuoiNo?: unknown },
+    @Request() req: any,
+  ) {
+    return this.tuoiNoService.datTuoiNo(khach, body?.tuoiNo, req.user?.username || 'system');
   }
 
   // ---------------- TỔNG QUAN CỦA KHÁCH HÀNG ----------------

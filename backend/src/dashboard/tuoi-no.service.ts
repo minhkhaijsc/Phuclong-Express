@@ -1,5 +1,7 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
+import { SystemLogsService } from '../system-logs/system-logs.service';
+import { chuanHoaTuoiNo } from '../users/tuoi-no-khach';
 
 /**
  * Báo cáo TUỔI NỢ.
@@ -26,17 +28,49 @@ import { Sequelize } from 'sequelize-typescript';
  * 449 triệu lên 7,8 tỷ — gấp 17 lần. Vì vậy phải tính theo BIẾN ĐỘNG RÒNG của
  * từng dòng (`DR - CR`): dương là phát sinh nợ (có tuổi), âm là khoản giảm trừ
  * (khấu vào nợ cũ nhất trước).
+ *
+ * ---------------------------------------------------------------------------
+ * TUỔI NỢ RIÊNG TỪNG KHÁCH (yêu cầu bên khách 16/10/2026)
+ *
+ *   "nếu ko co tuoi nợ thì cứ tính từ ngày up công nơ, chia ra, dưới 30 ngày,
+ *    trên 30 ngày duoi 60 ngay, và trên 60 ngày. còn khách nào có tuổi nợ, thì
+ *    phần mềm nó tự tính căn cứ vào tuổi nơ, ko dua vào ngày up cong no"
+ *
+ * `AspNetUsers.TuoiNo` là số ngày khách được phép nợ. Từ đó sinh ra MỘT con số
+ * duy nhất để chia nhóm, gọi là `soNgay`:
+ *
+ *   • Khách KHÔNG có tuổi nợ  → `soNgay` = tuổi thật, đếm từ ngày ghi nợ.
+ *   • Khách CÓ tuổi nợ        → `soNgay` = tuổi thật − tuổi nợ = số ngày QUÁ HẠN.
+ *     Chưa tới hạn (`soNgay <= 0`) thì KHÔNG phải nợ quá hạn — xếp riêng một ô
+ *     "Chưa tới hạn", không nhét vào nhóm "dưới 30 ngày".
+ *
+ * Phải có ô "Chưa tới hạn" thì bốn con số mới cộng lại đúng bằng tổng còn nợ.
+ * Bỏ nó đi là tiền biến mất khỏi báo cáo, kế toán đối chiếu không ra.
+ *
+ * Ba nhóm quá hạn theo đúng lời bên khách: ≤30, 31–60, >60. Bản trước chia bốn
+ * nhóm (thêm 61–90 và >90) — đã gộp hai nhóm cuối lại thành ">60".
  */
+
+/** Chia nhóm theo `soNgay`. Giữ cùng một bộ số ở cả SQL lẫn TypeScript. */
+export const MOC_NGAY = { ba_muoi: 30, sau_muoi: 60 } as const;
 
 export interface DongTuoiNo {
   khach: string;
   tong: number;
+  /** Số ngày khách được phép nợ. `null` = không có thoả thuận. */
+  tuoiNo: number | null;
+  /** Khoản chưa tới hạn trả — chỉ khách CÓ tuổi nợ mới có phần này. */
+  chuaToiHan: number;
   n0_30: number;
   n31_60: number;
-  n61_90: number;
-  tren90: number;
-  /** Số ngày của khoản nợ CHƯA TRẢ cũ nhất — dùng để sắp xếp mức độ nghiêm trọng. */
+  tren60: number;
+  /** Tuổi thật (tính từ ngày ghi nợ) của khoản chưa trả CŨ NHẤT. */
   soNgayCuNhat: number;
+  /**
+   * Số ngày quá hạn nhiều nhất. Bằng `soNgayCuNhat` với khách không có tuổi nợ;
+   * âm hoặc 0 nghĩa là chưa khoản nào tới hạn.
+   */
+  soNgayQuaHan: number;
   /** Lần cuối có phát sinh bất kỳ (nợ hoặc thu). */
   lanCuoi: string | null;
 }
@@ -44,25 +78,52 @@ export interface DongTuoiNo {
 export interface TongHopTuoiNo {
   soKhachConNo: number;
   tongConNo: number;
+  chuaToiHan: number;
   n0_30: number;
   n31_60: number;
-  n61_90: number;
-  tren90: number;
+  tren60: number;
+}
+
+export interface DongChiTietTuoiNo {
+  ngay: string;
+  noiDung: string;
+  conLai: number;
+  /** Tuổi thật, đếm từ ngày ghi nợ. */
+  soNgay: number;
+  /** Số ngày quá hạn. Bằng `soNgay` khi khách không có tuổi nợ. */
+  soNgayQuaHan: number;
+  /** Hạn phải trả (`yyyy-mm-dd`). `null` khi khách không có tuổi nợ. */
+  hanTra: string | null;
 }
 
 @Injectable()
 export class TuoiNoService {
-  constructor(@Inject('SEQUELIZE') private readonly sequelize: Sequelize) {}
+  constructor(
+    @Inject('SEQUELIZE') private readonly sequelize: Sequelize,
+    private readonly systemLogsService: SystemLogsService,
+  ) {}
 
   /**
-   * Khấu trừ FIFO, trả về phần CHƯA TRẢ của từng dòng nợ kèm tuổi.
+   * Khấu trừ FIFO, trả về phần CHƯA TRẢ của từng dòng nợ kèm tuổi và nhóm.
    *
    * `luyKeNo` là tổng nợ cộng dồn tới dòng đó. So với tổng đã thu:
    *   luyKeNo - tongThu <= 0        -> dòng này đã trả hết
    *   luyKeNo - tongThu >= DR       -> dòng này chưa trả đồng nào
    *   ở giữa                        -> trả một phần
    *
+   * `nhom`: 0 chưa tới hạn · 1 quá hạn ≤30 · 2 quá hạn 31–60 · 3 quá hạn >60.
+   *
+   * Nối `AspNetUsers` bằng LEFT JOIN, không phải JOIN: 5 trong 895 mã khách
+   * trên sổ công nợ không còn tài khoản tương ứng. JOIN thường là 5 mã đó biến
+   * mất khỏi báo cáo cùng với tiền của họ.
+   *
    * Bỏ qua khách có số dư <= 1.000đ: lẻ do làm tròn, đưa vào chỉ làm nhiễu.
+   *
+   * Và bỏ cả những DÒNG còn dưới 1đ. Phép khấu trừ FIFO chạy trên kiểu `float`
+   * nên để lại bụi: 51 dòng còn sót tổng cộng 11,8đ trên toàn sổ. Tiền thì
+   * không đáng kể, nhưng TUỔI thì sai hẳn — khách HP142 trả hết từ lâu, còn
+   * đúng 0,0000001đ ở một dòng 266 ngày trước, là màn hình ghi "khoản cũ nhất
+   * 266 ngày" trong khi cả cột tiền nằm ở nhóm 0-30.
    */
   private readonly SQL_FIFO = `
     WITH ChuyenDong AS (
@@ -74,6 +135,11 @@ export class TuoiNoService {
       SELECT UserName, SUM(CASE WHEN bien < 0 THEN -bien ELSE 0 END) AS tongGiam
       FROM ChuyenDong GROUP BY UserName
     ),
+    HanNo AS (
+      SELECT UserName, TuoiNo
+      FROM dbo.AspNetUsers
+      WHERE TuoiNo IS NOT NULL AND TuoiNo >= 0
+    ),
     No AS (
       SELECT d.UserName, d.NgayGhiNo, d.bien AS DR,
              SUM(d.bien) OVER (
@@ -84,7 +150,9 @@ export class TuoiNoService {
       WHERE d.bien > 0
     ),
     ChuaTra AS (
-      SELECT n.UserName, n.NgayGhiNo,
+      SELECT n.UserName, n.NgayGhiNo, h.TuoiNo,
+             DATEDIFF(day, n.NgayGhiNo, GETDATE()) AS tuoiThat,
+             DATEDIFF(day, n.NgayGhiNo, GETDATE()) - ISNULL(h.TuoiNo, 0) AS soNgay,
              CASE
                WHEN n.luyKeNo - ISNULL(g.tongGiam,0) <= 0 THEN 0
                WHEN n.luyKeNo - ISNULL(g.tongGiam,0) >= n.DR THEN n.DR
@@ -92,6 +160,17 @@ export class TuoiNoService {
              END AS conLai
       FROM No n
       LEFT JOIN TongGiam g ON g.UserName = n.UserName
+      LEFT JOIN HanNo h ON h.UserName = n.UserName
+    ),
+    PhanNhom AS (
+      SELECT UserName, NgayGhiNo, TuoiNo, tuoiThat, soNgay, conLai,
+             CASE
+               WHEN TuoiNo IS NOT NULL AND soNgay <= 0 THEN 0
+               WHEN soNgay <= ${MOC_NGAY.ba_muoi} THEN 1
+               WHEN soNgay <= ${MOC_NGAY.sau_muoi} THEN 2
+               ELSE 3
+             END AS nhom
+      FROM ChuaTra
     )`;
 
   private async hoi<T = any>(sql: string, replacements: Record<string, unknown> = {}): Promise<T[]> {
@@ -100,33 +179,33 @@ export class TuoiNoService {
     return (Array.isArray(kq[0]) ? kq[0] : kq) as T[];
   }
 
-  /** Tổng hợp theo nhóm tuổi — bốn ô đầu màn. */
+  /** Tổng hợp theo nhóm tuổi — mấy ô đầu màn. */
   async tongHop(): Promise<TongHopTuoiNo> {
     const [r] = await this.hoi<any>(`
       ${this.SQL_FIFO}
       , TheoKhach AS (
         SELECT UserName,
                SUM(conLai) AS tong,
-               SUM(CASE WHEN DATEDIFF(day, NgayGhiNo, GETDATE()) <= 30 THEN conLai ELSE 0 END) AS n0_30,
-               SUM(CASE WHEN DATEDIFF(day, NgayGhiNo, GETDATE()) BETWEEN 31 AND 60 THEN conLai ELSE 0 END) AS n31_60,
-               SUM(CASE WHEN DATEDIFF(day, NgayGhiNo, GETDATE()) BETWEEN 61 AND 90 THEN conLai ELSE 0 END) AS n61_90,
-               SUM(CASE WHEN DATEDIFF(day, NgayGhiNo, GETDATE()) > 90 THEN conLai ELSE 0 END) AS tren90
-        FROM ChuaTra WHERE conLai > 0
+               SUM(CASE WHEN nhom = 0 THEN conLai ELSE 0 END) AS chuaToiHan,
+               SUM(CASE WHEN nhom = 1 THEN conLai ELSE 0 END) AS n0_30,
+               SUM(CASE WHEN nhom = 2 THEN conLai ELSE 0 END) AS n31_60,
+               SUM(CASE WHEN nhom = 3 THEN conLai ELSE 0 END) AS tren60
+        FROM PhanNhom WHERE conLai >= 1
         GROUP BY UserName
       )
       SELECT COUNT(*) AS soKhachConNo,
              SUM(tong) AS tongConNo,
-             SUM(n0_30) AS n0_30, SUM(n31_60) AS n31_60,
-             SUM(n61_90) AS n61_90, SUM(tren90) AS tren90
+             SUM(chuaToiHan) AS chuaToiHan,
+             SUM(n0_30) AS n0_30, SUM(n31_60) AS n31_60, SUM(tren60) AS tren60
       FROM TheoKhach WHERE tong > 1000`);
 
     return {
       soKhachConNo: Number(r?.soKhachConNo ?? 0),
       tongConNo: Number(r?.tongConNo ?? 0),
+      chuaToiHan: Number(r?.chuaToiHan ?? 0),
       n0_30: Number(r?.n0_30 ?? 0),
       n31_60: Number(r?.n31_60 ?? 0),
-      n61_90: Number(r?.n61_90 ?? 0),
-      tren90: Number(r?.tren90 ?? 0),
+      tren60: Number(r?.tren60 ?? 0),
     };
   }
 
@@ -134,11 +213,15 @@ export class TuoiNoService {
    * Danh sách khách còn nợ.
    *
    * `sapTheo`:
-   *   'gia'  (mặc định) — nợ già nhất lên đầu, đó là tiền khó đòi nhất
+   *   'gia'  (mặc định) — QUÁ HẠN lâu nhất lên đầu, đó là tiền khó đòi nhất
    *   'tien' — nợ to nhất lên đầu
+   *
+   * Sắp theo số ngày QUÁ HẠN chứ không theo tuổi thật: khách được nợ 60 ngày mà
+   * mới nợ 50 ngày thì vẫn đang đúng hẹn, không có lý do gì đứng trên khách
+   * không được nợ ngày nào mà đã trễ 40 ngày.
    */
   async danhSach(sapTheo: 'gia' | 'tien' = 'gia', gioiHan = 200): Promise<DongTuoiNo[]> {
-    const thuTu = sapTheo === 'tien' ? 'tong DESC' : 'soNgayCuNhat DESC, tong DESC';
+    const thuTu = sapTheo === 'tien' ? 'tong DESC' : 'soNgayQuaHan DESC, tong DESC';
     const rows = await this.hoi<any>(`
       ${this.SQL_FIFO}
       , PhatSinh AS (
@@ -146,16 +229,18 @@ export class TuoiNoService {
       )
       SELECT TOP (:gioiHan)
              c.UserName AS khach,
+             MAX(c.TuoiNo) AS tuoiNo,
              SUM(c.conLai) AS tong,
-             SUM(CASE WHEN DATEDIFF(day, c.NgayGhiNo, GETDATE()) <= 30 THEN c.conLai ELSE 0 END) AS n0_30,
-             SUM(CASE WHEN DATEDIFF(day, c.NgayGhiNo, GETDATE()) BETWEEN 31 AND 60 THEN c.conLai ELSE 0 END) AS n31_60,
-             SUM(CASE WHEN DATEDIFF(day, c.NgayGhiNo, GETDATE()) BETWEEN 61 AND 90 THEN c.conLai ELSE 0 END) AS n61_90,
-             SUM(CASE WHEN DATEDIFF(day, c.NgayGhiNo, GETDATE()) > 90 THEN c.conLai ELSE 0 END) AS tren90,
-             MAX(DATEDIFF(day, c.NgayGhiNo, GETDATE())) AS soNgayCuNhat,
+             SUM(CASE WHEN c.nhom = 0 THEN c.conLai ELSE 0 END) AS chuaToiHan,
+             SUM(CASE WHEN c.nhom = 1 THEN c.conLai ELSE 0 END) AS n0_30,
+             SUM(CASE WHEN c.nhom = 2 THEN c.conLai ELSE 0 END) AS n31_60,
+             SUM(CASE WHEN c.nhom = 3 THEN c.conLai ELSE 0 END) AS tren60,
+             MAX(c.tuoiThat) AS soNgayCuNhat,
+             MAX(c.soNgay) AS soNgayQuaHan,
              MAX(p.lanCuoi) AS lanCuoi
-      FROM ChuaTra c
+      FROM PhanNhom c
       LEFT JOIN PhatSinh p ON p.UserName = c.UserName
-      WHERE c.conLai > 0
+      WHERE c.conLai >= 1
       GROUP BY c.UserName
       HAVING SUM(c.conLai) > 1000
       ORDER BY ${thuTu}`,
@@ -164,18 +249,73 @@ export class TuoiNoService {
 
     return rows.map((r) => ({
       khach: String(r.khach ?? ''),
+      tuoiNo: r.tuoiNo === null || r.tuoiNo === undefined ? null : Number(r.tuoiNo),
       tong: Number(r.tong ?? 0),
+      chuaToiHan: Number(r.chuaToiHan ?? 0),
       n0_30: Number(r.n0_30 ?? 0),
       n31_60: Number(r.n31_60 ?? 0),
-      n61_90: Number(r.n61_90 ?? 0),
-      tren90: Number(r.tren90 ?? 0),
+      tren60: Number(r.tren60 ?? 0),
       soNgayCuNhat: Number(r.soNgayCuNhat ?? 0),
+      soNgayQuaHan: Number(r.soNgayQuaHan ?? 0),
       lanCuoi: r.lanCuoi ? new Date(r.lanCuoi).toISOString() : null,
     }));
   }
 
+  /**
+   * Đặt tuổi nợ cho một khách, NGAY TRÊN MÀN BÁO CÁO.
+   *
+   * Vì sao không bắt vào màn tài khoản mà sửa: người cần đặt là KẾ TOÁN, mà kế
+   * toán không có miền `taiKhoan` — họ không mở được danh sách tài khoản khách
+   * (đúng yêu cầu bên khách 10/10: "các bộ phận còn lại không được xem danh
+   * sách tài khoản khách hàng"). Mở cả miền đó cho kế toán chỉ để sửa một ô là
+   * nới rộng hơn hẳn mức cần, nên đặt thẳng ở màn họ đang làm việc.
+   *
+   * Đường này gắn quyền `duyetCongNo` — Admin, Kế toán, CSKH, Mua hàng có; Kho
+   * và Kho SG thì KHÔNG: họ ghi được dòng công nợ nhưng tuổi nợ là thoả thuận
+   * thương mại, không phải việc của kho.
+   *
+   * GHI NHẬT KÝ: đây là con số quyết định khách bị gọi đòi nợ lúc nào, phải
+   * truy được ai đặt và đặt lúc nào.
+   */
+  async datTuoiNo(
+    khach: string,
+    tuoiNo: unknown,
+    nguoiSua = 'system',
+  ): Promise<{ khach: string; tuoiNo: number | null }> {
+    const ten = String(khach ?? '').trim();
+    if (!ten) throw new BadRequestException('Thiếu tên khách.');
+
+    const giaTri = chuanHoaTuoiNo(tuoiNo);
+
+    // Cập nhật rồi ĐẾM số dòng đã đụng bằng @@ROWCOUNT trong cùng một lượt,
+    // thay vì SELECT trước rồi UPDATE sau: tên khách gõ sai thì phải báo "không
+    // có mã này", chứ không lặng lẽ báo thành công trong khi chẳng ghi gì.
+    const [kq] = await this.hoi<{ soDong: number }>(
+      `SET NOCOUNT ON;
+       UPDATE dbo.AspNetUsers SET TuoiNo = :tuoiNo WHERE UserName = :khach;
+       SELECT @@ROWCOUNT AS soDong;`,
+      { tuoiNo: giaTri, khach: ten },
+    );
+
+    if (!Number(kq?.soDong)) {
+      throw new NotFoundException(`Không có mã khách "${ten}".`);
+    }
+
+    await this.systemLogsService
+      .create({
+        nguoiTao: nguoiSua,
+        nguon: 'TuoiNo:DatTuoiNo',
+        hanhDong: 'Chinh sua',
+        doiTuong: ten,
+        noiDung: `TuoiNo: ${giaTri === null ? '(bo trong)' : giaTri}`,
+      })
+      .catch((err) => console.error('[SystemLog]', err?.message ?? err));
+
+    return { khach: ten, tuoiNo: giaTri };
+  }
+
   /** Chi tiết các khoản còn nợ của MỘT khách — bấm từ danh sách vào. */
-  async chiTiet(khach: string): Promise<{ ngay: string; noiDung: string; conLai: number; soNgay: number }[]> {
+  async chiTiet(khach: string): Promise<DongChiTietTuoiNo[]> {
     if (!khach || !khach.trim()) return [];
     const rows = await this.hoi<any>(`
       WITH ChuyenDong AS (
@@ -190,6 +330,10 @@ export class TuoiNoService {
         SELECT d.NgayGhiNo, d.NoiDung, d.bien AS DR,
                SUM(d.bien) OVER (ORDER BY d.NgayGhiNo, d.CongNo_ID ROWS UNBOUNDED PRECEDING) AS luyKeNo
         FROM ChuyenDong d WHERE d.bien > 0
+      ),
+      Han AS (
+        SELECT MAX(TuoiNo) AS TuoiNo FROM dbo.AspNetUsers
+        WHERE UserName = :khach AND TuoiNo IS NOT NULL AND TuoiNo >= 0
       )
       SELECT n.NgayGhiNo AS ngay, n.NoiDung AS noiDung,
              CASE
@@ -197,18 +341,23 @@ export class TuoiNoService {
                WHEN n.luyKeNo - ISNULL(g.tongGiam,0) >= n.DR THEN n.DR
                ELSE n.luyKeNo - ISNULL(g.tongGiam,0)
              END AS conLai,
-             DATEDIFF(day, n.NgayGhiNo, GETDATE()) AS soNgay
-      FROM No n CROSS JOIN TongGiam g
+             DATEDIFF(day, n.NgayGhiNo, GETDATE()) AS soNgay,
+             DATEDIFF(day, n.NgayGhiNo, GETDATE()) - ISNULL(h.TuoiNo, 0) AS soNgayQuaHan,
+             CASE WHEN h.TuoiNo IS NULL THEN NULL
+                  ELSE DATEADD(day, h.TuoiNo, n.NgayGhiNo) END AS hanTra
+      FROM No n CROSS JOIN TongGiam g CROSS JOIN Han h
       ORDER BY n.NgayGhiNo`,
       { khach: khach.trim() },
     );
     return rows
-      .filter((r) => Number(r.conLai) > 0)
+      .filter((r) => Number(r.conLai) >= 1)
       .map((r) => ({
         ngay: r.ngay ? new Date(r.ngay).toISOString().slice(0, 10) : '',
         noiDung: String(r.noiDung ?? ''),
         conLai: Number(r.conLai ?? 0),
         soNgay: Number(r.soNgay ?? 0),
+        soNgayQuaHan: Number(r.soNgayQuaHan ?? 0),
+        hanTra: r.hanTra ? new Date(r.hanTra).toISOString().slice(0, 10) : null,
       }));
   }
 }

@@ -2518,25 +2518,35 @@ export const getSanLuongKhachTuyen = async (
 //
 // PLE có 9 màn công nợ nhưng không màn nào hiện nợ GIÀ bao nhiêu.
 // Tính theo FIFO: tiền thu khấu vào khoản nợ cũ trước.
+//
+// Từ 16/10/2026 mỗi khách có thể có TUỔI NỢ riêng (`AspNetUsers.TuoiNo`,
+// sửa ở màn chi tiết tài khoản). Khách có tuổi nợ thì các nhóm đếm theo số
+// ngày QUÁ HẠN; khách chưa đặt thì đếm thẳng từ ngày ghi nợ như trước.
 // ===================================================================
 
 export interface TuoiNoTongHop {
   soKhachConNo: number;
   tongConNo: number;
+  /** Khoản chưa tới hạn trả — chỉ khách CÓ tuổi nợ mới có phần này. */
+  chuaToiHan: number;
   n0_30: number;
   n31_60: number;
-  n61_90: number;
-  tren90: number;
+  tren60: number;
 }
 
 export interface TuoiNoDong {
   khach: string;
   tong: number;
+  /** Số ngày khách được phép nợ. `null` = chưa đặt. */
+  tuoiNo: number | null;
+  chuaToiHan: number;
   n0_30: number;
   n31_60: number;
-  n61_90: number;
-  tren90: number;
+  tren60: number;
+  /** Tuổi thật (từ ngày ghi nợ) của khoản chưa trả cũ nhất. */
   soNgayCuNhat: number;
+  /** Số ngày quá hạn nhiều nhất. Âm hoặc 0 = chưa khoản nào tới hạn. */
+  soNgayQuaHan: number;
   lanCuoi: string | null;
 }
 
@@ -2545,6 +2555,9 @@ export interface TuoiNoChiTiet {
   noiDung: string;
   conLai: number;
   soNgay: number;
+  soNgayQuaHan: number;
+  /** `yyyy-mm-dd`, hoặc null khi khách không có tuổi nợ. */
+  hanTra: string | null;
 }
 
 export const getTuoiNoTongHop = async (): Promise<TuoiNoTongHop> => {
@@ -2562,6 +2575,20 @@ export const getTuoiNoDanhSach = async (
 
 export const getTuoiNoChiTiet = async (khach: string): Promise<TuoiNoChiTiet[]> => {
   const res = await apiClient.get(`/dashboard/tuoi-no/chi-tiet?khach=${encodeURIComponent(khach)}`);
+  return res.data;
+};
+
+/**
+ * Đặt tuổi nợ cho một khách ngay trên màn báo cáo.
+ *
+ * `null` = xoá thoả thuận, quay về đếm từ ngày ghi nợ. Máy chủ đòi quyền
+ * `duyetCongNo` (Admin, Kế toán, CSKH, Mua hàng).
+ */
+export const datTuoiNo = async (
+  khach: string,
+  tuoiNo: number | null,
+): Promise<{ khach: string; tuoiNo: number | null }> => {
+  const res = await apiClient.put(`/dashboard/tuoi-no/${encodeURIComponent(khach)}`, { tuoiNo });
   return res.data;
 };
 

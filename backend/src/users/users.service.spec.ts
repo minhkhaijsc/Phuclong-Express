@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CHUA_GAN, UsersService } from './users.service';
+import { BadRequestException } from '@nestjs/common';
+import { CHUA_GAN, TUOI_NO_TOI_DA, UsersService, chuanHoaTuoiNo } from './users.service';
 import { SystemLogsService } from '../system-logs/system-logs.service';
 
 /**
@@ -100,5 +101,104 @@ describe('UsersService — danh sách và CSKH phụ trách', () => {
       const [sql] = mockSequelize.query.mock.calls[0];
       expect(sql).toContain('ISNULL(u.HoTen, u.UserName)');
     });
+  });
+
+  describe('danh sách trả về cả tuổi nợ', () => {
+    it('có cột TuoiNo — thiếu thì cột trên màn danh sách rỗng trắng', async () => {
+      traVe([]);
+      await service.findAll();
+
+      const [sql] = mockSequelize.query.mock.calls[0];
+      expect(sql).toContain('TuoiNo');
+    });
+  });
+});
+
+/**
+ * Ô "Tuổi nợ" — số ngày khách được phép nợ.
+ *
+ * Chỗ dễ vỡ nhất là CHUỖI RỖNG: màn sửa gửi `''` khi người dùng xoá trắng ô, và
+ * `''` ném thẳng vào cột `int` thì cả câu UPDATE vỡ, người dùng chỉ thấy "Cập
+ * nhật thất bại" mà không hiểu vì sao.
+ */
+describe('chuanHoaTuoiNo', () => {
+  it('rỗng nghĩa là KHÔNG CÓ thoả thuận -> null', () => {
+    expect(chuanHoaTuoiNo('')).toBeNull();
+    expect(chuanHoaTuoiNo('   ')).toBeNull();
+    expect(chuanHoaTuoiNo(null)).toBeNull();
+    expect(chuanHoaTuoiNo(undefined)).toBeNull();
+  });
+
+  it('0 KHÁC rỗng — 0 là phải trả ngay, không phải chưa thoả thuận', () => {
+    expect(chuanHoaTuoiNo(0)).toBe(0);
+    expect(chuanHoaTuoiNo('0')).toBe(0);
+  });
+
+  it('nhận số và chuỗi số', () => {
+    expect(chuanHoaTuoiNo(30)).toBe(30);
+    expect(chuanHoaTuoiNo(' 45 ')).toBe(45);
+  });
+
+  it('chặn số âm', () => {
+    expect(() => chuanHoaTuoiNo(-1)).toThrow(BadRequestException);
+  });
+
+  it('chặn số lẻ — nửa ngày nợ là vô nghĩa', () => {
+    expect(() => chuanHoaTuoiNo('30.5')).toThrow(BadRequestException);
+  });
+
+  it('chặn chữ', () => {
+    expect(() => chuanHoaTuoiNo('ba mươi')).toThrow(BadRequestException);
+  });
+
+  it('chặn số quá lớn — gần như chắc chắn là gõ nhầm', () => {
+    expect(chuanHoaTuoiNo(TUOI_NO_TOI_DA)).toBe(TUOI_NO_TOI_DA);
+    expect(() => chuanHoaTuoiNo(TUOI_NO_TOI_DA + 1)).toThrow(BadRequestException);
+  });
+});
+
+describe('UsersService.update — ô tuổi nợ', () => {
+  let service: UsersService;
+  const banGhi = { UserName: 'HP591', update: jest.fn() };
+  const mockSequelize = {
+    query: jest.fn(),
+    models: { User: { findByPk: jest.fn().mockResolvedValue(banGhi) } } as any,
+  };
+  const mockLogs = { create: jest.fn().mockResolvedValue(undefined) };
+
+  beforeEach(async () => {
+    banGhi.update.mockResolvedValue(banGhi);
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: 'SEQUELIZE', useValue: mockSequelize },
+        { provide: SystemLogsService, useValue: mockLogs },
+      ],
+    }).compile();
+    service = module.get<UsersService>(UsersService);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('xoá trắng ô thì ghi NULL, không ghi chuỗi rỗng vào cột int', async () => {
+    await service.update('id-1', { TuoiNo: '' } as any);
+    expect(banGhi.update).toHaveBeenCalledWith(expect.objectContaining({ TuoiNo: null }));
+  });
+
+  it('chuỗi số thành số', async () => {
+    await service.update('id-1', { TuoiNo: '45' } as any);
+    expect(banGhi.update).toHaveBeenCalledWith(expect.objectContaining({ TuoiNo: 45 }));
+  });
+
+  it('sửa thứ khác mà không gửi ô này lên thì KHÔNG đụng tới tuổi nợ', async () => {
+    // Nhét TuoiNo: null vào đây là mỗi lần sửa họ tên lại xoá mất thoả thuận.
+    await service.update('id-1', { HoTen: 'Nguyễn Văn A' } as any);
+    const [duLieu] = banGhi.update.mock.calls[0];
+    expect('TuoiNo' in duLieu).toBe(false);
+  });
+
+  it('số âm thì chặn, không ghi gì cả', async () => {
+    await expect(service.update('id-1', { TuoiNo: -5 } as any)).rejects.toThrow(BadRequestException);
+    expect(banGhi.update).not.toHaveBeenCalled();
   });
 });

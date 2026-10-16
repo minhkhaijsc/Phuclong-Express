@@ -54,6 +54,14 @@ export class User extends Model {
    */
   declare CSKHPhuTrach: string | null;
   /**
+   * TUỔI NỢ — số ngày khách này được phép nợ, tính từ ngày ghi nợ.
+   * Thêm bởi `migrations/them-tuoi-no-khach.sql`.
+   *
+   * `null` = KHÔNG CÓ thoả thuận, khác hẳn `0`. Null thì báo cáo Tuổi nợ đếm
+   * thẳng từ ngày ghi nợ; có số thì đếm số ngày QUÁ HẠN (tuổi − số ngày này).
+   */
+  declare TuoiNo: number | null;
+  /**
    * Trạng thái do CSKH/admin chốt: null | 'hoat-dong' | 'tam-nghi' | 'dong-ma'.
    * Thêm bởi `migrations/them-trang-thai-khach-hang.sql`.
    */
@@ -138,6 +146,9 @@ export const UserModel = (sequelize: Sequelize) => {
       },
       CSKHPhuTrach: {
         type: DataTypes.STRING,
+      },
+      TuoiNo: {
+        type: DataTypes.INTEGER,
       },
       // Bốn cột trạng thái. Phải khai ở đây, không chỉ để đọc cho đẹp:
       // Sequelize chỉ SELECT những cột được khai, nên thiếu thì `validateUser`

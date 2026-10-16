@@ -40,6 +40,8 @@ interface User {
   VungMien: string;
   /** Tên đăng nhập của CSKH phụ trách. Null = chưa gán. */
   CSKHPhuTrach: string | null;
+  /** Số ngày được phép nợ. Null = chưa thoả thuận, khác hẳn 0. */
+  TuoiNo: number | null;
 }
 
 export default function ListUserPage() {
@@ -122,9 +124,12 @@ export default function ListUserPage() {
   };
 
   const handleExport = () => {
-    const headers = ['ID', 'UserName', 'HoTen', 'CSKH phụ trách', 'DiaChi', 'Email', 'PhoneNumber', 'TinhThanh', 'SoTaiKhoan', 'HinhThucNhanHang', 'KhachBuon', 'LinkTaiKhoanMang'];
+    const headers = ['ID', 'UserName', 'HoTen', 'CSKH phụ trách', 'Tuổi nợ (ngày)', 'DiaChi', 'Email', 'PhoneNumber', 'TinhThanh', 'SoTaiKhoan', 'HinhThucNhanHang', 'KhachBuon', 'LinkTaiKhoanMang'];
     const rows = users.map(u => [
-      u.Id, u.UserName || '', u.HoTen || '', tenCskh(u.CSKHPhuTrach), u.DiaChi || '', u.Email || '',
+      // Chưa đặt thì để trống chứ không ghi 0 — 0 nghĩa là phải trả ngay.
+      u.Id, u.UserName || '', u.HoTen || '', tenCskh(u.CSKHPhuTrach),
+      u.TuoiNo === null || u.TuoiNo === undefined ? '' : String(u.TuoiNo),
+      u.DiaChi || '', u.Email || '',
       u.PhoneNumber || '', u.TinhThanh || '', u.SoTaiKhoan || '',
       u.HinhThucNhanHang || '', u.KhachBuon ? 'true' : 'false', u.LinkTaiKhoanMang || '',
     ]);
@@ -267,7 +272,7 @@ export default function ListUserPage() {
           <div className="overflow-x-auto">
             <table className="w-full table-fixed text-sm">
               <colgroup>
-                <col className="w-24" /><col className="w-24" /><col className="w-32" /><col className="w-24" /><col className="w-20" /><col className="w-28" /><col className="w-20" /><col className="w-20" /><col className="w-16" /><col className="w-12" /><col className="w-36" />
+                <col className="w-24" /><col className="w-24" /><col className="w-32" /><col className="w-24" /><col className="w-20" /><col className="w-28" /><col className="w-20" /><col className="w-20" /><col className="w-16" /><col className="w-16" /><col className="w-12" /><col className="w-36" />
               </colgroup>
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/60">
@@ -279,6 +284,7 @@ export default function ListUserPage() {
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Địa chỉ</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Số TK</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">CSKH</th>
+                  <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Tuổi nợ</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nhận hàng</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">K.Buôn</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">FB</th>
@@ -299,6 +305,11 @@ export default function ListUserPage() {
                     <td className="px-3 py-2.5 truncate text-slate-600">{user.SoTaiKhoan || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-2.5 truncate text-slate-600" title={user.CSKHPhuTrach || ''}>
                       {user.CSKHPhuTrach ? tenCskh(user.CSKHPhuTrach) : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-center text-slate-600">
+                      {user.TuoiNo === null || user.TuoiNo === undefined
+                        ? <span className="text-slate-300" title="Chưa đặt — báo cáo Tuổi nợ đếm từ ngày ghi nợ">—</span>
+                        : <span title="Số ngày được phép nợ">{user.TuoiNo}</span>}
                     </td>
                     <td className="px-3 py-2.5 truncate text-slate-600" title={user.HinhThucNhanHang || ''}>{user.HinhThucNhanHang || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-2.5 text-center">

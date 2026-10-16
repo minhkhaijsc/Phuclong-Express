@@ -35,6 +35,11 @@ interface User {
   VungMien: string;
   /** Tên đăng nhập của CSKH phụ trách, vd `CSKHMAILINH`. Null = chưa gán. */
   CSKHPhuTrach: string | null;
+  /**
+   * TUỔI NỢ — số ngày khách này được phép nợ. `null` = chưa thoả thuận, khác
+   * hẳn `0` (0 là phải trả ngay). Báo cáo Tuổi nợ căn vào đây.
+   */
+  TuoiNo: number | null;
 }
 
 interface Role {
@@ -173,6 +178,8 @@ export default function UserDetailPage() {
       KhachBuon: user.KhachBuon,
       LinkTaiKhoanMang: user.LinkTaiKhoanMang,
       CSKHPhuTrach: user.CSKHPhuTrach ?? '',
+      // Về chuỗi để ô nhập xoá trắng được; máy chủ đổi '' thành NULL.
+      TuoiNo: (user.TuoiNo ?? '') as unknown as number,
     });
     setEditing(true);
   };
@@ -188,8 +195,10 @@ export default function UserDetailPage() {
       } else {
         showFeedback('error', res.data.message || 'Cập nhật thất bại');
       }
-    } catch {
-      showFeedback('error', 'Cập nhật thất bại');
+    } catch (e: any) {
+      // Hiện nguyên lời máy chủ: ô Tuổi nợ bị chặn vì số âm hay gõ chữ thì
+      // người dùng phải đọc được LÝ DO, chứ "Cập nhật thất bại" thì chịu.
+      showFeedback('error', e?.response?.data?.message || 'Cập nhật thất bại');
     } finally {
       setSaving(false);
     }
@@ -343,6 +352,10 @@ export default function UserDetailPage() {
                 <InfoRow label="Khách buôn" value={user.KhachBuon} />
                 <InfoRow label="Link FB" value={user.LinkTaiKhoanMang} />
                 <InfoRow label="CSKH phụ trách" value={tenCskh(user.CSKHPhuTrach)} />
+                <InfoRow
+                  label="Tuổi nợ"
+                  value={user.TuoiNo === null || user.TuoiNo === undefined ? '' : `${user.TuoiNo} ngày`}
+                />
               </div>
             ) : (
               <div className="px-6 py-4 space-y-4">
@@ -392,6 +405,28 @@ export default function UserDetailPage() {
                         <option value={user.CSKHPhuTrach}>{user.CSKHPhuTrach} (đã nghỉ)</option>
                       )}
                   </select>
+                </div>
+                {/*
+                  Số ngày khách được phép nợ. ĐỂ TRỐNG nghĩa là chưa thoả thuận
+                  — báo cáo Tuổi nợ sẽ đếm từ ngày ghi nợ như cũ. Gõ `0` lại là
+                  chuyện khác hẳn: phải trả ngay, hôm sau đã tính quá hạn.
+                */}
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    Tuổi nợ (số ngày được nợ)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="Để trống nếu không có thoả thuận"
+                    value={(editForm as Record<string, string | number>).TuoiNo ?? ''}
+                    onChange={e => setEditForm(f => ({ ...f, TuoiNo: e.target.value as unknown as number }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#14264b] focus:outline-none focus:ring-2 focus:ring-[#14264b]/20 transition-all"
+                  />
+                  <p className="mt-1 text-xs text-slate-400">
+                    Để trống: báo cáo Tuổi nợ đếm từ ngày ghi nợ. Có số: đếm số ngày quá hạn.
+                  </p>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-slate-500">Khách buôn</label>

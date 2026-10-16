@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
 import { User, UserModel } from './entities/user.entity';
+import { chuanHoaTuoiNo } from './tuoi-no-khach';
 import { SystemLogsService } from '../system-logs/system-logs.service';
 import Excel from 'exceljs';
 import bcrypt from 'bcrypt';
@@ -12,6 +13,11 @@ import bcrypt from 'bcrypt';
  */
 /** Giá trị lọc đặc biệt: những mã chưa gán CSKH nào. */
 export const CHUA_GAN = '(chua-gan)';
+
+// Cùng một ô nhưng có hai đường ghi (màn tài khoản và màn báo cáo Tuổi nợ),
+// nên phần chuẩn hoá để riêng `tuoi-no-khach.ts`. Vẫn xuất lại ở đây cho
+// những chỗ đang nhập từ `users.service`.
+export { TUOI_NO_TOI_DA, chuanHoaTuoiNo } from './tuoi-no-khach';
 
 @Injectable()
 export class UsersService {
@@ -46,7 +52,7 @@ export class UsersService {
       `SELECT Id, UserName, Email, PhoneNumber,
               HoTen, DiaChi, TinhThanh, SoTaiKhoan,
               HinhThucNhanHang, KhachBuon, LinkTaiKhoanMang, VungMien,
-              CSKHPhuTrach
+              CSKHPhuTrach, TuoiNo
          FROM dbo.AspNetUsers
         WHERE (:tuKhoa IS NULL OR UserName LIKE :tuKhoa)
           AND (:loc IS NULL
@@ -138,7 +144,13 @@ export class UsersService {
    */
   async update(id: string, userData: Partial<User>, nguoiTao = 'system'): Promise<User> {
     const user = await this.findByStringId(id);
-    const updated = await user.update(userData);
+    // Chỉ đụng tới khi màn hình CÓ gửi ô này lên: không có khoá thì nghĩa là
+    // người dùng đang sửa thứ khác, ghi đè null vào đây là xoá mất thoả thuận.
+    const duLieu =
+      'TuoiNo' in userData
+        ? { ...userData, TuoiNo: chuanHoaTuoiNo((userData as { TuoiNo?: unknown }).TuoiNo) }
+        : userData;
+    const updated = await user.update(duLieu);
     await this.systemLogsService.create({
       nguoiTao,
       nguon: 'UpdateUser',
