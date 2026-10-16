@@ -284,4 +284,129 @@ describe('TuoiNoService', () => {
       await expect(service.datTuoiNo('SANG_UK', 45)).resolves.toEqual({ khach: 'SANG_UK', tuoiNo: 45 });
     });
   });
+
+  describe('datTuoiNoHangLoat', () => {
+    /** Lượt truy vấn đầu là lấy cả bảng tài khoản về để tra trong bộ nhớ. */
+    const coSan = (ds: { UserName: string; TuoiNo: number | null }[]) =>
+      mockSequelize.query.mockResolvedValueOnce(ds).mockResolvedValue([]);
+
+    const BANG = [
+      { UserName: 'SANG_UK', TuoiNo: null },
+      { UserName: 'HP1131', TuoiNo: 30 },
+      { UserName: 'THAO_UK', TuoiNo: null },
+    ];
+
+    /** Các câu UPDATE, bỏ qua câu SELECT mở đầu. */
+    const cacLenhGhi = () =>
+      mockSequelize.query.mock.calls.slice(1).map(([, o]: any) => o.replacements);
+
+    it('ghi từng mã một, giá trị đã chuẩn hoá', async () => {
+      coSan(BANG);
+      const kq = await service.datTuoiNoHangLoat(
+        [
+          { khach: 'SANG_UK', tuoiNo: '45' },
+          { khach: 'THAO_UK', tuoiNo: 0 },
+        ],
+        'KETOANDIEP',
+      );
+      expect(kq.soDaGhi).toBe(2);
+      expect(kq.loi).toEqual([]);
+      expect(cacLenhGhi()).toEqual([
+        { khach: 'SANG_UK', tuoiNo: 45 },
+        { khach: 'THAO_UK', tuoiNo: 0 },
+      ]);
+    });
+
+    it('giá trị y như cũ thì không ghi lại', async () => {
+      coSan(BANG);
+      const kq = await service.datTuoiNoHangLoat([{ khach: 'HP1131', tuoiNo: 30 }]);
+      expect(kq).toMatchObject({ soDaGhi: 0, soKhongDoi: 1, loi: [] });
+      expect(cacLenhGhi()).toEqual([]);
+    });
+
+    it('ô để trống là XOÁ thoả thuận', async () => {
+      coSan(BANG);
+      await service.datTuoiNoHangLoat([{ khach: 'HP1131', tuoiNo: '' }]);
+      expect(cacLenhGhi()).toEqual([{ khach: 'HP1131', tuoiNo: null }]);
+    });
+
+    it('MỘT DÒNG HỎNG KHÔNG CHẶN CẢ FILE', async () => {
+      coSan(BANG);
+      const kq = await service.datTuoiNoHangLoat([
+        { khach: 'SANG_UK', tuoiNo: 45 },
+        { khach: 'KHONGCO', tuoiNo: 10 },
+        { khach: 'THAO_UK', tuoiNo: -5 },
+        { khach: '', tuoiNo: 10 },
+      ]);
+      expect(kq.soDaGhi).toBe(1);
+      expect(kq.loi.map((l) => [l.dong, l.khach])).toEqual([
+        [3, 'KHONGCO'],
+        [4, 'THAO_UK'],
+        [5, ''],
+      ]);
+      expect(cacLenhGhi()).toEqual([{ khach: 'SANG_UK', tuoiNo: 45 }]);
+    });
+
+    it('số dòng báo lỗi tính theo dòng trong EXCEL, dòng 1 là tiêu đề', async () => {
+      coSan(BANG);
+      const kq = await service.datTuoiNoHangLoat([{ khach: 'KHONGCO', tuoiNo: 10 }]);
+      expect(kq.loi[0].dong).toBe(2);
+    });
+
+    it('trùng mã trong cùng file thì báo lỗi, không để dòng sau lặng lẽ đè dòng trước', async () => {
+      coSan(BANG);
+      const kq = await service.datTuoiNoHangLoat([
+        { khach: 'SANG_UK', tuoiNo: 30 },
+        { khach: 'sang_uk', tuoiNo: 60 },
+      ]);
+      expect(kq.soDaGhi).toBe(1);
+      expect(kq.loi[0]).toMatchObject({ dong: 3, lyDo: 'Trùng với dòng 2' });
+      expect(cacLenhGhi()).toEqual([{ khach: 'SANG_UK', tuoiNo: 30 }]);
+    });
+
+    it('mã khách khác hoa thường vẫn khớp', async () => {
+      coSan(BANG);
+      const kq = await service.datTuoiNoHangLoat([{ khach: ' sang_uk ', tuoiNo: 45 }]);
+      expect(kq.soDaGhi).toBe(1);
+      // Ghi bằng tên đã cắt khoảng trắng; SQL Server so chuỗi không phân biệt hoa thường.
+      expect(cacLenhGhi()).toEqual([{ khach: 'sang_uk', tuoiNo: 45 }]);
+    });
+
+    it('file rỗng thì chặn', async () => {
+      await expect(service.datTuoiNoHangLoat([])).rejects.toThrow(BadRequestException);
+      expect(mockSequelize.query).not.toHaveBeenCalled();
+    });
+
+    it('quá nhiều dòng thì chặn, không nghẽn máy chủ', async () => {
+      const qua = Array.from({ length: 2001 }, (_, i) => ({ khach: 'K' + i, tuoiNo: 1 }));
+      await expect(service.datTuoiNoHangLoat(qua)).rejects.toThrow(BadRequestException);
+      expect(mockSequelize.query).not.toHaveBeenCalled();
+    });
+
+    it('ghi nhật ký MỘT dòng cho cả lượt, kèm trọn danh sách', async () => {
+      coSan(BANG);
+      await service.datTuoiNoHangLoat(
+        [
+          { khach: 'SANG_UK', tuoiNo: 45 },
+          // HP1131 đang là 30 — để trống là XOÁ, nên đây là một thay đổi thật.
+          { khach: 'HP1131', tuoiNo: '' },
+        ],
+        'KETOANDIEP',
+      );
+      expect(mockLogs.create).toHaveBeenCalledTimes(1);
+      expect(mockLogs.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nguoiTao: 'KETOANDIEP',
+          nguon: 'TuoiNo:DatHangLoat',
+          noiDung: '2 ma khach; SANG_UK=45, HP1131=(bo trong)',
+        }),
+      );
+    });
+
+    it('không có gì để ghi thì không ghi nhật ký rỗng', async () => {
+      coSan(BANG);
+      await service.datTuoiNoHangLoat([{ khach: 'HP1131', tuoiNo: 30 }]);
+      expect(mockLogs.create).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { Fragment, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FiAlertCircle, FiClock, FiUsers } from 'react-icons/fi';
+import { FiAlertCircle, FiClock, FiUpload, FiUsers } from 'react-icons/fi';
 import {
   datTuoiNo,
   getTuoiNoChiTiet,
@@ -13,6 +13,7 @@ import {
   type TuoiNoDong,
 } from '@/lib/api';
 import { useQuyen } from '@/hooks/use-quyen';
+import { NhapTuoiNoHangLoat } from '@/app/components/tuoi-no/nhap-hang-loat';
 
 /**
  * Báo cáo TUỔI NỢ.
@@ -75,21 +76,25 @@ export default function TuoiNoPage() {
   const { co } = useQuyen();
   const coDatTuoiNo = co('duyetCongNo');
   const [dangSua, setDangSua] = useState<string | null>(null);
+  const [moNhap, setMoNhap] = useState(false);
   const [oNhap, setONhap] = useState('');
   const [loiDat, setLoiDat] = useState('');
 
   const qc = useQueryClient();
+
+  /** Nạp lại cả ba truy vấn — đổi tuổi nợ là đổi cả cách chia nhóm. */
+  const napLai = () => {
+    qc.invalidateQueries({ queryKey: ['tuoi-no-tong-hop'] });
+    qc.invalidateQueries({ queryKey: ['tuoi-no-danh-sach'] });
+    qc.invalidateQueries({ queryKey: ['tuoi-no-chi-tiet'] });
+  };
   const datMut = useMutation({
     mutationFn: ({ khach, tuoiNo }: { khach: string; tuoiNo: number | null }) =>
       datTuoiNo(khach, tuoiNo),
     onSuccess: () => {
       setDangSua(null);
       setLoiDat('');
-      // Đổi tuổi nợ là đổi cả cách chia nhóm, nên nạp lại cả ba truy vấn chứ
-      // không chỉ dòng vừa sửa.
-      qc.invalidateQueries({ queryKey: ['tuoi-no-tong-hop'] });
-      qc.invalidateQueries({ queryKey: ['tuoi-no-danh-sach'] });
-      qc.invalidateQueries({ queryKey: ['tuoi-no-chi-tiet'] });
+      napLai();
     },
     onError: (e: any) => setLoiDat(e?.response?.data?.message || 'Không lưu được'),
   });
@@ -149,8 +154,9 @@ export default function TuoiNoPage() {
         {coDatTuoiNo && (
           <p className="mt-1 text-sm text-gray-400">
             Bấm vào ô <strong className="font-medium text-gray-500">Tuổi nợ</strong> của từng khách
-            để đặt số ngày được nợ. Để trống nghĩa là chưa có thoả thuận; gõ <code>0</code> nghĩa
-            là phải trả ngay.
+            để đặt số ngày được nợ, hoặc dùng <strong className="font-medium text-gray-500">Đặt
+            hàng loạt</strong> để nhập bằng Excel. Để trống nghĩa là chưa có thoả thuận; gõ{' '}
+            <code>0</code> nghĩa là phải trả ngay.
           </p>
         )}
       </div>
@@ -213,9 +219,27 @@ export default function TuoiNoPage() {
         </>
       )}
 
+      {coDatTuoiNo && moNhap && (
+        <NhapTuoiNoHangLoat
+          danhSach={danhSach.data ?? []}
+          onXong={napLai}
+          onDong={() => setMoNhap(false)}
+        />
+      )}
+
       <div className="rounded-xl border border-gray-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
           <div className="font-medium text-[#14264b]">Khách còn nợ</div>
+          <div className="flex items-center gap-2">
+          {coDatTuoiNo && !moNhap && (
+            <button
+              onClick={() => setMoNhap(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              <FiUpload size={14} />
+              Đặt hàng loạt
+            </button>
+          )}
           <div className="flex gap-1 rounded-lg border border-gray-300 p-0.5">
             {([
               ['gia', 'Quá hạn lâu nhất', <FiClock key="a" size={14} />],
@@ -236,6 +260,7 @@ export default function TuoiNoPage() {
                 {nhan}
               </button>
             ))}
+          </div>
           </div>
         </div>
 

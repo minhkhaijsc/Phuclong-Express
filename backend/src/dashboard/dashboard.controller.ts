@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Put, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Request, UseGuards } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { VanHanhService } from './van-hanh.service';
 import { TuoiNoService } from './tuoi-no.service';
@@ -162,6 +162,19 @@ export class DashboardController {
    *
    * `null`/chuỗi rỗng = xoá thoả thuận, quay về đếm từ ngày ghi nợ.
    */
+  /**
+   * Đặt tuổi nợ cho nhiều khách một lượt, từ file Excel kế toán tải lên.
+   *
+   * POST chứ không PUT: `PUT tuoi-no/hang-loat` sẽ đụng `PUT tuoi-no/:khach`
+   * với `khach = "hang-loat"`, đúng sai phụ thuộc vào thứ tự khai — không nên
+   * để một đường ghi phụ thuộc vào thứ tự dòng.
+   */
+  @Quyen('duyetCongNo')
+  @Post('tuoi-no/hang-loat')
+  async datTuoiNoHangLoat(@Body() body: { dong?: any[] }, @Request() req: any) {
+    return this.tuoiNoService.datTuoiNoHangLoat(body?.dong ?? [], req.user?.username || 'system');
+  }
+
   @Quyen('duyetCongNo')
   @Put('tuoi-no/:khach')
   async datTuoiNo(

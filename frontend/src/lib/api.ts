@@ -2584,6 +2584,27 @@ export const getTuoiNoChiTiet = async (khach: string): Promise<TuoiNoChiTiet[]> 
  * `null` = xoá thoả thuận, quay về đếm từ ngày ghi nợ. Máy chủ đòi quyền
  * `duyetCongNo` (Admin, Kế toán, CSKH, Mua hàng).
  */
+/** Một dòng trong file Excel đặt tuổi nợ hàng loạt. */
+export interface DongDatTuoiNo {
+  khach: string;
+  /** Số ngày, hoặc rỗng để xoá thoả thuận. */
+  tuoiNo: string | number | null;
+}
+
+export interface KetQuaDatTuoiNoHangLoat {
+  soDaGhi: number;
+  soKhongDoi: number;
+  loi: { dong: number; khach: string; lyDo: string }[];
+}
+
+/** Đặt tuổi nợ cho nhiều khách một lượt, từ file Excel. */
+export const datTuoiNoHangLoat = async (
+  dong: DongDatTuoiNo[],
+): Promise<KetQuaDatTuoiNoHangLoat> => {
+  const res = await apiClient.post('/dashboard/tuoi-no/hang-loat', { dong });
+  return res.data;
+};
+
 export const datTuoiNo = async (
   khach: string,
   tuoiNo: number | null,

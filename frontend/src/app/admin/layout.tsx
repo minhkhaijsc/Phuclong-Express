@@ -23,6 +23,7 @@ import {
 import { NotificationBell } from '@/app/components/notifications/notification-bell';
 import { useQnaBadgeCount } from '@/hooks/use-qna-badge-count';
 import { useQuyen } from '@/hooks/use-quyen';
+import { locMenu } from '@/lib/menu-quyen';
 
 type NavSubItem = {
   href: string;
@@ -61,8 +62,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, []);
 
   const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
-  const qnaBadgeCount = useQnaBadgeCount();
   const { co } = useQuyen();
+  /**
+   * Chuông Thắc mắc chỉ đếm khi CÓ quyền. Trước đây hỏi vô điều kiện, nên mọi
+   * trang admin của Kho đều ném `GET /qna 403` ra console mỗi 60 giây.
+   */
+  const qnaBadgeCount = useQnaBadgeCount(co('noiDung.xem'));
   const hasAdminAccess = isAuthenticated && (user?.roles?.length ?? 0) > 0;
 
   // Chỉ user đã đăng nhập và có ít nhất 1 role mới được vào khu vực admin.
@@ -78,17 +83,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       label: 'TỔNG QUAN',
       icon: FiGrid,
       submenu: [
-        { href: '/admin/dashboard', label: 'Dashboard thống kê' },
-        { href: '/admin/dashboard/san-luong-khach', label: 'Sản lượng khách hàng' },
+        { href: '/admin/dashboard', label: 'Dashboard thống kê', canQuyen: 'dashboard.xem' },
+        { href: '/admin/dashboard/san-luong-khach', label: 'Sản lượng khách hàng', canQuyen: 'dashboard.xem' },
       ],
     },
     {
       label: 'MUA HÀNG GIÚP',
       icon: FiShoppingCart,
       submenu: [
-        { href: '/admin/orders/list', label: 'Mua hàng' },
-        { href: '/admin/order-management-list', label: 'Nhận đơn hàng' },
-        { href: '/admin/orders/deleted', label: 'Các đơn hàng đã xóa' },
+        { href: '/admin/orders/list', label: 'Mua hàng', canQuyen: 'muaHang.xem' },
+        { href: '/admin/order-management-list', label: 'Nhận đơn hàng', canQuyen: 'muaHang.xem' },
+        { href: '/admin/orders/deleted', label: 'Các đơn hàng đã xóa', canQuyen: 'muaHang.xem' },
         { href: '/admin/suppliers', label: 'Nhà cung cấp', canQuyen: 'giaNcc' },
       ],
     },
@@ -96,28 +101,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       label: 'VẬN CHUYỂN',
       icon: FiTruck,
       submenu: [
-        { href: '/admin/tracking', label: 'Quản lý tracking' },
-        { href: '/admin/tracking/anh', label: 'Up ảnh tracking' },
-        { href: '/admin/batches', label: 'Quản lý lô hàng' },
-        { href: '/admin/debt-reports/profit-loss-by-lot', label: 'BC phân tích lãi lỗ theo lô hàng' },
-        { href: '/admin/debt-reports/by-lot', label: 'BC công nợ khách hàng theo lô' },
+        { href: '/admin/tracking', label: 'Quản lý tracking', canQuyen: 'vanChuyen.xem' },
+        { href: '/admin/tracking/anh', label: 'Up ảnh tracking', canQuyen: 'vanChuyen.xem' },
+        { href: '/admin/batches', label: 'Quản lý lô hàng', canQuyen: 'vanChuyen.xem' },
+        { href: '/admin/debt-reports/profit-loss-by-lot', label: 'BC phân tích lãi lỗ theo lô hàng', canQuyen: 'baoCao.xem' },
+        { href: '/admin/debt-reports/by-lot', label: 'BC công nợ khách hàng theo lô', canQuyen: 'baoCao.xem' },
       ],
     },
     {
       label: 'FINANCE',
       icon: FiDollarSign,
       submenu: [
-        { href: '/admin/debt-management', label: 'QL công nợ' },
-        { href: '/admin/customer-limits', label: 'Hạn mức khách hàng' },
+        { href: '/admin/debt-management', label: 'QL công nợ', canQuyen: 'congNo.xem' },
+        { href: '/admin/customer-limits', label: 'Hạn mức khách hàng', canQuyen: 'congNo.xem' },
         { href: '', label: 'Báo cáo', type: 'divider' },
-        { href: '/admin/debt-reports', label: 'Chi tiết công nợ' },
-        { href: '/admin/debt-reports/by-period', label: 'Chi tiết công nợ theo kỳ' },
-        { href: '/admin/debt-reports/total-revenue', label: 'Tổng doanh thu' },
-        { href: '/admin/debt-reports/debt-by-user', label: 'Tổng công nợ theo user' },
-        { href: '/admin/debt-reports/aging', label: 'Tuổi nợ' },
-        { href: '/admin/debt-reports/reconciliation', label: 'Kiểm tra đơn hàng mua' },
-        { href: '/admin/debt-reports/customer', label: 'Công nợ khách hàng' },
-        { href: '/admin/debt-reports/by-shipment-lot', label: 'Công nợ theo đợt hàng' },
+        { href: '/admin/debt-reports', label: 'Chi tiết công nợ', canQuyen: 'baoCao.xem' },
+        { href: '/admin/debt-reports/by-period', label: 'Chi tiết công nợ theo kỳ', canQuyen: 'baoCao.xem' },
+        { href: '/admin/debt-reports/total-revenue', label: 'Tổng doanh thu', canQuyen: 'baoCao.xem' },
+        { href: '/admin/debt-reports/debt-by-user', label: 'Tổng công nợ theo user', canQuyen: 'baoCao.xem' },
+        { href: '/admin/debt-reports/aging', label: 'Tuổi nợ', canQuyen: 'dashboard.xem' },
+        { href: '/admin/debt-reports/reconciliation', label: 'Kiểm tra đơn hàng mua', canQuyen: 'baoCao.xem' },
+        { href: '/admin/debt-reports/customer', label: 'Công nợ khách hàng', canQuyen: 'baoCao.xem' },
+        { href: '/admin/debt-reports/by-shipment-lot', label: 'Công nợ theo đợt hàng', canQuyen: 'baoCao.xem' },
         {
           href: '/admin/debt-reports/supplier',
           label: 'Công nợ phải trả NCC',
@@ -129,23 +134,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       label: 'TÀI KHOẢN',
       icon: FiUsers,
       submenu: [
-        { href: '/admin/roles', label: 'Role' },
-        { href: '/admin/users', label: 'User' },
-        { href: '/admin/khach-ngung-giao-dich', label: 'Khách ngừng giao dịch' },
-        { href: '/admin/clear-user-data', label: 'Xóa dữ liệu theo user' },
+        { href: '/admin/roles', label: 'Role', canQuyen: 'taiKhoan.xem' },
+        { href: '/admin/users', label: 'User', canQuyen: 'xemDanhSachKhach' },
+        { href: '/admin/khach-ngung-giao-dich', label: 'Khách ngừng giao dịch', canQuyen: 'taiKhoan.xem' },
+        { href: '/admin/clear-user-data', label: 'Xóa dữ liệu theo user', canQuyen: 'quanLyRole' },
       ],
     },
     {
       label: 'DANH MỤC & CẤU HÌNH',
       icon: FiSettings,
       submenu: [
-        { href: '/admin/periods', label: 'Danh mục kỳ' },
-        { href: '/admin/exchange-rates', label: 'Tỷ giá' },
-        { href: '/admin/websites', label: 'Danh sách website' },
-        { href: '/admin/bank-accounts', label: 'Tài khoản ngân hàng' },
-        { href: '/admin/service-fees', label: 'Công mua hàng' },
-        { href: '/admin/delivery-addresses', label: 'Địa chỉ nhận hàng' },
-        { href: '/admin/system-logs', label: 'Báo cáo hoạt động hệ thống' },
+        { href: '/admin/periods', label: 'Danh mục kỳ', canQuyen: 'danhMuc.xem' },
+        { href: '/admin/exchange-rates', label: 'Tỷ giá', canQuyen: 'danhMuc.xem' },
+        { href: '/admin/websites', label: 'Danh sách website', canQuyen: 'danhMuc.xem' },
+        { href: '/admin/bank-accounts', label: 'Tài khoản ngân hàng', canQuyen: 'danhMuc.xem' },
+        { href: '/admin/service-fees', label: 'Công mua hàng', canQuyen: 'danhMuc.xem' },
+        { href: '/admin/delivery-addresses', label: 'Địa chỉ nhận hàng', canQuyen: 'diaChi.xem' },
+        { href: '/admin/system-logs', label: 'Báo cáo hoạt động hệ thống', canQuyen: 'nhatKy.xem' },
       ],
     },
     {
@@ -153,13 +158,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       icon: FiInfo,
       submenu: [
         { href: '/', label: 'Trang chủ' },
-        { href: '/admin/info', label: 'Thông tin' },
-        { href: '/admin/qna', label: 'Thắc mắc' },
-        { href: '/admin/articles', label: 'Bài viết' },
-        { href: '/admin/websites', label: 'Cập nhật các trang web hay' },
+        { href: '/admin/info', label: 'Thông tin', canQuyen: 'danhMuc.xem' },
+        { href: '/admin/qna', label: 'Thắc mắc', canQuyen: 'noiDung.xem' },
+        { href: '/admin/articles', label: 'Bài viết', canQuyen: 'noiDung.xem' },
+        { href: '/admin/websites', label: 'Cập nhật các trang web hay', canQuyen: 'danhMuc.xem' },
       ],
     },
   ];
+
+  /**
+   * Menu THẬT SỰ hiện ra. Bỏ mục không đủ quyền, bỏ dòng phân cách mồ côi, bỏ
+   * cả nhóm rỗng — xem `lib/menu-quyen.ts`.
+   *
+   * Dùng cho cả phần dò trang đang mở lẫn hai chỗ vẽ menu, để không nơi nào
+   * còn đọc `navItems` thô rồi hiện lại mục vừa giấu.
+   */
+  const menu = locMenu(navItems, co);
 
   // Track which submenu is open
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
@@ -168,7 +182,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     let longestMatch = '';
     let matchedLabel = '';
 
-    for (const item of navItems) {
+    for (const item of menu) {
       for (const sub of item.submenu) {
         if (
           sub.href &&
@@ -263,7 +277,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             sidebarCollapsed ? 'overflow-visible' : 'overflow-y-auto [scrollbar-width:thin]'
           }`}
         >
-          {navItems.map((item) => {
+          {menu.map((item) => {
             const isActive = item.label === activeLabel;
             const isOpen = visibleOpenSubmenu === item.label;
             const IconComponent = item.icon;
@@ -298,9 +312,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 {/* Submenu */}
                 {item.submenu && isOpen && !sidebarCollapsed && (
                   <div className="ml-4 mt-2 space-y-1 border-l border-white/10 pl-3">
-                    {item.submenu
-                      .filter((subItem) => !subItem.canQuyen || co(subItem.canQuyen))
-                      .map((subItem, idx) =>
+                    {item.submenu.map((subItem, idx) =>
                       subItem.type === 'divider' || !subItem.href ? (
                         <div key={idx} className="flex items-center gap-2 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">
                           <span className="h-px flex-1 bg-white/10" />
@@ -338,9 +350,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         {item.label}
                       </div>
                       <div className="space-y-1">
-                        {item.submenu
-                          .filter((subItem) => !subItem.canQuyen || co(subItem.canQuyen))
-                          .map((subItem, idx) =>
+                        {item.submenu.map((subItem, idx) =>
                           subItem.type === 'divider' || !subItem.href ? (
                             <div key={idx} className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">
                               {subItem.label}

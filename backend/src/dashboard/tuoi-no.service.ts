@@ -84,6 +84,24 @@ export interface TongHopTuoiNo {
   tren60: number;
 }
 
+/** Một dòng trong file Excel đặt tuổi nợ hàng loạt. */
+export interface DongDatHangLoat {
+  khach: string;
+  /** Số ngày, hoặc rỗng/null để xoá thoả thuận. */
+  tuoiNo: unknown;
+}
+
+export interface KetQuaDatHangLoat {
+  /** Số khách thật sự đổi giá trị. */
+  soDaGhi: number;
+  /** Dòng hợp lệ nhưng giá trị y như cũ — không ghi lại làm gì. */
+  soKhongDoi: number;
+  loi: { dong: number; khach: string; lyDo: string }[];
+}
+
+/** Trần số dòng một lần nhập. Nhiều hơn thì chia file. */
+export const SO_DONG_TOI_DA = 2000;
+
 export interface DongChiTietTuoiNo {
   ngay: string;
   noiDung: string;
@@ -312,6 +330,109 @@ export class TuoiNoService {
       .catch((err) => console.error('[SystemLog]', err?.message ?? err));
 
     return { khach: ten, tuoiNo: giaTri };
+  }
+
+  /**
+   * Đặt tuổi nợ cho NHIỀU khách một lượt — từ file Excel kế toán tải lên.
+   *
+   * Vì sao không dùng màn "Nhập Excel" của TÀI KHOẢN: phần nhập đó ghi vào
+   * những cột KHÔNG TỒN TẠI (`ho_ten`, `vung_mien`, `dia_chi`… trong khi bảng
+   * tên là `HoTen`, `VungMien`, `DiaChi`), nên mọi dòng đều rơi vào `catch` và
+   * bị đếm là lỗi — tức là màn đó chưa bao giờ chạy được. Thêm một cột nữa vào
+   * đó là thêm vào chỗ hỏng.
+   *
+   * MỘT DÒNG HỎNG KHÔNG CHẶN CẢ FILE: dòng nào sai thì báo riêng dòng đó, phần
+   * còn lại vẫn ghi. Kế toán sửa vài dòng rồi nhập lại, chứ không phải dò lại
+   * từ đầu.
+   *
+   * Lấy nguyên danh sách tài khoản về rồi tra trong bộ nhớ, không ghép `IN
+   * (...)` theo số dòng: bảng chỉ có ~985 dòng, mà ghép thì 2000 dòng Excel là
+   * 2000 tham số, chạm trần 2100 tham số của SQL Server.
+   */
+  async datTuoiNoHangLoat(
+    dong: DongDatHangLoat[],
+    nguoiSua = 'system',
+  ): Promise<KetQuaDatHangLoat> {
+    const ds = Array.isArray(dong) ? dong : [];
+    if (!ds.length) throw new BadRequestException('Không có dòng nào để ghi.');
+    if (ds.length > SO_DONG_TOI_DA) {
+      throw new BadRequestException(`Mỗi lần chỉ nhập tối đa ${SO_DONG_TOI_DA} dòng.`);
+    }
+
+    const dangCo = await this.hoi<{ UserName: string; TuoiNo: number | null }>(
+      `SELECT UserName, TuoiNo FROM dbo.AspNetUsers`,
+    );
+    const bang = new Map<string, number | null>();
+    for (const u of dangCo) {
+      bang.set(String(u.UserName).trim().toUpperCase(), u.TuoiNo === null ? null : Number(u.TuoiNo));
+    }
+
+    const loi: { dong: number; khach: string; lyDo: string }[] = [];
+    const daGap = new Map<string, number>();
+    const canGhi: { khach: string; tuoiNo: number | null }[] = [];
+    let soKhongDoi = 0;
+
+    ds.forEach((d, i) => {
+      // Dòng 1 là tiêu đề, nên dòng dữ liệu thứ i nằm ở dòng Excel i + 2.
+      const soDong = i + 2;
+      const ten = String(d?.khach ?? '').trim();
+      if (!ten) {
+        loi.push({ dong: soDong, khach: '', lyDo: 'Thiếu mã khách' });
+        return;
+      }
+
+      const khoa = ten.toUpperCase();
+      const lanTruoc = daGap.get(khoa);
+      if (lanTruoc) {
+        loi.push({ dong: soDong, khach: ten, lyDo: `Trùng với dòng ${lanTruoc}` });
+        return;
+      }
+      daGap.set(khoa, soDong);
+
+      if (!bang.has(khoa)) {
+        loi.push({ dong: soDong, khach: ten, lyDo: 'Không có mã khách này' });
+        return;
+      }
+
+      let giaTri: number | null;
+      try {
+        giaTri = chuanHoaTuoiNo(d?.tuoiNo);
+      } catch (e: any) {
+        loi.push({ dong: soDong, khach: ten, lyDo: e?.message ?? 'Giá trị không hợp lệ' });
+        return;
+      }
+
+      if (bang.get(khoa) === giaTri) {
+        soKhongDoi++;
+        return;
+      }
+      canGhi.push({ khach: ten, tuoiNo: giaTri });
+    });
+
+    for (const g of canGhi) {
+      await this.sequelize.query(
+        `UPDATE dbo.AspNetUsers SET TuoiNo = :tuoiNo WHERE UserName = :khach`,
+        { replacements: { tuoiNo: g.tuoiNo, khach: g.khach } },
+      );
+    }
+
+    if (canGhi.length) {
+      await this.systemLogsService
+        .create({
+          nguoiTao: nguoiSua,
+          nguon: 'TuoiNo:DatHangLoat',
+          hanhDong: 'Chinh sua',
+          doiTuong: '',
+          // Ghi trọn danh sách: cột NoiDung là nvarchar(max), và sau này cần
+          // truy "ai đặt khách X thành 45 ngày" thì phải có ở đây.
+          noiDung:
+            `${canGhi.length} ma khach; ` +
+            canGhi.map((g) => `${g.khach}=${g.tuoiNo === null ? '(bo trong)' : g.tuoiNo}`).join(', '),
+        })
+        .catch((err) => console.error('[SystemLog]', err?.message ?? err));
+    }
+
+    return { soDaGhi: canGhi.length, soKhongDoi, loi };
   }
 
   /** Chi tiết các khoản còn nợ của MỘT khách — bấm từ danh sách vào. */
