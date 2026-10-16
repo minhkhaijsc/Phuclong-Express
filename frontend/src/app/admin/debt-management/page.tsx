@@ -24,10 +24,8 @@ import {
   UpdateDebtParams,
 } from '@/lib/api';
 import { useCurrentUser } from '@/hooks/use-auth';
-import { useAuth } from '@/hooks/use-auth-context';
+import { useQuyen } from '@/hooks/use-quyen';
 import { useLocalStorageHistory } from '@/hooks/use-localstorage-history';
-
-const DEBT_MANAGEMENT_ALLOWED_ROLES = ['admin', 'order', 'sale'];
 
 const NOI_DUNG_HISTORY_KEY = 'debt-management:noi-dung-history';
 const NOI_DUNG_HISTORY_MAX = 50;
@@ -82,17 +80,48 @@ export default function DebtManagementPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const currentUser = useCurrentUser();
-  const { user: authUser, isLoading: authLoading } = useAuth();
-  const hasDebtAccess = (authUser?.roles ?? []).some((role) =>
-    DEBT_MANAGEMENT_ALLOWED_ROLES.includes(role.toLowerCase())
-  );
 
-  // Chỉ role admin/order/sale được thao tác công nợ; role khác bị đá về trang chủ admin.
+  /**
+   * QUYỀN CỦA TRANG NÀY ĐI THEO BẢNG QUYỀN (`backend/src/auth/quyen/bo-phan.ts`),
+   * không theo tên vai trò gõ cứng nữa.
+   *
+   * Chỗ này trước là `['admin', 'order', 'sale']` — ba tên vai trò CŨ. Từ đợt
+   * phân bộ phận 10/10/2026, CSKH mang vai trò `CSKH`, kế toán `KeToan`, kho
+   * `Kho`, mua hàng `MuaHang`… nên KHÔNG tên nào khớp: cả công ty trừ Admin bị
+   * `router.replace('/admin')` đá ra khỏi trang Quản lý công nợ, dù máy chủ vẫn
+   * cho qua (mọi route `/debt-reports/management/*` đều gắn miền `congNo`, và
+   * `GET .../management/list` bằng tài khoản CSKH trả 200). Bên khách báo ngày
+   * 16/10/2026: *"phần ql công nợ a mở quyền cho cskh giúp em nha"*.
+   *
+   * Bốn mã dưới đây lấy đúng theo nhãn của từng route trong
+   * `debt-reports.controller.ts`, để nút nào hiện ra thì máy chủ cũng cho làm —
+   * không còn cảnh bấm vào rồi nhận 403.
+   */
+  const { quyen, dangNap, co } = useQuyen();
+  const coXemCongNo = co('congNo.xem');
+  /** Sửa, xoá, import. */
+  const coSuaCongNo = co('congNo.sua');
+  /** Thêm dòng mới: route POST gắn `baoChuyenKhoan`, không phải `congNo.sua`. */
+  const coThemCongNo = co('baoChuyenKhoan');
+  /** Nút Duyệt: Kho và Kho SG ghi được công nợ nhưng KHÔNG được duyệt. */
+  const coDuyetCongNo = co('duyetCongNo');
+  const choGhiCongNo = coThemCongNo || coSuaCongNo;
+
+  /**
+   * Chưa biết quyền thì chưa kết luận gì.
+   *
+   * Phải chờ `quyen` về thật chứ không chỉ chờ `dangNap`: lúc tải lại trang,
+   * store đăng nhập còn đang khôi phục nên truy vấn quyền bị `enabled: false`,
+   * mà truy vấn đang tắt thì `isLoading` là false trong khi quyền vẫn chưa có.
+   * Xét sớm một nhịp là đá người có quyền ra ngoài.
+   */
+  const dangDoiQuyen = dangNap || !quyen;
+
   useEffect(() => {
-    if (!authLoading && !hasDebtAccess) {
+    if (!dangDoiQuyen && !coXemCongNo) {
       router.replace('/admin');
     }
-  }, [authLoading, hasDebtAccess, router]);
+  }, [dangDoiQuyen, coXemCongNo, router]);
 
   const getTodayFormatted = () => {
     const d = new Date();
@@ -295,7 +324,7 @@ export default function DebtManagementPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['debt-management', filters],
     queryFn: () => getDebtManagementList(filters),
-    enabled: hasDebtAccess,
+    enabled: coXemCongNo,
   });
 
   // Đo bề rộng nội dung/khung của bảng để biết khi nào cần thanh scroll ngang ghim.
@@ -730,6 +759,20 @@ export default function DebtManagementPage() {
 
   const totalPages = Math.ceil((data?.total || 0) / filters.limit);
 
+  // Chưa có quyền trong tay thì chưa vẽ gì — khỏi loé lên form thêm công nợ
+  // trước mặt người chỉ được xem.
+  if (dangDoiQuyen) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-20 text-sm text-slate-500">
+        <FiLoader className="w-4 h-4 animate-spin" />
+        Đang kiểm tra quyền truy cập...
+      </div>
+    );
+  }
+
+  // useEffect ở trên đang đưa về /admin.
+  if (!coXemCongNo) return null;
+
   // Calculate summary stats
   return (
     <div className="space-y-6">
@@ -758,17 +801,20 @@ export default function DebtManagementPage() {
               {exportAllMutation.isPending ? 'Đang xuất...' : 'Xuất ra excel theo bộ lọc'}
             </span>
           </button>
-          <Link
-            href="/admin/debt-management/import"
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#14264b] text-white rounded-xl hover:bg-cyan-400 transition-colors duration-200 font-medium shadow-sm cursor-pointer"
-          >
-            <FiUpload className="w-4 h-4" />
-            <span className="hidden sm:inline">Import Excel</span>
-          </Link>
+          {coSuaCongNo && (
+            <Link
+              href="/admin/debt-management/import"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#14264b] text-white rounded-xl hover:bg-cyan-400 transition-colors duration-200 font-medium shadow-sm cursor-pointer"
+            >
+              <FiUpload className="w-4 h-4" />
+              <span className="hidden sm:inline">Import Excel</span>
+            </Link>
+          )}
         </div>
       </div>
 
-      {/* Inline Add/Edit Form */}
+      {/* Inline Add/Edit Form — ẩn với bộ phận chỉ được XEM công nợ (Vận chuyển, MKT) */}
+      {choGhiCongNo && (
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-visible">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <div>
@@ -1121,7 +1167,12 @@ export default function DebtManagementPage() {
               </button>
               <button
                 type="submit"
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={
+                  createMutation.isPending ||
+                  updateMutation.isPending ||
+                  // Thêm dòng mới cần `baoChuyenKhoan`, sửa dòng cũ cần `congNo.sua`.
+                  (editingId ? !coSuaCongNo : !coThemCongNo)
+                }
                 className="px-3 py-2 text-xs font-medium text-white bg-gradient-to-r from-[#14264b] to-cyan-400 rounded-lg hover:from-[#4bb3dd] hover:to-cyan-300 transition-all shadow-lg shadow-cyan-500/25 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
               >
                 {(createMutation.isPending || updateMutation.isPending) && <FiLoader className="w-3.5 h-3.5 animate-spin" />}
@@ -1130,6 +1181,7 @@ export default function DebtManagementPage() {
             </div>
           </form>
         </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-visible">
@@ -1426,7 +1478,7 @@ export default function DebtManagementPage() {
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
-                          {!item.Status && (
+                          {!item.Status && coDuyetCongNo && (
                             <button
                               onClick={() => approveMutation.mutate(item.CongNo_ID)}
                               disabled={approveMutation.isPending}
@@ -1436,6 +1488,8 @@ export default function DebtManagementPage() {
                               <FiCheck className="w-4 h-4" />
                             </button>
                           )}
+                          {coSuaCongNo && (
+                          <>
                           <button
                             onClick={() => {
                               setEditingId(item.CongNo_ID);
@@ -1481,6 +1535,8 @@ export default function DebtManagementPage() {
                           >
                             <FiTrash2 className="w-4 h-4" />
                           </button>
+                          </>
+                          )}
                         </div>
                       </td>
                     </tr>

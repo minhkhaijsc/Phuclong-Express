@@ -13,10 +13,8 @@ import {
   ImportDebtRow,
   ImportDebtResponse,
 } from '@/lib/api';
-import { useAuth } from '@/hooks/use-auth-context';
+import { useQuyen } from '@/hooks/use-quyen';
 import { downloadDataAsExcel, readExcelSheetNames, readExcelSheetRows } from '@/lib/excel-download';
-
-const DEBT_MANAGEMENT_ALLOWED_ROLES = ['admin', 'order', 'sale'];
 
 /**
  * Debt Import Page — bulk "Thêm mới công nợ" from Excel
@@ -243,17 +241,21 @@ function getErrorMessage(error: unknown, fallback: string): string {
 export default function DebtImportPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user: authUser, isLoading: authLoading } = useAuth();
-  const hasDebtAccess = (authUser?.roles ?? []).some((role) =>
-    DEBT_MANAGEMENT_ALLOWED_ROLES.includes(role.toLowerCase())
-  );
+  /**
+   * Import là GHI, nên cần `congNo.sua` — đúng nhãn của
+   * `POST /debt-reports/management/import`. Chỗ này trước đây so với ba tên vai
+   * trò cũ `['admin','order','sale']`; xem ghi chú dài ở trang
+   * `/admin/debt-management`.
+   */
+  const { quyen, dangNap, co } = useQuyen();
+  const coSuaCongNo = co('congNo.sua');
+  const dangDoiQuyen = dangNap || !quyen;
 
-  // Chỉ role admin/order/sale được import công nợ; role khác bị đá về trang chủ admin.
   useEffect(() => {
-    if (!authLoading && !hasDebtAccess) {
+    if (!dangDoiQuyen && !coSuaCongNo) {
       router.replace('/admin');
     }
-  }, [authLoading, hasDebtAccess, router]);
+  }, [dangDoiQuyen, coSuaCongNo, router]);
 
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [file, setFile] = useState<File | null>(null);
@@ -264,9 +266,9 @@ export default function DebtImportPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportDebtResponse | null>(null);
 
-  const { data: users, isLoading: usersLoading } = useQuery({ queryKey: ['debt-report-users'], queryFn: getDebtReportUsers, enabled: hasDebtAccess });
-  const { data: bankAccounts, isLoading: bankAccountsLoading } = useQuery({ queryKey: ['bank-accounts'], queryFn: getBankAccounts, enabled: hasDebtAccess });
-  const { data: countries, isLoading: countriesLoading } = useQuery({ queryKey: ['quoc-gia'], queryFn: getQuocGia, enabled: hasDebtAccess });
+  const { data: users, isLoading: usersLoading } = useQuery({ queryKey: ['debt-report-users'], queryFn: getDebtReportUsers, enabled: coSuaCongNo });
+  const { data: bankAccounts, isLoading: bankAccountsLoading } = useQuery({ queryKey: ['bank-accounts'], queryFn: getBankAccounts, enabled: coSuaCongNo });
+  const { data: countries, isLoading: countriesLoading } = useQuery({ queryKey: ['quoc-gia'], queryFn: getQuocGia, enabled: coSuaCongNo });
   // Chờ 3 danh sách này load xong trước khi cho tải file mẫu, tránh file mẫu bị thiếu dropdown
   // User/Tài khoản/Tuyến nếu người dùng bấm quá sớm lúc mạng chậm.
   const templateDataReady = !usersLoading && !bankAccountsLoading && !countriesLoading;
@@ -434,6 +436,17 @@ export default function DebtImportPage() {
     setImportResult(null);
     setErrorMessage(null);
   };
+
+  if (dangDoiQuyen) {
+    return (
+      <div className="container mx-auto p-4 py-20 text-center text-sm text-slate-500">
+        Đang kiểm tra quyền truy cập...
+      </div>
+    );
+  }
+
+  // useEffect ở trên đang đưa về /admin.
+  if (!coSuaCongNo) return null;
 
   return (
     <div className="container mx-auto p-4 max-w-6xl space-y-4">
