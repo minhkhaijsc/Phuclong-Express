@@ -2,12 +2,11 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FiUsers, FiDollarSign, FiPackage, FiShoppingBag } from 'react-icons/fi';
 import { KPICard } from '@/app/components/admin';
-import { useAuth } from '@/hooks/use-auth-context';
+import { useQuyen } from '@/hooks/use-quyen';
 import {
   getVanHanhSoLieu,
   getVanHanhTheoNgay,
@@ -45,9 +44,25 @@ const sumBy = <T,>(rows: T[] | undefined, key: keyof T): number =>
   (rows || []).reduce((acc, r) => acc + (Number(r[key]) || 0), 0);
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const { user, isLoading: authLoading } = useAuth();
-  const isAdmin = user?.roles?.includes('Admin') ?? false;
+  /**
+   * XÉT THEO QUYỀN, KHÔNG XÉT VAI TRÒ THÔ.
+   *
+   * Trước đây dòng này là `user?.roles?.includes('Admin')` rồi `router.replace
+   * ('/login')` nếu không phải Admin. Ngày 15/10/2026 bên khách cho Kế toán và
+   * MKT xem Dashboard: máy chủ đã mở, mục menu đã hiện, nhưng mở ra thì trang
+   * tự đá về trang chủ — vì cái chốt Admin này còn nguyên. Tức là hai bộ phận
+   * kia nhìn như được cấp quyền mà thực tế chưa vào được.
+   *
+   * `dashboard.xem` là đúng mã mà máy chủ đòi (@MienQuyen('dashboard') trên cả
+   * DashboardController), nên hai bên không còn lệch nhau nữa; thêm bộ phận
+   * sau này chỉ sửa BANG_QUYEN, không phải sửa trang.
+   *
+   * Và KHÔNG điều hướng nữa: đá về /login khi người ta ĐANG đăng nhập là vòng
+   * tròn — /login lại đẩy tiếp ra trang chủ, người dùng không hiểu vừa xảy ra
+   * chuyện gì. Hiện hẳn một ô "Không có quyền" như màn Sản lượng khách hàng.
+   */
+  const { co, dangNap } = useQuyen();
+  const xemDuoc = co('dashboard.xem');
 
   const [draft, setDraft] = useState(getDefaultRange);
   const [applied, setApplied] = useState(draft);
@@ -66,29 +81,22 @@ export default function DashboardPage() {
 
   // Chỉ nạp danh sách tuyến CÓ dữ liệu — 10/13 nước trong danh mục chưa từng có
   // kiện nào, đổ hết vào ô lọc chỉ làm người dùng chọn nhầm rồi thấy trống.
-  const tuyen = useQuery({ queryKey: ['vh-tuyen'], queryFn: getVanHanhTuyen, enabled: isAdmin });
-
-  // Chỉ Admin được xem dashboard — non-admin redirect về login (chặn ở giao diện).
-  useEffect(() => {
-    if (!authLoading && !isAdmin) {
-      router.replace('/login');
-    }
-  }, [authLoading, isAdmin, router]);
+  const tuyen = useQuery({ queryKey: ['vh-tuyen'], queryFn: getVanHanhTuyen, enabled: xemDuoc });
 
   const newCustomers = useQuery({
     queryKey: ['dashboard-new-customers', applied],
     queryFn: () => getDashboardNewCustomers(applied.fromDate, applied.toDate),
-    enabled: isAdmin,
+    enabled: xemDuoc,
   });
   const revenue = useQuery({
     queryKey: ['dashboard-revenue', applied],
     queryFn: () => getDashboardRevenue(applied.fromDate, applied.toDate),
-    enabled: isAdmin,
+    enabled: xemDuoc,
   });
   const output = useQuery({
     queryKey: ['dashboard-output-daily', applied],
     queryFn: () => getDashboardOutputDaily(applied.fromDate, applied.toDate),
-    enabled: isAdmin,
+    enabled: xemDuoc,
   });
   const totals = useMemo(
     () => ({
@@ -206,12 +214,20 @@ export default function DashboardPage() {
     }
   };
 
-  // Gate giao diện: chờ auth load, chặn non-admin (useEffect ở trên đã điều hướng).
-  if (authLoading) {
-    return <div className="p-6 text-sm text-gray-500">Đang tải…</div>;
+  // Ẩn trước, hiện sau: `co()` trả false trong lúc còn nạp quyền, nên phải chờ
+  // `dangNap` xong mới được kết luận là không có quyền.
+  if (dangNap) {
+    return <div className="p-6 text-sm text-gray-500">Đang kiểm quyền…</div>;
   }
-  if (!isAdmin) {
-    return <div className="p-6 text-sm text-red-600">Bạn không có quyền truy cập trang này (chỉ Admin).</div>;
+  if (!xemDuoc) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+        <h2 className="text-base font-semibold text-amber-900">Không có quyền</h2>
+        <p className="mt-1 text-sm text-amber-800">
+          Trang này nằm trong Dashboard, chỉ mở cho Admin, Kế toán, MKT, Trưởng phòng và Giám đốc.
+        </p>
+      </div>
+    );
   }
 
   return (

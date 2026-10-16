@@ -120,7 +120,7 @@ export default function TrangSanLuongKhach() {
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
         <h2 className="text-base font-semibold text-amber-900">Không có quyền</h2>
         <p className="mt-1 text-sm text-amber-800">
-          Báo cáo này nằm trong Dashboard, chỉ mở cho Admin, Trưởng phòng và Giám đốc.
+          Báo cáo này nằm trong Dashboard, chỉ mở cho Admin, Kế toán, MKT, Trưởng phòng và Giám đốc.
         </p>
       </div>
     );
