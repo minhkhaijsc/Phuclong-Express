@@ -2829,6 +2829,44 @@ export const anNhaCungCap = async (
   return res.data;
 };
 
+/**
+ * NHẬP GIÁ NHÀ CUNG CẤP CHO NHIỀU DÒNG ĐƠN MỘT LƯỢT.
+ *
+ * `nccId` / `cong` / `tyGia` / `tracking` ĐỂ TRỐNG LÀ GIỮ NGUYÊN giá trị cũ
+ * của từng đơn — ĐỪNG gửi `null` để hòng xoá, máy chủ cũng hiểu null là giữ
+ * nguyên. Muốn xoá thì mở đúng đơn đó ra sửa.
+ *
+ * Ngoại tệ đi theo TỪNG DÒNG (`dong[].ngoaiTe`) vì mỗi món một giá.
+ */
+export interface DongNccHangLoat {
+  id: number;
+  ngoaiTe?: number | null;
+}
+
+export interface ThanNccHangLoat {
+  dong: DongNccHangLoat[];
+  nccId?: number | null;
+  cong?: number | null;
+  tyGia?: number | null;
+  tracking?: string | null;
+  /** Mặc định true — tính lại Tổng phải trả = (Ngoại tệ + %Công) × Tỷ giá. */
+  tinhLaiTongPhaiTra?: boolean;
+}
+
+export interface KetQuaNccHangLoat {
+  success: boolean;
+  capNhat: number;
+  khongDoi: number;
+  khongThay: number[];
+}
+
+export const capNhatNccHangLoat = async (
+  than: ThanNccHangLoat,
+): Promise<KetQuaNccHangLoat> => {
+  const res = await apiClient.post<KetQuaNccHangLoat>('/orders/ncc/hang-loat', than);
+  return res.data;
+};
+
 export interface DongCongNoNcc {
   ID: number;
   ordernumber: string | null;

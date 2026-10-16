@@ -27,6 +27,7 @@ import { QueryOrderListDto } from './dto/query-order-list.dto';
 import { MassUpdateDto, MassDeleteDto, MassCompleteDto, MassReceivedDto, MassShippedDto, MassCancelDto } from './dto/mass-update.dto';
 import { UpdateOrderNoteDto } from './dto/update-order-note.dto';
 import { BatchUpdateNoteDto } from './dto/batch-update-note.dto';
+import { NccHangLoatDto } from './dto/ncc-hang-loat.dto';
 import { UpdateReturnDateDto } from './dto/update-return-date.dto';
 import { ImportOrdersDto, ImportOrderItemDto } from './dto/import-orders.dto';
 import { QueryQLDatHangDto, QLDatHangResponseDto } from './dto/query-qldathang.dto';
@@ -428,6 +429,28 @@ export class OrdersController {
   async massShipped(@Body() massShippedDto: MassShippedDto, @Request() req: any): Promise<{ shipped: number }> {
     const ids = massShippedDto.ids.join(',');
     return this.ordersService.massShipped(ids, req.user?.username || 'system', massShippedDto.nguon);
+  }
+
+  /**
+   * POST /orders/ncc/hang-loat
+   *
+   * Nhập giá nhà cung cấp cho NHIỀU dòng đơn một lượt (yêu cầu bên khách
+   * 16/10/2026: một OrderNumber có nhiều mã ĐH, mở từng mã ra gõ lại cùng một
+   * tỷ giá / % công thì quá lâu).
+   *
+   * CẦN CẢ HAI QUYỀN. `@Quyen` ghi đè hẳn suy luận theo miền, nên phải ghi lại
+   * `muaHang.sua` — thiếu nó thì ai có `giaNcc` cũng ghi được đơn kể cả khi
+   * không được sửa Mua hàng. Còn `giaNcc` là quyền xem/sửa giá nhập: không có
+   * nó thì ngay cả khối NCC trên màn sửa từng đơn cũng không hiện.
+   */
+  @Post('ncc/hang-loat')
+  @HttpCode(HttpStatus.OK)
+  @Quyen('muaHang.sua', 'giaNcc')
+  async nccHangLoat(
+    @Body() dto: NccHangLoatDto,
+    @Request() req: any,
+  ): Promise<{ success: boolean; capNhat: number; khongDoi: number; khongThay: number[] }> {
+    return this.ordersService.capNhatNccHangLoat(dto, req.user?.username || 'system');
   }
 
   /**

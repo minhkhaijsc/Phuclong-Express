@@ -25,6 +25,7 @@ import {
   layNhaCungCap,
 } from '@/lib/api';
 import { useQuyen } from '@/hooks/use-quyen';
+import { soNcc, tienCongNcc, tongPhaiTraGoiY } from '@/lib/gia-ncc';
 
 const STYLES = {
   input:
@@ -354,30 +355,23 @@ export default function EditOrderDetailModal({ orderId, onClose }: Props) {
   /**
    * Tổng phải trả gợi ý = (Ngoại tệ + Ngoại tệ × %Công / 100) × Tỷ giá.
    *
-   * Ô "% Công" là PHẦN TRĂM, không phải số tiền — sửa 15/10/2026 theo bên khách.
-   * Giống hệt cột `cong` ở phía bán cho khách, nên hai bên cùng một nghĩa.
-   *
-   * Cùng công thức với `tongPhaiTraGoiY` trong
-   * backend/src/orders/ncc-don-hang.ts. Lặp lại ở đây chứ không gọi API: đây là
-   * phép nhân chạy theo từng lần bấm bàn phím, gọi máy chủ cho việc đó là vô
-   * nghĩa. Đổi công thức thì phải sửa CẢ HAI chỗ.
+   * Công thức ở `@/lib/gia-ncc` — dùng chung với màn nhập giá NCC hàng loạt,
+   * để hai màn không bao giờ ra hai con số khác nhau.
    */
-  const soNcc = (v: string): number => {
-    const n = Number(String(v).trim());
-    return Number.isFinite(n) ? n : 0;
-  };
-  const tienCongNcc = (soNcc(ncc.NCC_NgoaiTe) * soNcc(ncc.NCC_Cong)) / 100;
-  const tongPhaiTraGoiY = Math.round(
-    (soNcc(ncc.NCC_NgoaiTe) + tienCongNcc) * soNcc(ncc.NCC_TyGia),
+  const tienCongNccDon = tienCongNcc(ncc.NCC_NgoaiTe, ncc.NCC_Cong);
+  const tongPhaiTraGoiYDon = tongPhaiTraGoiY(
+    ncc.NCC_NgoaiTe,
+    ncc.NCC_Cong,
+    ncc.NCC_TyGia,
   );
 
   useEffect(() => {
     if (!xemGiaNcc || tongPhaiTraSuaTay) return;
     setNcc((t) => {
-      const moi = tongPhaiTraGoiY ? String(tongPhaiTraGoiY) : '';
+      const moi = tongPhaiTraGoiYDon ? String(tongPhaiTraGoiYDon) : '';
       return t.NCC_TongPhaiTra === moi ? t : { ...t, NCC_TongPhaiTra: moi };
     });
-  }, [tongPhaiTraGoiY, tongPhaiTraSuaTay, xemGiaNcc]);
+  }, [tongPhaiTraGoiYDon, tongPhaiTraSuaTay, xemGiaNcc]);
 
   /**
    * LÃI/LỖ — "số liệu giữa phần thông tin giá so với thông tin nhà cung cấp".
@@ -838,9 +832,9 @@ export default function EditOrderDetailModal({ orderId, onClose }: Props) {
                         {/* Hiện luôn ra tiền: gõ phần trăm mà không thấy nó
                             thành bao nhiêu ngoại tệ thì rất dễ nhập nhầm 3
                             thành 300. */}
-                        {tienCongNcc > 0 && (
+                        {tienCongNccDon > 0 && (
                           <p className="mt-1 text-xs text-gray-500">
-                            = {tienCongNcc.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}{' '}
+                            = {tienCongNccDon.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}{' '}
                             {order?.loaiTien || ''}
                           </p>
                         )}
@@ -879,7 +873,7 @@ export default function EditOrderDetailModal({ orderId, onClose }: Props) {
                             className="mt-1 text-xs text-cyan-700 underline"
                           >
                             Tính lại theo (Ngoại tệ + %Công) × Tỷ giá
-                            {tongPhaiTraGoiY ? ` = ${tongPhaiTraGoiY.toLocaleString('vi-VN')}` : ''}
+                            {tongPhaiTraGoiYDon ? ` = ${tongPhaiTraGoiYDon.toLocaleString('vi-VN')}` : ''}
                           </button>
                         ) : (
                           <p className="mt-1 text-xs text-gray-500">

@@ -11,6 +11,7 @@ import { useAuthStore } from '@/hooks/use-auth';
 import { Order, QueryParams } from '@/types/order';
 import { OrderStatus, OrderStatusConfig } from '@/types/order-status';
 import EditOrderDetailModal from './edit-order-detail-modal';
+import NhapGiaNccModal from './nhap-gia-ncc-modal';
 import { bangXuatDonHang, tenTepXuatDonHang } from './xuat-don-hang';
 import { useQuyen } from '@/hooks/use-quyen';
 
@@ -488,6 +489,9 @@ export default function EditOrderListPage() {
 
   // Note modal state
   const [noteModalOpen, setNoteModalOpen] = useState(false);
+
+  // Nhập giá nhà cung cấp hàng loạt — chỉ người có quyền `giaNcc` thấy nút.
+  const [nhapGiaNccMo, setNhapGiaNccMo] = useState(false);
 
   // Edit order detail modal state — null when closed, orderId when open
   const [editOrderId, setEditOrderId] = useState<number | null>(null);
@@ -1129,6 +1133,21 @@ export default function EditOrderListPage() {
               Bổ sung ghi chú
             </button>
           )}
+          {/*
+            Nhập giá NCC cho cả mẻ đang chọn — yêu cầu bên khách 16/10/2026
+            ("1 Order number gồm nhiều mã ĐH, ấn edit từng mã khá mất thời
+            gian"). Ẩn hẳn với người không có quyền `giaNcc`: đường API cũng
+            chặn, nhưng hiện một cái nút chỉ để bấm vào nhận 403 thì vô duyên.
+          */}
+          {xemGiaNcc && (
+            <button
+              onClick={() => setNhapGiaNccMo(true)}
+              disabled={selectedIds.length === 0}
+              className="rounded bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Nhập giá NCC
+            </button>
+          )}
         </div>
       </div>
 
@@ -1446,6 +1465,14 @@ export default function EditOrderListPage() {
         open={noteModalOpen}
         orderIds={selectedIds}
         onClose={() => setNoteModalOpen(false)}
+      />
+
+      {/* Nhập giá nhà cung cấp hàng loạt */}
+      <NhapGiaNccModal
+        open={nhapGiaNccMo}
+        don={(data?.data ?? []).filter((o) => selectedIds.includes(o.id))}
+        onClose={() => setNhapGiaNccMo(false)}
+        onSuccess={() => setSelectedIds([])}
       />
 
       {/* Edit Order Detail Modal */}

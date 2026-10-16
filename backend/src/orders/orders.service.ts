@@ -22,6 +22,11 @@ import {
   ganNcc,
   nhatKyNcc,
 } from './ncc-don-hang';
+import {
+  GiaNccTrenDon,
+  ThanNccHangLoat,
+  tinhNccHangLoat,
+} from './ncc-hang-loat';
 
 /**
  * Orders Service
@@ -3031,5 +3036,111 @@ export class OrdersService {
       console.error('Error in updateForUser:', (error as any).message);
       return { success: false };
     }
+  }
+
+  /**
+   * NHẬP GIÁ NHÀ CUNG CẤP CHO NHIỀU DÒNG ĐƠN MỘT LƯỢT.
+   *
+   * Yêu cầu bên khách 16/10/2026 — một OrderNumber tách thành nhiều mã ĐH, mở
+   * từng mã ra gõ lại cùng một nhà cung cấp / % công / tỷ giá thì quá lâu.
+   * Phép trộn nằm ở `ncc-hang-loat.ts`, đây chỉ lo đọc, ghi và ghi nhật ký.
+   *
+   * KHÔNG GỌI `SP_KiemTra_DuocCapNhatDonHang` — khác hẳn `updateOrderDetail`.
+   * SP đó kiểm kỳ công nợ của KHÁCH (bảng CONGNO style = 1, tbKy.DaDong): sửa
+   * đơn trong kỳ đã chốt là sửa số tiền khách đã đối chiếu, nên mới chặn. Sáu
+   * cột NCC_* thì không vào CONGNO một dòng nào, chúng chỉ nuôi trang Công nợ
+   * phải trả NCC — bên đó chưa có khái niệm chốt kỳ. Chặn theo kỳ của khách ở
+   * đây là tự khoá mất việc chính: tính đến 16/10/2026 còn hơn 11.000 đơn chưa
+   * ai nhập giá nhập, phần lớn nằm ở những kỳ đã đóng (kỳ 8/2026 trở về trước
+   * đều DaDong = 1), mà nhập giá nhập cho đơn cũ là chuyện hoàn toàn hợp lệ.
+   * Nếu sau này có chốt kỳ cho công nợ NCC thì mới thêm kiểm tra, và kiểm theo
+   * kỳ của NCC chứ không phải kỳ của khách.
+   *
+   * Ghi trong MỘT giao dịch: nửa chừng hỏng thì không để lại mẻ đơn mang nhà
+   * cung cấp mới nhưng tỷ giá cũ.
+   */
+  async capNhatNccHangLoat(
+    than: ThanNccHangLoat,
+    actorUsername = 'system',
+  ): Promise<{
+    success: boolean;
+    capNhat: number;
+    khongDoi: number;
+    khongThay: number[];
+  }> {
+    const ids = [...new Set((than.dong || []).map((d) => Number(d.id)))].filter(
+      (n) => Number.isInteger(n) && n > 0,
+    );
+    if (ids.length === 0) {
+      throw new BadRequestException('Chưa chọn đơn nào để nhập giá nhà cung cấp.');
+    }
+
+    // Đọc lại giá đang có NGAY TRƯỚC KHI GHI, không tin số màn hình gửi lên:
+    // danh sách có thể đã mở từ sáng mà trong lúc đó người khác sửa giá rồi.
+    const hienCo = await this.sequelize.query<GiaNccTrenDon>(
+      `SELECT ID, NCC_ID, NCC_NgoaiTe, NCC_Cong, NCC_TyGia, NCC_TongPhaiTra, NCC_Tracking
+       FROM   dbo.DON_HANG
+       WHERE  DaXoa = 0 AND ID IN (:ids)`,
+      { replacements: { ids }, type: QueryTypes.SELECT },
+    );
+
+    const { apDung, khongDoi, khongThay } = tinhNccHangLoat(hienCo, than);
+
+    if (apDung.length > 0) {
+      await this.sequelize.transaction(async (t) => {
+        for (const d of apDung) {
+          await this.sequelize.query(
+            `UPDATE dbo.DON_HANG
+             SET    NCC_ID = :nccId,
+                    NCC_NgoaiTe = :ngoaiTe,
+                    NCC_Cong = :cong,
+                    NCC_TyGia = :tyGia,
+                    NCC_TongPhaiTra = :tongPhaiTra,
+                    NCC_Tracking = :tracking
+             WHERE  ID = :id AND DaXoa = 0`,
+            {
+              replacements: {
+                id: d.ID,
+                nccId: d.NCC_ID,
+                ngoaiTe: d.NCC_NgoaiTe,
+                cong: d.NCC_Cong,
+                tyGia: d.NCC_TyGia,
+                tongPhaiTra: d.NCC_TongPhaiTra,
+                tracking: d.NCC_Tracking,
+              },
+              type: QueryTypes.UPDATE,
+              transaction: t,
+            },
+          );
+        }
+      });
+
+      // MỘT DÒNG NHẬT KÝ MỖI ĐƠN, cùng khuôn với đường sửa từng đơn — tra theo
+      // mã đơn thì thấy đủ, không phải biết là nó được sửa bằng màn nào.
+      // Ngoài giao dịch: nhật ký hỏng cũng không được làm hỏng việc ghi giá.
+      for (const d of apDung) {
+        await this.systemLogsService.create({
+          nguoiTao: actorUsername,
+          nguon: 'NhapGiaNccHangLoat',
+          hanhDong: 'Chinh sua',
+          doiTuong: String(d.ID),
+          noiDung: `ID: ${d.ID}; ${nhatKyNcc({
+            NCC_ID: d.NCC_ID,
+            NCC_NgoaiTe: d.NCC_NgoaiTe,
+            NCC_Cong: d.NCC_Cong,
+            NCC_TyGia: d.NCC_TyGia,
+            NCC_TongPhaiTra: d.NCC_TongPhaiTra,
+            NCC_Tracking: d.NCC_Tracking,
+          })}; (nhap hang loat ${apDung.length} don)`,
+        });
+      }
+    }
+
+    return {
+      success: true,
+      capNhat: apDung.length,
+      khongDoi: khongDoi.length,
+      khongThay,
+    };
   }
 }
