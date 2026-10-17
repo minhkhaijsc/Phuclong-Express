@@ -46,3 +46,39 @@ describe('User entity', () => {
     expect(Object.prototype.hasOwnProperty.call(u, 'UserName')).toBe(false);
   });
 });
+
+/**
+ * Ngày 17/10/2026: kế toán không import được công nợ cho HP3085 — màn hình báo
+ * `User "HP3085" không tồn tại` trong khi tài khoản có thật và đang có 10 dòng
+ * công nợ. Tên lưu trong CSDL là `'HP3085 '`, dính một dấu cách ở cuối do người
+ * nhập dán từ Excel sang. SQL Server bỏ qua khoảng trắng cuối khi so sánh nên
+ * mọi màn hình chạy SQL vẫn thấy bình thường; chỉ chỗ so chuỗi bằng JavaScript
+ * là trượt. Cắt ngay tại model để không sinh thêm mã nào như vậy nữa.
+ */
+describe('User.UserName — cắt khoảng trắng thừa', () => {
+  const sq = new Sequelize({ dialect: 'mssql', logging: false });
+  beforeAll(() => UserModel(sq as any));
+
+  it('cắt dấu cách ở cuối — đúng ca HP3085', () => {
+    expect(User.build({ UserName: 'HP3085 ' } as any).UserName).toBe('HP3085');
+  });
+
+  it('cắt cả hai đầu', () => {
+    expect(User.build({ UserName: '  HP3090  ' } as any).UserName).toBe('HP3090');
+  });
+
+  it('không đụng tới tên đã sạch', () => {
+    expect(User.build({ UserName: 'KETOANHA' } as any).UserName).toBe('KETOANHA');
+  });
+
+  it('cắt cả khi sửa, không riêng lúc tạo', () => {
+    const u = User.build({ UserName: 'HP1000' } as any);
+    u.UserName = 'HP1000 ';
+    expect(u.UserName).toBe('HP1000');
+  });
+
+  it('không nuốt mất giá trị rỗng hay null', () => {
+    expect(User.build({ UserName: '' } as any).UserName).toBe('');
+    expect(User.build({ UserName: null } as any).UserName).toBeNull();
+  });
+});

@@ -79,9 +79,27 @@ export const UserModel = (sequelize: Sequelize) => {
         type: DataTypes.STRING,
         primaryKey: true,
       },
+      /**
+       * Cắt khoảng trắng hai đầu NGAY TẠI MODEL, không để ở từng màn hình.
+       *
+       * Ngày 17/10/2026 có 8 mã khách bị lưu kèm một dấu cách ở cuối
+       * (HP3074, Hp3079, HP3085, HP3090, HP3100, HP3103, HP3105, HP3106) —
+       * người nhập dán từ Excel sang. SQL Server bỏ qua khoảng trắng cuối khi
+       * so sánh nên các màn hình chạy SQL vẫn thấy bình thường, nhưng chỗ nào
+       * so chuỗi bằng JavaScript (nhập công nợ từ Excel) thì báo "không tồn
+       * tại" — khách có thật mà kế toán không nhập được.
+       *
+       * Đặt ở đây thì mọi đường ghi qua model đều sạch, cả tạo lẫn sửa.
+       */
       UserName: {
         type: DataTypes.STRING,
         unique: true,
+        set(gia_tri: unknown) {
+          (this as User).setDataValue(
+            'UserName',
+            typeof gia_tri === 'string' ? gia_tri.trim() : (gia_tri as string),
+          );
+        },
       },
       Email: {
         type: DataTypes.STRING,

@@ -103,7 +103,19 @@ function parseImportRows(
     if (key) colIndex[key] = i;
   });
 
-  const userSet = new Set(users.map((u) => u.UserName.toLowerCase()));
+  /**
+   * Khớp User bỏ qua hoa/thường VÀ khoảng trắng thừa ở hai đầu.
+   *
+   * Tám tài khoản khách (HP3074, Hp3079, HP3085, HP3090, HP3100, HP3103,
+   * HP3105, HP3106) được tạo với một dấu cách ở cuối tên. SQL Server bỏ qua
+   * khoảng trắng cuối khi so sánh chuỗi, nên mọi màn hình khác vẫn chạy bình
+   * thường — riêng chỗ này so bằng JavaScript nên báo "không tồn tại" dù
+   * khách có thật và đang có công nợ.
+   *
+   * Map giữ lại tên gốc trong CSDL (kể cả dấu cách) để lúc gửi lên máy chủ
+   * ghi y hệt các dòng công nợ đã có của khách đó, không tách làm hai mã.
+   */
+  const userMap = new Map(users.map((u) => [u.UserName.trim().toLowerCase(), u.UserName]));
   const bankSet = new Set(bankAccounts.map((b) => b.TenTaiKhoanNganHang.toLowerCase()));
   const countryMap = new Map(countries.map((c) => [c.TenQuocGia.toLowerCase(), c.QuocGiaID]));
 
@@ -116,9 +128,12 @@ function parseImportRows(
     const errors: string[] = [];
     const get = (key: string) => (colIndex[key] !== undefined ? row[colIndex[key]] : null);
 
-    const username = String(get('username') ?? '').trim();
-    if (!username) errors.push('Thiếu User');
-    else if (!userSet.has(username.toLowerCase())) errors.push(`User "${username}" không tồn tại`);
+    const userNhap = String(get('username') ?? '').trim();
+    // Gửi đi là tên gốc trong CSDL; chỉ khi không tra được mới giữ nguyên ô
+    // người dùng gõ, để câu báo lỗi hiện đúng thứ họ nhìn thấy trong file.
+    const username = userMap.get(userNhap.toLowerCase()) ?? userNhap;
+    if (!userNhap) errors.push('Thiếu User');
+    else if (!userMap.has(userNhap.toLowerCase())) errors.push(`User "${userNhap}" không tồn tại`);
 
     const noiDung = String(get('noiDung') ?? '').trim();
     if (!noiDung) errors.push('Thiếu Nội dung');
@@ -289,7 +304,7 @@ export default function DebtImportPage() {
   });
 
   const handleDownloadTemplate = () => {
-    const usernames = (users || []).map((u) => u.UserName);
+    const usernames = (users || []).map((u) => u.UserName.trim());
     const bankAccountNames = (bankAccounts || [])
       .map((b) => b.TenTaiKhoanNganHang)
       .filter((name): name is string => !!name);
