@@ -117,5 +117,12 @@ export function formatArticleDate(value: string | null): string {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    // Chốt mốc UTC, KHÔNG để máy đang xem tự quy đổi.
+    //
+    // Máy chủ ghi giờ Việt Nam rồi trả về kèm hậu tố Z, nên để trình duyệt quy
+    // đổi là nó cộng thêm 7 tiếng: bài đăng lúc 18h tối hiện thành NGÀY HÔM
+    // SAU, và người xem ở múi giờ khác lại thấy một ngày khác nữa. Ngày đăng
+    // phải là con số cố định, ai mở cũng thấy như nhau.
+    timeZone: 'UTC',
   });
 }

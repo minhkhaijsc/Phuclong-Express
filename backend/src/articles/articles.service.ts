@@ -243,6 +243,18 @@ export class ArticlesService {
     };
   }
 
+  /**
+   * 'yyyy-mm-dd' -> chuoi datetime cho SQL Server. Chot vao GIUA TRUA, khong
+   * phai nua dem.
+   *
+   * Moc nua dem de vo ngay: he thong tra ngay gio kem hau to Z, con trang web
+   * ve lai theo mui gio may dang xem — lech vai tieng la nhay sang ngay hom
+   * truoc. Giua trua thi lech ca +/-12 tieng van ra dung ngay nguoi soan go.
+   */
+  private mocNgayDang(ngay?: string): string | null {
+    return ngay ? `${ngay} 12:00:00` : null;
+  }
+
   /** Tao bai moi */
   async create(dto: CreateArticleDto, username: string) {
     const slug = await this.ensureUniqueSlug(dto.slug || dto.title);
@@ -256,7 +268,10 @@ export class ArticlesService {
        OUTPUT INSERTED.Id
        VALUES
          (:title, :slug, :content, :excerpt, :thumbnail, :author, :articleType, :published,
-          CASE WHEN :published = 1 THEN GETDATE() ELSE NULL END,
+          -- Ngay nguoi soan tu dat thang hon; khong dat thi lay luc bam Dang bai.
+          CASE WHEN :ngayDang IS NOT NULL THEN CONVERT(datetime, :ngayDang, 120)
+               WHEN :published = 1 THEN GETDATE()
+               ELSE NULL END,
           :metaTitle, :metaDescription, :focusKeyword, :canonicalUrl, :ogTitle, :ogDescription, :ogImage, :noindex,
           :createdBy)`,
       {
@@ -269,6 +284,7 @@ export class ArticlesService {
           author: dto.author?.trim() || username,
           articleType: dto.articleType || 'tin-tuc',
           published: published ? 1 : 0,
+          ngayDang: this.mocNgayDang(dto.publishedAt),
           metaTitle: dto.metaTitle?.trim() || null,
           metaDescription: dto.metaDescription?.trim() || null,
           focusKeyword: dto.focusKeyword?.trim() || null,
@@ -326,9 +342,13 @@ export class ArticlesService {
          OgImage         = CASE WHEN :hasOgImage     = 1 THEN :ogImage     ELSE OgImage         END,
          Noindex         = CASE WHEN :hasNoindex     = 1 THEN :noindex     ELSE Noindex         END,
          Published       = CASE WHEN :hasPublished   = 1 THEN :published   ELSE Published       END,
-         -- Lan dau bam dang thi ghi moc thoi gian, cac lan sua sau giu nguyen.
-         PublishedAt     = CASE WHEN :hasPublished = 1 AND :published = 1 AND PublishedAt IS NULL
-                                THEN GETDATE() ELSE PublishedAt END,
+         -- Nguoi soan tu dat ngay thi theo ho. Khong dat: lan dau bam dang ghi
+         -- moc thoi gian, cac lan sua sau giu nguyen.
+         PublishedAt     = CASE
+                             WHEN :hasNgayDang = 1 THEN CONVERT(datetime, :ngayDang, 120)
+                             WHEN :hasPublished = 1 AND :published = 1 AND PublishedAt IS NULL
+                                  THEN GETDATE()
+                             ELSE PublishedAt END,
          UpdatedAt       = GETDATE(),
          UpdatedBy       = :username
        WHERE Id = :id`,
@@ -353,6 +373,7 @@ export class ArticlesService {
           hasOgImage: has('ogImage'),  ogImage: dto.ogImage?.trim() || null,
           hasNoindex: has('noindex'),  noindex: dto.noindex === true ? 1 : 0,
           hasPublished: has('published'), published: dto.published === true ? 1 : 0,
+          hasNgayDang: dto.publishedAt ? 1 : 0, ngayDang: this.mocNgayDang(dto.publishedAt),
         },
         type: 'SELECT' as const,
       },

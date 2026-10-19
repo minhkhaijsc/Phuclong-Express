@@ -2274,6 +2274,8 @@ export interface ArticlePayload {
   author?: string;
   articleType?: string;
   published?: boolean;
+  /** Ngày đăng hiện trên bài, dạng `yyyy-mm-dd`. Trống = lấy ngày bấm Đăng bài. */
+  publishedAt?: string;
   metaTitle?: string;
   metaDescription?: string;
   focusKeyword?: string;

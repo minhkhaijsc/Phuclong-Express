@@ -1,5 +1,5 @@
-import { IsOptional, IsNumber, IsString, IsBoolean, Min, MaxLength } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsNumber, IsString, IsBoolean, Min, MaxLength, Matches } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 
 /**
  * Query parameters for the admin article list
@@ -101,6 +101,28 @@ export class CreateArticleDto {
   @IsOptional()
   @IsBoolean()
   published?: boolean;
+
+  /**
+   * Ngay dang hien tren bai, dang `yyyy-mm-dd`. Bo trong thi he thong tu lay
+   * ngay bam Dang bai nhu truoc.
+   *
+   * CHI LA NGAY HIEN THI, khong phai hen gio: bai len web ngay khi `published`
+   * bat, du ngay nay la mai sau. Dat ngay sau de danh dau "bai cu dang bu"
+   * la viec thuong gap nen van cho phep.
+   *
+   * O trong tren man soan bai gui len CHUOI RONG chu khong phai undefined, ma
+   * `@IsOptional` chi bo qua null/undefined — nen phai doi '' thanh undefined
+   * ngay o day. Dat o DTO de moi noi goi khoi phai nho: ca
+   * `POST /articles/seo-preview` (cham diem SEO sau moi lan go, dung CHINH
+   * DTO nay) lan luc luu bai.
+   */
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'Ngày đăng phải ở dạng yyyy-mm-dd.',
+  })
+  publishedAt?: string;
 
   // ---- SEO ----
 

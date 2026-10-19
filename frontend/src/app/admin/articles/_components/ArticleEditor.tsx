@@ -55,6 +55,8 @@ function initialState(a?: ArticleDetail): FormState {
     author: a?.Author ?? '',
     articleType: a?.ArticleType ?? 'tin-tuc',
     published: a?.Published ?? false,
+    // '2026-10-19T09:45:56.537Z' -> '2026-10-19', đúng dạng ô <input type="date">.
+    publishedAt: a?.PublishedAt ? a.PublishedAt.slice(0, 10) : '',
     metaTitle: a?.MetaTitle ?? '',
     metaDescription: a?.MetaDescription ?? '',
     focusKeyword: a?.FocusKeyword ?? '',
@@ -392,6 +394,20 @@ export default function ArticleEditor({ article }: ArticleEditorProps) {
                   <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Ngày đăng</label>
+              <input
+                type="date"
+                value={form.publishedAt ?? ''}
+                onChange={(e) => set('publishedAt', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Để trống thì lấy ngày bấm Đăng bài. Đây là ngày hiện trên bài chứ không phải
+                hẹn giờ — bài lên web ngay khi bấm Đăng.
+              </p>
             </div>
 
             <div>

@@ -212,6 +212,74 @@ describe('ArticlesService', () => {
     });
   });
 
+  /**
+   * Yeu cau ben khach 19/10/2026: "them giup e cai thoi gian dang bai nua,
+   * vi du ngay 12/10 — e co the dieu chinh dc ngay dang y".
+   *
+   * Truoc do `PublishedAt` chi do may tu dat luc bam Dang bai lan dau va khong
+   * sua duoc bang duong nao.
+   */
+  describe('ngay dang tu dat', () => {
+    const taoBai = (dto: Record<string, unknown>) => {
+      mockSequelize.query
+        .mockResolvedValueOnce([])              // slug con trong
+        .mockResolvedValueOnce([{ Id: 5 }])     // INSERT
+        .mockResolvedValueOnce([{ Id: 5 }]);    // getById
+      return service.create({ title: 'A', content: 'B', ...dto } as any, 'nv');
+    };
+
+    const suaBai = (dto: Record<string, unknown>) => {
+      mockSequelize.query
+        .mockResolvedValueOnce([{ Id: 1, Title: 'Cũ', Slug: 'cu', Content: 'x', Published: 1 }])
+        .mockResolvedValueOnce([])              // UPDATE
+        .mockResolvedValueOnce([{ Id: 1 }]);    // getById
+      return service.update(1, dto as any, 'nv');
+    };
+
+    /**
+     * GIUA TRUA chu khong phai nua dem: may chu ghi gio Viet Nam roi tra ve
+     * kem hau to Z. Moc 00:00 lech vai tieng la nhay sang ngay hom truoc o may
+     * dang xem; 12:00 thi lech ca +/-12 tieng van dung ngay.
+     */
+    it('chot vao giua trua, khong phai nua dem', async () => {
+      await taoBai({ publishedAt: '2026-10-12' });
+      expect(mockSequelize.query.mock.calls[1][1].replacements.ngayDang).toBe(
+        '2026-10-12 12:00:00',
+      );
+    });
+
+    it('de trong thi khong dat gi — may tu lay ngay bam Dang bai', async () => {
+      await taoBai({ published: true });
+      expect(mockSequelize.query.mock.calls[1][1].replacements.ngayDang).toBeNull();
+    });
+
+    it('dat duoc ngay cho ca bai con la ban nhap', async () => {
+      await taoBai({ publishedAt: '2026-09-01' });
+      const r = mockSequelize.query.mock.calls[1][1].replacements;
+      expect(r.published).toBe(0);
+      expect(r.ngayDang).toBe('2026-09-01 12:00:00');
+    });
+
+    it('sua bai: doi duoc ngay dang cua bai da len', async () => {
+      await suaBai({ publishedAt: '2026-10-12' });
+      const r = mockSequelize.query.mock.calls[1][1].replacements;
+      expect(r.hasNgayDang).toBe(1);
+      expect(r.ngayDang).toBe('2026-10-12 12:00:00');
+    });
+
+    it('sua thu khac thi KHONG dung toi ngay dang', async () => {
+      await suaBai({ content: '<p>sửa chính tả</p>' });
+      const r = mockSequelize.query.mock.calls[1][1].replacements;
+      expect(r.hasNgayDang).toBe(0);
+      expect(r.ngayDang).toBeNull();
+    });
+
+    it('chuoi rong coi nhu khong dat, khong ghi de ngay cu', async () => {
+      await suaBai({ publishedAt: '' });
+      expect(mockSequelize.query.mock.calls[1][1].replacements.hasNgayDang).toBe(0);
+    });
+  });
+
   describe('remove', () => {
     it('bao khong tim thay khi bai khong ton tai', async () => {
       mockSequelize.query.mockResolvedValueOnce([]);

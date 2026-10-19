@@ -50,8 +50,17 @@ export default function ArticlesPage() {
 
   const totalPages = Math.ceil((data?.total || 0) / filters.limit);
 
+  // `timeZone: 'UTC'` để khớp với ngày hiện ngoài trang tin — xem ghi chú ở
+  // `formatArticleDate` trong lib/articles-server.ts.
   const formatDate = (v: string | null) =>
-    v ? new Date(v).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+    v
+      ? new Date(v).toLocaleDateString('vi-VN', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          timeZone: 'UTC',
+        })
+      : '—';
 
   return (
     <div className="min-h-screen bg-gray-50">
