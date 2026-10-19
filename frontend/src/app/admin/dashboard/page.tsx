@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FiUsers, FiDollarSign, FiPackage, FiShoppingBag } from 'react-icons/fi';
 import { KPICard } from '@/app/components/admin';
+import { GIAI_THICH } from './giai-thich';
 import { useQuyen } from '@/hooks/use-quyen';
 import {
   getVanHanhSoLieu,
@@ -256,10 +257,32 @@ export default function DashboardPage() {
           định — người dùng mở dashboard ra là không thấy mấy số vẫn xem hằng
           ngày nữa. Đây là thứ họ nhìn đầu tiên, không nên bắt bấm thêm một nhịp. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard label="Tổng KH mới" value={totals.khMoi.toLocaleString('vi-VN')} icon={<FiUsers size={28} />} />
-        <KPICard label="Tổng doanh thu" value={fmtMoney(totals.doanhThu)} unit="₫" icon={<FiDollarSign size={28} />} />
-        <KPICard label="Đơn hoàn tất" value={totals.soDon.toLocaleString('vi-VN')} icon={<FiShoppingBag size={28} />} />
-        <KPICard label="Tổng sản lượng" value={fmtKg(totals.sanLuong)} unit="kg" icon={<FiPackage size={28} />} />
+        <KPICard
+          label="Tổng KH mới"
+          value={totals.khMoi.toLocaleString('vi-VN')}
+          icon={<FiUsers size={28} />}
+          giaiThich={GIAI_THICH.khMoi}
+        />
+        <KPICard
+          label="Tổng doanh thu"
+          value={fmtMoney(totals.doanhThu)}
+          unit="₫"
+          icon={<FiDollarSign size={28} />}
+          giaiThich={GIAI_THICH.doanhThu}
+        />
+        <KPICard
+          label="Đơn hoàn tất"
+          value={totals.soDon.toLocaleString('vi-VN')}
+          icon={<FiShoppingBag size={28} />}
+          giaiThich={GIAI_THICH.soDon}
+        />
+        <KPICard
+          label="Tổng sản lượng"
+          value={fmtKg(totals.sanLuong)}
+          unit="kg"
+          icon={<FiPackage size={28} />}
+          giaiThich={GIAI_THICH.sanLuong}
+        />
       </div>
 
       <div className="flex gap-1 border-b border-gray-200">
