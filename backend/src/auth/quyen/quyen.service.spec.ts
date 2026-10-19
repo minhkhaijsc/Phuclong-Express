@@ -96,7 +96,7 @@ describe('QuyenService', () => {
     for (const bp of [BO_PHAN.VanChuyen, BO_PHAN.MKT]) {
       it(`${bp} xem được nhưng không sửa được gì`, () => {
         const x = q(bp);
-        for (const m of ['muaHang', 'vanChuyen', 'congNo', 'baoCao', 'danhMuc', 'noiDung']) {
+        for (const m of ['muaHang', 'vanChuyen', 'congNo', 'baoCao', 'danhMuc']) {
           expect(x.quyen).toContain(`${m}.xem`);
           expect(x.quyen).not.toContain(`${m}.sua`);
         }
@@ -105,6 +105,31 @@ describe('QuyenService', () => {
       it(`${bp} vẫn làm được việc cá nhân`, () =>
         expect(q(bp).quyen).toContain('rieng.sua'));
     }
+
+    /**
+     * `noiDung` tách khỏi vòng lặp trên từ 19/10/2026: soạn bài cho web là
+     * việc chính của MKT, để ở mức XEM thì bấm "Đăng bài" ăn 403 (ca
+     * MKT_LUYEN). Vận chuyển thì vẫn chỉ xem.
+     */
+    it('MKT ĐĂNG BÀI ĐƯỢC — đây là việc chính của bộ phận', () => {
+      expect(q(BO_PHAN.MKT).quyen).toContain('noiDung.xem');
+      expect(q(BO_PHAN.MKT).quyen).toContain('noiDung.sua');
+    });
+
+    it('Vận chuyển vẫn chỉ xem nội dung', () => {
+      expect(q(BO_PHAN.VanChuyen).quyen).toContain('noiDung.xem');
+      expect(q(BO_PHAN.VanChuyen).quyen).not.toContain('noiDung.sua');
+    });
+
+    it('mở nội dung cho MKT KHÔNG kéo theo miền nào khác', () => {
+      const x = q(BO_PHAN.MKT);
+      for (const m of ['muaHang', 'vanChuyen', 'congNo', 'baoCao', 'danhMuc', 'diaChi']) {
+        expect(x.quyen).not.toContain(`${m}.sua`);
+      }
+      expect(x.quyen).not.toContain('taiKhoan.xem');
+      expect(x.quyen).not.toContain('nhatKy.xem');
+      expect(x.quyen).not.toContain('giaNcc');
+    });
   });
 
   describe('Dashboard — Trưởng phòng, Admin, Giám đốc', () => {

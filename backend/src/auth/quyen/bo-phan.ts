@@ -317,11 +317,27 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
    * Vẫn KHÔNG có `giaNcc`: "xem hết" ở đây là xem số liệu vận hành, còn giá
    * nhập và Lãi/Lỗ thì yêu cầu 12/10 nói rõ chỉ mua hàng, kế toán, giám đốc.
    * Hai thứ đó tách nhau, sửa chỗ này không đụng chỗ kia.
+   *
+   * `noiDung: SUA` — thêm 19/10/2026. MKT_LUYEN bấm "Đăng bài" bị 403: miền
+   * `noiDung` (bài viết & thắc mắc) để ở mức XEM theo lối "MKT chỉ xem mọi
+   * miền". Nhưng soạn bài cho web CHÍNH LÀ việc của bộ phận này — họ là bộ
+   * phận duy nhất vào trang Viết bài mới hằng ngày.
+   *
+   * Mức độ lệch của chỗ sót này: `noiDung.sua` vốn đã mở cho Admin, CSKH, Mua
+   * hàng, Kế toán — và cho cả KHÁCH HÀNG (xem `MIEN_CUA_KHACH`, để họ gửi
+   * thắc mắc). Tức là khách viết được mà MKT thì không. Đây là bỏ sót lúc
+   * dựng bảng chứ không phải một quyết định.
+   *
+   * Mở cả miền chứ không riêng bài viết: `ArticlesController` và
+   * `QnaController` cùng mang nhãn `noiDung`, hệ thống không chia nhỏ hơn
+   * được. Hai bộ phận khác đã có cả miền này rồi nên MKT có cũng không mở ra
+   * thứ gì mới. Riêng trang quản trị bài viết còn một lớp `assertStaff` nữa,
+   * khách không lọt vào được.
    */
   [BO_PHAN.MKT]: {
     nhan: 'MKT',
     tienTo: ['MKT'],
-    mien: { ...moiMien(XEM), rieng: SUA, dashboard: XEM },
+    mien: { ...moiMien(XEM), rieng: SUA, dashboard: XEM, noiDung: SUA },
   },
 
   /**
