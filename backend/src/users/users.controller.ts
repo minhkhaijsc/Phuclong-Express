@@ -27,6 +27,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 import { MienQuyen, Quyen } from '../auth/quyen/quyen.decorator';
+import { cheLienHe, cheLienHeDanhSach, coXemLienHe } from './che-lien-he';
 /**
  * Users Controller
  *
@@ -56,14 +57,27 @@ export class UsersController {
   /**
    * GET /users
    * List all users
+   *
+   * Đòi ĐÚNG MỘT mã `xemDanhSachKhach`, không còn kèm `taiKhoan.xem`.
+   *
+   * Không ai bị nới thêm: trước giờ chỉ Admin và CSKH có `xemDanhSachKhach`,
+   * mà cả hai vốn đã có `taiKhoan` ở mức SUA. Bỏ điều kiện thừa đó là để mở
+   * được màn này cho KẾ TOÁN (yêu cầu 22/10/2026) mà không phải cấp cả miền
+   * `taiKhoan` — cấp cả miền là mở luôn trang Role, trang Khách ngừng giao
+   * dịch và mọi route GET còn lại của controller này.
+   *
+   * Email/số điện thoại bị cắt khỏi JSON cho người không có `xemLienHeKhach`
+   * — xem `che-lien-he.ts`.
    */
-  @Quyen('taiKhoan.xem', 'xemDanhSachKhach')
+  @Quyen('xemDanhSachKhach')
   @Get()
   async findAll(
+    @Request() req: any,
     @Query('keyword') keyword?: string,
     @Query('cskh') cskh?: string,
   ): Promise<User[]> {
-    return this.usersService.findAll(keyword, cskh);
+    const rows = await this.usersService.findAll(keyword, cskh);
+    return coXemLienHe(req) ? rows : cheLienHeDanhSach(rows);
   }
 
   // ---------------- TRẠNG THÁI KHÁCH HÀNG ----------------
@@ -87,7 +101,7 @@ export class UsersController {
    * Cùng mức quyền với danh sách khách: ai mở được màn khách thì mới cần ô này.
    * Trả về tên đăng nhập + họ tên, không kèm gì khác.
    */
-  @Quyen('taiKhoan.xem', 'xemDanhSachKhach')
+  @Quyen('xemDanhSachKhach')
   @Get('cskh')
   async danhSachCskh(): Promise<{ username: string; hoTen: string }[]> {
     return this.usersService.danhSachCskh();
@@ -162,8 +176,12 @@ export class UsersController {
    * Get user by ID
    */
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<User> {
-    return this.usersService.findByStringId(id);
+  async findOne(@Param('id') id: string, @Request() req: any): Promise<User> {
+    const user = await this.usersService.findByStringId(id);
+    // Hôm nay là vô hại — đường này đòi `taiKhoan.xem`, mà ai có mã đó cũng có
+    // `xemLienHeKhach`. Để sẵn vì ngày nào đó cấp `taiKhoan.xem` cho thêm một
+    // bộ phận là email chảy ra đây, trong khi màn danh sách vẫn che đúng.
+    return coXemLienHe(req) ? user : cheLienHe(user);
   }
 
   /**

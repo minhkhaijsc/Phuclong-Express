@@ -24,6 +24,7 @@ import {
 import { HopDoiTrangThai } from '@/app/components/hop-doi-trang-thai';
 import { HopXoaTaiKhoan } from '@/app/components/hop-xoa-tai-khoan';
 import { getDanhSachCskh } from '@/lib/api';
+import { useQuyen } from '@/hooks/use-quyen';
 
 interface User {
   Id: string;
@@ -45,6 +46,27 @@ interface User {
 }
 
 export default function ListUserPage() {
+  const { co } = useQuyen();
+  /**
+   * Kế toán mở được màn này (yêu cầu 22/10/2026) nhưng KHÔNG được thấy email
+   * và số điện thoại khách. Ẩn hai cột ở đây chỉ cho đỡ chướng mắt — chặn thật
+   * nằm ở máy chủ, `GET /users` đã cắt hai khoá đó khỏi JSON rồi
+   * (backend/src/users/che-lien-he.ts), nên sửa localStorage cũng không moi ra
+   * được.
+   */
+  const xemLienHe = co('xemLienHeKhach');
+  /** Mở trang chi tiết tài khoản — `GET /users/:id` đòi `taiKhoan.xem`. */
+  const xemChiTiet = co('taiKhoan.xem');
+  /** Tạo tài khoản, đổi trạng thái — đều đi qua `taiKhoan.sua`. */
+  const suaTaiKhoan = co('taiKhoan.sua');
+  /** Xoá tài khoản — `DELETE /users/:id` đòi thêm `quanLyRole`. */
+  const xoaDuoc = co('quanLyRole');
+  /**
+   * Còn thao tác nào không. Kế toán không có cái nào trong ba, nên bỏ hẳn cột
+   * thay vì để một cột rỗng rộng 36 đơn vị giữa bảng.
+   */
+  const coThaoTac = xemChiTiet || suaTaiKhoan || xoaDuoc;
+
   const [keyword, setKeyword] = useState('');
   /** Lọc theo CSKH phụ trách. '' = tất cả, CHUA_GAN = những mã chưa ai nhận. */
   const [locCskh, setLocCskh] = useState('');
@@ -123,14 +145,29 @@ export default function ListUserPage() {
     }
   };
 
+  /**
+   * Xuất file danh sách user.
+   *
+   * Hai cột Email/PhoneNumber chỉ có với người được `xemLienHeKhach`. Người
+   * không có quyền thì file ra THIẾU HẲN hai cột, chứ không phải có cột rỗng:
+   * cột rỗng khiến bên nhận tưởng khách chưa khai email, rồi đi hỏi lại CSKH.
+   *
+   * Dù sao máy chủ cũng đã cắt hai khoá đó khỏi JSON, nên để nguyên danh sách
+   * cũ thì cột cũng chỉ toàn rỗng — bỏ hẳn là cách đọc đúng duy nhất.
+   */
   const handleExport = () => {
-    const headers = ['ID', 'UserName', 'HoTen', 'CSKH phụ trách', 'Tuổi nợ (ngày)', 'DiaChi', 'Email', 'PhoneNumber', 'TinhThanh', 'SoTaiKhoan', 'HinhThucNhanHang', 'KhachBuon', 'LinkTaiKhoanMang'];
+    const headers = [
+      'ID', 'UserName', 'HoTen', 'CSKH phụ trách', 'Tuổi nợ (ngày)', 'DiaChi',
+      ...(xemLienHe ? ['Email', 'PhoneNumber'] : []),
+      'TinhThanh', 'SoTaiKhoan', 'HinhThucNhanHang', 'KhachBuon', 'LinkTaiKhoanMang',
+    ];
     const rows = users.map(u => [
       // Chưa đặt thì để trống chứ không ghi 0 — 0 nghĩa là phải trả ngay.
       u.Id, u.UserName || '', u.HoTen || '', tenCskh(u.CSKHPhuTrach),
       u.TuoiNo === null || u.TuoiNo === undefined ? '' : String(u.TuoiNo),
-      u.DiaChi || '', u.Email || '',
-      u.PhoneNumber || '', u.TinhThanh || '', u.SoTaiKhoan || '',
+      u.DiaChi || '',
+      ...(xemLienHe ? [u.Email || '', u.PhoneNumber || ''] : []),
+      u.TinhThanh || '', u.SoTaiKhoan || '',
       u.HinhThucNhanHang || '', u.KhachBuon ? 'true' : 'false', u.LinkTaiKhoanMang || '',
     ]);
     downloadDataAsExcel([headers, ...rows], `DanhSachUser_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.xlsx`);
@@ -164,13 +201,15 @@ export default function ListUserPage() {
             <FiDownload className="h-4 w-4" />
             Export Excel
           </button>
-          <Link
-            href="/admin/users/new"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#14264b] px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#3db8e4] cursor-pointer"
-          >
-            <FiPlus className="h-4 w-4" />
-            Tạo mới
-          </Link>
+          {suaTaiKhoan && (
+            <Link
+              href="/admin/users/new"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#14264b] px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#3db8e4] cursor-pointer"
+            >
+              <FiPlus className="h-4 w-4" />
+              Tạo mới
+            </Link>
+          )}
         </div>
       </div>
 
@@ -271,15 +310,27 @@ export default function ListUserPage() {
           /* Data table */
           <div className="overflow-x-auto">
             <table className="w-full table-fixed text-sm">
+              {/*
+                Phải đủ 13 `col` cho 13 `th`, và bớt đi 2 khi ẩn Email/Phone.
+                Trước đây chỉ có 12 — thiếu một, nên `table-fixed` chia lại bề
+                ngang từ cột FB trở đi và cột Thao tác bị co.
+              */}
               <colgroup>
-                <col className="w-24" /><col className="w-24" /><col className="w-32" /><col className="w-24" /><col className="w-20" /><col className="w-28" /><col className="w-20" /><col className="w-20" /><col className="w-16" /><col className="w-16" /><col className="w-12" /><col className="w-36" />
+                <col className="w-24" /><col className="w-24" />
+                {xemLienHe && <><col className="w-32" /><col className="w-24" /></>}
+                <col className="w-20" /><col className="w-28" /><col className="w-20" /><col className="w-20" /><col className="w-16" /><col className="w-16" /><col className="w-12" /><col className="w-12" />
+                {coThaoTac && <col className="w-36" />}
               </colgroup>
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/60">
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">UserName</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Họ tên</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Email</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Phone</th>
+                  {xemLienHe && (
+                    <>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Email</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Phone</th>
+                    </>
+                  )}
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tỉnh</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Địa chỉ</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Số TK</th>
@@ -288,7 +339,7 @@ export default function ListUserPage() {
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Nhận hàng</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">K.Buôn</th>
                   <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">FB</th>
-                  <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Thao tác</th>
+                  {coThaoTac && <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Thao tác</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -298,8 +349,12 @@ export default function ListUserPage() {
                       <span className="font-medium text-slate-800">{user.UserName}</span>
                     </td>
                     <td className="px-3 py-2.5 truncate text-slate-600" title={user.HoTen || ''}>{user.HoTen || <span className="text-slate-300">—</span>}</td>
-                    <td className="px-3 py-2.5 truncate text-slate-600" title={user.Email || ''}>{user.Email || <span className="text-slate-300">—</span>}</td>
-                    <td className="px-3 py-2.5 truncate text-slate-600">{user.PhoneNumber || <span className="text-slate-300">—</span>}</td>
+                    {xemLienHe && (
+                      <>
+                        <td className="px-3 py-2.5 truncate text-slate-600" title={user.Email || ''}>{user.Email || <span className="text-slate-300">—</span>}</td>
+                        <td className="px-3 py-2.5 truncate text-slate-600">{user.PhoneNumber || <span className="text-slate-300">—</span>}</td>
+                      </>
+                    )}
                     <td className="px-3 py-2.5 truncate text-slate-600" title={user.TinhThanh || ''}>{user.TinhThanh || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-2.5 truncate text-slate-600" title={user.DiaChi || ''}>{user.DiaChi || <span className="text-slate-300">—</span>}</td>
                     <td className="px-3 py-2.5 truncate text-slate-600">{user.SoTaiKhoan || <span className="text-slate-300">—</span>}</td>
@@ -344,34 +399,42 @@ export default function ListUserPage() {
                       Chữ "Xóa" giữ lại vì đó là thao tác không lùi được — nó phải
                       đọc ra thành lời, không để người ta bấm nhầm một biểu tượng.
                     */}
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center justify-center gap-1 whitespace-nowrap">
-                        <Link
-                          href={`/admin/users/${user.Id}`}
-                          title="Xem chi tiết tài khoản"
-                          aria-label="Xem chi tiết tài khoản"
-                          className="inline-flex items-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 cursor-pointer"
-                        >
-                          <FiEye className="h-4 w-4" />
-                        </Link>
-                        <button
-                          onClick={() => moTrangThai(user.Id)}
-                          disabled={dangMoTrangThai === user.Id}
-                          title="Đổi trạng thái — đóng mã / khoá đăng nhập, dùng thay cho xoá"
-                          aria-label="Đổi trạng thái tài khoản"
-                          className="inline-flex items-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50 cursor-pointer"
-                        >
-                          <FiLock className={`h-4 w-4 ${dangMoTrangThai === user.Id ? 'animate-pulse' : ''}`} />
-                        </button>
-                        <button
-                          onClick={() => setDangXoa(user.Id)}
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 cursor-pointer"
-                        >
-                          <FiTrash2 className="h-4 w-4" />
-                          Xóa
-                        </button>
-                      </div>
-                    </td>
+                    {coThaoTac && (
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-center gap-1 whitespace-nowrap">
+                          {xemChiTiet && (
+                            <Link
+                              href={`/admin/users/${user.Id}`}
+                              title="Xem chi tiết tài khoản"
+                              aria-label="Xem chi tiết tài khoản"
+                              className="inline-flex items-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 cursor-pointer"
+                            >
+                              <FiEye className="h-4 w-4" />
+                            </Link>
+                          )}
+                          {suaTaiKhoan && (
+                            <button
+                              onClick={() => moTrangThai(user.Id)}
+                              disabled={dangMoTrangThai === user.Id}
+                              title="Đổi trạng thái — đóng mã / khoá đăng nhập, dùng thay cho xoá"
+                              aria-label="Đổi trạng thái tài khoản"
+                              className="inline-flex items-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50 cursor-pointer"
+                            >
+                              <FiLock className={`h-4 w-4 ${dangMoTrangThai === user.Id ? 'animate-pulse' : ''}`} />
+                            </button>
+                          )}
+                          {xoaDuoc && (
+                            <button
+                              onClick={() => setDangXoa(user.Id)}
+                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 hover:text-red-600 cursor-pointer"
+                            >
+                              <FiTrash2 className="h-4 w-4" />
+                              Xóa
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

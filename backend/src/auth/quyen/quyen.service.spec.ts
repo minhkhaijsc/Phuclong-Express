@@ -84,12 +84,36 @@ describe('QuyenService', () => {
       });
 
       it(`${bp} KHÔNG vào được miền tài khoản`, () => {
-        // "Các bộ phận còn lại không được xem list tk khách hàng".
+        // Không mở cả miền cho bộ phận nào ngoài Admin: mở miền là kèm luôn
+        // trang Role, Khách ngừng giao dịch và mọi route GET của UsersController.
         const x = q(bp);
         expect(x.quyen).not.toContain('taiKhoan.xem');
-        expect(x.quyen).not.toContain('xemDanhSachKhach');
+        expect(x.quyen).not.toContain('taiKhoan.sua');
       });
     }
+
+    /**
+     * Yêu cầu 22/10/2026: "mở quyền xem, xuất file user cho đội kế toán a nhé,
+     * ẩn thông tin mail và sdt với kế toán".
+     *
+     * Ghi đè một phần yêu cầu 10/10/2026 ("các bộ phận còn lại không được xem
+     * list tk khách hàng") — chỉ cho KẾ TOÁN, Mua hàng vẫn đứng ngoài.
+     */
+    it('KeToan xem được danh sách khách nhưng KHÔNG xem được email/sđt', () => {
+      const x = q(BO_PHAN.KeToan);
+      expect(x.quyen).toContain('xemDanhSachKhach');
+      expect(x.quyen).not.toContain('xemLienHeKhach');
+    });
+
+    it('MuaHang vẫn KHÔNG xem được danh sách khách', () => {
+      expect(q(BO_PHAN.MuaHang).quyen).not.toContain('xemDanhSachKhach');
+    });
+
+    it('Admin và CSKH vẫn xem được email/sđt của khách', () => {
+      for (const bp of [BO_PHAN.Admin, BO_PHAN.CSKH]) {
+        expect(q(bp).quyen).toContain('xemLienHeKhach');
+      }
+    });
   });
 
   describe('5 & 6. Vận chuyển và MKT — xem all, KHÔNG được sửa', () => {

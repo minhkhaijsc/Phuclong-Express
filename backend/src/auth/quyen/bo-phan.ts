@@ -132,6 +132,23 @@ export const QUYEN_LE = {
   taoNhanVien: 'taoNhanVien',
   /** Xem danh sách tài khoản khách hàng. */
   xemDanhSachKhach: 'xemDanhSachKhach',
+  /**
+   * Xem email và số điện thoại của khách — trên màn Danh sách User và trong
+   * file Excel xuất ra từ màn đó.
+   *
+   * Yêu cầu bên khách 22/10/2026, nguyên văn: "giúp e mở quyền xem, xuất file
+   * user cho đội kế toán a nhé, ẩn thông tin mail và sdt với kế toán ạ".
+   *
+   * TÁCH RIÊNG khỏi `xemDanhSachKhach` chứ không gộp: kế toán phải mở được
+   * đúng màn đó và xuất được file, chỉ riêng hai cột liên hệ là không. Một mã
+   * cho cả hai việc thì hoặc kế toán không vào được màn, hoặc vào được rồi đọc
+   * luôn email — không có cách thứ ba.
+   *
+   * Che ở TẦNG API chứ không chỉ ẩn cột trên web: `GET /users` trả thẳng
+   * `Email` và `PhoneNumber` của cả 985 tài khoản, ẩn cột mà không che ở máy
+   * chủ thì mở tab Network là đọc được hết. Xem `users/che-lien-he.ts`.
+   */
+  xemLienHeKhach: 'xemLienHeKhach',
   /** Thêm/sửa/xoá vai trò, gán bộ phận cho người khác. */
   quanLyRole: 'quanLyRole',
   /**
@@ -215,6 +232,7 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
       QUYEN_LE.taoKhach,
       QUYEN_LE.taoNhanVien,
       QUYEN_LE.xemDanhSachKhach,
+      QUYEN_LE.xemLienHeKhach,
       QUYEN_LE.quanLyRole,
       QUYEN_LE.baoChuyenKhoan,
     ],
@@ -264,6 +282,8 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
       QUYEN_LE.duyetCongNo,
       QUYEN_LE.taoKhach,
       QUYEN_LE.xemDanhSachKhach,
+      // CSKH phải gọi và gửi mail cho khách — hai cột liên hệ là việc của họ.
+      QUYEN_LE.xemLienHeKhach,
       QUYEN_LE.baoChuyenKhoan,
     ],
   },
@@ -296,6 +316,27 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
       QUYEN_LE.giaNcc,
       QUYEN_LE.congNoNcc,
       QUYEN_LE.duyetCongNo,
+      /**
+       * Mở màn Danh sách User cho kế toán — yêu cầu bên khách 22/10/2026:
+       * "mở quyền xem, xuất file user cho đội kế toán".
+       *
+       * KHÔNG kèm `xemLienHeKhach`, nên email và số điện thoại bị cắt khỏi cả
+       * bảng lẫn file Excel. Đó là nửa sau của cùng câu yêu cầu: "ẩn thông tin
+       * mail và sdt với kế toán".
+       *
+       * Cố ý KHÔNG mở cả miền `taiKhoan`: mở miền thì kế toán vào được luôn
+       * trang Role, trang Khách ngừng giao dịch và mọi route GET của
+       * UsersController (`/users/:id`, `/users/:id/roles`, `/users/:id/kiem-ke`).
+       * Thay vào đó `GET /users` và `GET /users/cskh` đổi sang đòi đúng một mã
+       * `xemDanhSachKhach` — không nới cho ai khác, vì Admin và CSKH vốn đã có
+       * cả hai mã.
+       *
+       * Một hệ quả có thật, đã cân nhắc: `xemDanhSachKhach` cũng là mã mở
+       * `xemHoDuoc` ở dashboard (xem dashboard.controller), nên kế toán xem
+       * được tổng quan của từng khách. Không phải thông tin mới — kế toán vốn
+       * đã có cả miền `congNo` và `baoCao` của mọi khách.
+       */
+      QUYEN_LE.xemDanhSachKhach,
       QUYEN_LE.baoChuyenKhoan,
     ],
   },
