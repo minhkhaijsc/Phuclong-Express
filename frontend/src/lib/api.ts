@@ -2955,6 +2955,8 @@ export interface DongCongNoNcc {
   NCC_TongPhaiTra: number | null;
   NCC_Tracking: string | null;
   NCC_LaiLo: number | null;
+  /** Đã trả NCC cho dòng này (tổng các phiếu thanh toán chưa huỷ). */
+  NCC_DaTra: number;
   trangthaiOrder: string | null;
 }
 
@@ -2967,6 +2969,7 @@ export interface TongTheoNcc {
   tongPhaiTra: number;
   tongThuKhach: number;
   laiLo: number;
+  daTra: number;
 }
 
 export interface CongNoNccResponse {
@@ -2977,6 +2980,7 @@ export interface CongNoNccResponse {
     tongPhaiTra: number;
     tongThuKhach: number;
     laiLo: number;
+    daTra: number;
   };
   theoNcc: TongTheoNcc[];
   chiTiet: { data: DongCongNoNcc[]; total: number; page: number; limit: number };
@@ -2995,3 +2999,85 @@ export const layCongNoNcc = async (loc: {
   const res = await apiClient.get<CongNoNccResponse>('/supplier-debt', { params: loc });
   return res.data;
 };
+
+// ---------------- THANH TOÁN NCC (23/10/2026) ----------------
+
+export interface SoDuNcc {
+  NCC_ID: number;
+  TenNhaCungCap: string | null;
+  phaiTra: number;
+  daTra: number;
+  conNo: number;
+}
+
+export interface PhieuThanhToanNcc {
+  PhieuID: number;
+  NCC_ID: number;
+  TenNhaCungCap: string | null;
+  NgayTra: string;
+  SoTien: number;
+  Loai: 'theo-don' | 'gop';
+  GhiChu: string | null;
+  NguoiTao: string | null;
+  NgayTao: string;
+  DaXoa: boolean;
+  NguoiXoa: string | null;
+  NgayXoa: string | null;
+  soDon: number;
+  daPhanBo: number;
+}
+
+export interface DongPhieuNcc {
+  DonHangID: number;
+  ordernumber: string | null;
+  username: string | null;
+  ngayMua: string | null;
+  NCC_TongPhaiTra: number | null;
+  SoTien: number;
+}
+
+export interface KetQuaLapPhieuNcc {
+  phieuId: number;
+  soTien: number;
+  soDon: number;
+  daPhanBo: number;
+  traDu: number;
+}
+
+export const laySoDuNcc = async (): Promise<SoDuNcc[]> =>
+  (await apiClient.get<SoDuNcc[]>('/supplier-debt/so-du')).data;
+
+export const layPhieuThanhToanNcc = async (loc: {
+  nccId?: number;
+  tuNgay?: string;
+  denNgay?: string;
+  coPhieuHuy?: boolean;
+}): Promise<PhieuThanhToanNcc[]> =>
+  (
+    await apiClient.get<PhieuThanhToanNcc[]>('/supplier-debt/thanh-toan', {
+      params: { ...loc, coPhieuHuy: loc.coPhieuHuy ? '1' : undefined },
+    })
+  ).data;
+
+export const layChiTietPhieuNcc = async (id: number): Promise<DongPhieuNcc[]> =>
+  (await apiClient.get<DongPhieuNcc[]>(`/supplier-debt/thanh-toan/${id}`)).data;
+
+/** Trả THEO ĐƠN: các đơn đã tick, mỗi đơn một số tiền. */
+export const traNccTheoDon = async (than: {
+  ngayTra: string;
+  ghiChu?: string;
+  dong: { donHangId: number; soTien: number }[];
+}): Promise<KetQuaLapPhieuNcc> =>
+  (await apiClient.post<KetQuaLapPhieuNcc>('/supplier-debt/thanh-toan/theo-don', than)).data;
+
+/** Trả GỘP: một cục cho một NCC, máy chủ tự trừ đơn cũ nhất trước. */
+export const traNccGop = async (than: {
+  nccId: number;
+  ngayTra: string;
+  soTien: number;
+  ghiChu?: string;
+}): Promise<KetQuaLapPhieuNcc> =>
+  (await apiClient.post<KetQuaLapPhieuNcc>('/supplier-debt/thanh-toan/gop', than)).data;
+
+export const huyPhieuNcc = async (id: number): Promise<{ phieuId: number }> =>
+  (await apiClient.post<{ phieuId: number }>(`/supplier-debt/thanh-toan/${id}/huy`)).data;

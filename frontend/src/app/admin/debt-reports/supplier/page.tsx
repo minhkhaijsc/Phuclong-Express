@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { layCongNoNcc, layNhaCungCap } from '@/lib/api';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { layCongNoNcc, layNhaCungCap, laySoDuNcc, traNccTheoDon, type DongCongNoNcc } from '@/lib/api';
+import { OTien, SoPhieu, TraGop } from '@/app/components/ncc/thanh-toan-ncc';
 import { useQuyen } from '@/hooks/use-quyen';
 import { downloadDataAsExcel } from '@/lib/excel-download';
 
@@ -18,6 +19,10 @@ import { downloadDataAsExcel } from '@/lib/excel-download';
  * có sổ nào, số phải trả nằm trên chính dòng đơn. Vì vậy trang này hiện luôn
  * số đơn CHƯA NHẬP giá NCC — không có con số đó thì người xem tưởng tổng phải
  * trả đã là toàn bộ, trong khi có thể mới nhập được một phần.
+ *
+ * THANH TOÁN NCC (23/10/2026): "có thể lựa chọn thanh toán theo đơn hàng, hoặc
+ * k theo đơn hàng". Theo đơn = tick dòng ở bảng chi tiết + số tiền từng dòng;
+ * không theo đơn = khối "Thanh toán gộp", tự trừ đơn cũ nhất của NCC đó.
  */
 const soVn = (v: number | null | undefined) => (v ?? 0).toLocaleString('vi-VN');
 
@@ -36,6 +41,15 @@ export default function TrangCongNoNcc() {
   const [trangThai, setTrangThai] = useState<'' | 'con-no' | 'da-tra'>('');
   const [page, setPage] = useState(1);
 
+  /** Đơn đang tick để trả theo đơn: mã đơn → số tiền trả. */
+  const [chon, setChon] = useState<Map<number, number>>(new Map());
+  const [nccDangChon, setNccDangChon] = useState<number | null>(null);
+  const [ngayTra, setNgayTra] = useState(homNay);
+  const [ghiChuTra, setGhiChuTra] = useState('');
+  const [thongBao, setThongBao] = useState<{ loai: 'ok' | 'loi'; noiDung: string } | null>(null);
+  /** Tăng mỗi lần ghi/huỷ phiếu để mọi khối nạp lại. */
+  const [phienBan, setPhienBan] = useState(0);
+
   const loc = {
     tuNgay,
     denNgay,
@@ -46,7 +60,7 @@ export default function TrangCongNoNcc() {
   };
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['cong-no-ncc', loc],
+    queryKey: ['cong-no-ncc', loc, phienBan],
     queryFn: () => layCongNoNcc(loc),
     enabled: xemCongNoNcc,
   });
@@ -58,6 +72,53 @@ export default function TrangCongNoNcc() {
     enabled: xemCongNoNcc,
   });
 
+  const { data: soDu = [] } = useQuery({
+    queryKey: ['so-du-ncc', phienBan],
+    queryFn: laySoDuNcc,
+    enabled: xemCongNoNcc,
+  });
+
+  const conNoDon = (r: DongCongNoNcc) => Math.max(0, (r.NCC_TongPhaiTra ?? 0) - (r.NCC_DaTra ?? 0));
+
+  /**
+   * Tick một đơn. Mặc định trả ĐỦ phần còn nợ — đa số lần trả là trả hết, gõ
+   * lại từng số là việc thừa; trả một phần thì sửa ô số tiền.
+   *
+   * Chỉ tick được đơn CÙNG một NCC: một phiếu là một lần chuyển tiền cho một
+   * nhà cung cấp (máy chủ cũng chặn).
+   */
+  const tick = (r: DongCongNoNcc) => {
+    const m = new Map(chon);
+    if (m.has(r.ID)) {
+      m.delete(r.ID);
+      if (m.size === 0) setNccDangChon(null);
+    } else {
+      m.set(r.ID, Math.round(conNoDon(r)));
+      setNccDangChon(r.NCC_ID);
+    }
+    setChon(m);
+  };
+
+  const boChon = () => { setChon(new Map()); setNccDangChon(null); };
+  const tongChon = [...chon.values()].reduce((a, b) => a + b, 0);
+
+  const traTheoDon = useMutation({
+    mutationFn: () =>
+      traNccTheoDon({
+        ngayTra,
+        ghiChu: ghiChuTra || undefined,
+        dong: [...chon.entries()].map(([donHangId, soTien]) => ({ donHangId, soTien })),
+      }),
+    onSuccess: (kq) => {
+      setThongBao({ loai: 'ok', noiDung: `Đã ghi phiếu #${kq.phieuId}: ${soVn(kq.soTien)}đ cho ${kq.soDon} đơn.` });
+      boChon();
+      setGhiChuTra('');
+      setPhienBan((v) => v + 1);
+    },
+    onError: (e: any) =>
+      setThongBao({ loai: 'loi', noiDung: e?.response?.data?.message || 'Không ghi được thanh toán' }),
+  });
+
   const xuatExcel = () => {
     const rows = data?.chiTiet?.data ?? [];
     if (!rows.length) return;
@@ -66,7 +127,8 @@ export default function TrangCongNoNcc() {
         [
           'Mã ĐH', 'OrderNumber', 'Ngày mua', 'Khách', 'Nhà cung cấp', 'Website',
           'Tuyến', 'Ngoại tệ', '% Công', 'Tỷ giá', 'Tổng phải trả (VNĐ)',
-          'Tổng thu khách (VNĐ)', 'Lãi/Lỗ (VNĐ)', 'Tracking NCC', 'Trạng thái',
+          'Tổng thu khách (VNĐ)', 'Lãi/Lỗ (VNĐ)', 'Đã trả NCC (VNĐ)', 'Còn nợ NCC (VNĐ)',
+          'Tracking NCC', 'Trạng thái',
         ],
         ...rows.map((r) => [
           r.ID,
@@ -82,6 +144,8 @@ export default function TrangCongNoNcc() {
           Math.round(r.NCC_TongPhaiTra ?? 0),
           Math.round(r.tongtienVND ?? 0),
           Math.round(r.NCC_LaiLo ?? 0),
+          Math.round(r.NCC_DaTra ?? 0),
+          Math.round(conNoDon(r)),
           r.NCC_Tracking || '',
           r.trangthaiOrder || '',
         ]),
@@ -155,15 +219,15 @@ export default function TrangCongNoNcc() {
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Trạng thái đơn</label>
+          <label className="mb-1 block text-xs font-medium text-gray-600">Thanh toán NCC</label>
           <select
             value={trangThai}
             onChange={(e) => { setTrangThai(e.target.value as '' | 'con-no' | 'da-tra'); setPage(1); }}
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
           >
             <option value="">Tất cả</option>
-            <option value="con-no">Chưa hoàn tất</option>
-            <option value="da-tra">Đã hoàn tất</option>
+            <option value="con-no">Còn nợ NCC</option>
+            <option value="da-tra">Đã trả đủ NCC</option>
           </select>
         </div>
         <button
@@ -183,10 +247,16 @@ export default function TrangCongNoNcc() {
       )}
 
       {/* Tổng hợp */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {[
           { nhan: 'Số đơn có giá NCC', gt: soVn(t?.soDon) },
           { nhan: 'Tổng phải trả (VNĐ)', gt: soVn(t?.tongPhaiTra) },
+          { nhan: 'Đã trả NCC (VNĐ)', gt: soVn(t?.daTra), mau: 'text-emerald-700' },
+          {
+            nhan: 'Còn phải trả (VNĐ)',
+            gt: soVn((t?.tongPhaiTra ?? 0) - (t?.daTra ?? 0)),
+            mau: 'text-amber-700',
+          },
           { nhan: 'Tổng thu khách (VNĐ)', gt: soVn(t?.tongThuKhach) },
           {
             nhan: 'Lãi / Lỗ (VNĐ)',
@@ -223,17 +293,19 @@ export default function TrangCongNoNcc() {
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Ngoại tệ</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Tiền công</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Phải trả</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Đã trả</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Còn nợ</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Thu khách</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Lãi/Lỗ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {isLoading && (
-              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">Đang tải…</td></tr>
+              <tr><td colSpan={9} className="px-4 py-6 text-center text-gray-400">Đang tải…</td></tr>
             )}
             {!isLoading && (data?.theoNcc?.length ?? 0) === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={9} className="px-4 py-6 text-center text-gray-400">
                   Chưa có đơn nào nhập giá nhà cung cấp trong khoảng này.
                 </td>
               </tr>
@@ -247,6 +319,8 @@ export default function TrangCongNoNcc() {
                 <td className="px-4 py-2.5 text-right">{soVn(r.tongNgoaiTe)}</td>
                 <td className="px-4 py-2.5 text-right">{soVn(r.tongCong)}</td>
                 <td className="px-4 py-2.5 text-right font-semibold">{soVn(r.tongPhaiTra)}</td>
+                <td className="px-4 py-2.5 text-right text-emerald-700">{soVn(r.daTra)}</td>
+                <td className="px-4 py-2.5 text-right font-semibold text-amber-700">{soVn(r.tongPhaiTra - r.daTra)}</td>
                 <td className="px-4 py-2.5 text-right">{soVn(r.tongThuKhach)}</td>
                 <td className={`px-4 py-2.5 text-right font-semibold ${r.laiLo < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                   {soVn(r.laiLo)}
@@ -256,6 +330,64 @@ export default function TrangCongNoNcc() {
           </tbody>
         </table>
       </div>
+
+      {/* Không theo đơn: trả gộp, tự trừ đơn cũ nhất của NCC đó */}
+      <TraGop
+        key={nccId}
+        dsNcc={dsNcc}
+        soDu={soDu}
+        nccMacDinh={nccId}
+        onXong={() => setPhienBan((v) => v + 1)}
+      />
+
+      {/* Theo đơn: tick dòng ở bảng dưới, rồi ghi ở thanh này */}
+      {chon.size > 0 && (
+        <div className="sticky top-2 z-10 flex flex-wrap items-end gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 shadow-sm">
+          <div className="text-sm text-emerald-900">
+            Đã tick <b>{chon.size}</b> đơn
+            {nccDangChon !== null && (
+              <> của <b>{dsNcc.find((n) => n.NhaCungCapID === nccDangChon)?.TenNhaCungCap ?? nccDangChon}</b></>
+            )}{' '}
+            — tổng <b>{soVn(tongChon)}đ</b>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-emerald-800">Ngày thanh toán</label>
+            <input
+              type="date"
+              value={ngayTra}
+              onChange={(e) => setNgayTra(e.target.value)}
+              className="rounded-lg border border-emerald-200 px-3 py-1.5 text-sm"
+            />
+          </div>
+          <div className="min-w-[12rem] flex-1">
+            <label className="mb-1 block text-xs font-medium text-emerald-800">Ghi chú</label>
+            <input
+              value={ghiChuTra}
+              onChange={(e) => setGhiChuTra(e.target.value)}
+              placeholder="vd: CK Vietcombank 23/10"
+              className="w-full rounded-lg border border-emerald-200 px-3 py-1.5 text-sm"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => { setThongBao(null); traTheoDon.mutate(); }}
+            disabled={traTheoDon.isPending || tongChon <= 0}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {traTheoDon.isPending ? 'Đang ghi…' : 'Ghi đã thanh toán'}
+          </button>
+          <button type="button" onClick={boChon} className="rounded-lg border border-emerald-300 px-3 py-2 text-sm text-emerald-800">
+            Bỏ chọn
+          </button>
+        </div>
+      )}
+      {thongBao && (
+        <div
+          className={`rounded-lg px-4 py-2.5 text-sm ${thongBao.loai === 'ok' ? 'border border-emerald-200 bg-emerald-50 text-emerald-800' : 'border border-red-200 bg-red-50 text-red-700'}`}
+        >
+          {thongBao.noiDung}
+        </div>
+      )}
 
       {/* Chi tiết từng đơn */}
       <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
@@ -288,14 +420,41 @@ export default function TrangCongNoNcc() {
         <table className="min-w-full divide-y divide-gray-100 text-xs">
           <thead className="bg-gray-50">
             <tr>
-              {['Mã ĐH', 'Ngày mua', 'Khách', 'Nhà cung cấp', 'Tuyến', 'Ngoại tệ', '% Công', 'Tỷ giá', 'Phải trả', 'Thu khách', 'Lãi/Lỗ', 'Tracking NCC', 'Trạng thái'].map((h) => (
+              {['Trả', 'Mã ĐH', 'Ngày mua', 'Khách', 'Nhà cung cấp', 'Tuyến', 'Ngoại tệ', '% Công', 'Tỷ giá', 'Phải trả', 'Đã trả', 'Còn nợ', 'Thu khách', 'Lãi/Lỗ', 'Tracking NCC', 'Trạng thái'].map((h) => (
                 <th key={h} className="px-3 py-2.5 text-left font-semibold text-gray-500">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {(data?.chiTiet?.data ?? []).map((r) => (
-              <tr key={r.ID}>
+            {(data?.chiTiet?.data ?? []).map((r) => {
+              const no = conNoDon(r);
+              const daDu = no < 1;
+              const khacNcc = nccDangChon !== null && nccDangChon !== r.NCC_ID;
+              const dangChon = chon.has(r.ID);
+              return (
+              <tr key={r.ID} className={dangChon ? 'bg-emerald-50/60' : ''}>
+                <td className="px-3 py-2">
+                  {daDu ? (
+                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">Đã trả</span>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={dangChon}
+                        disabled={khacNcc || r.NCC_ID === null}
+                        title={khacNcc ? 'Mỗi lần ghi chỉ cho một nhà cung cấp' : 'Tick để ghi đã thanh toán'}
+                        onChange={() => tick(r)}
+                      />
+                      {dangChon && (
+                        <OTien
+                          giaTri={chon.get(r.ID) ?? 0}
+                          doi={(n) => setChon(new Map(chon).set(r.ID, n))}
+                          className="w-28"
+                        />
+                      )}
+                    </div>
+                  )}
+                </td>
                 <td className="px-3 py-2">{r.ordernumber || r.ID}</td>
                 <td className="px-3 py-2">
                   {r.ngayMua ? new Date(r.ngayMua).toLocaleDateString('vi-VN') : '-'}
@@ -311,6 +470,8 @@ export default function TrangCongNoNcc() {
                 </td>
                 <td className="px-3 py-2 text-right">{soVn(r.NCC_TyGia)}</td>
                 <td className="px-3 py-2 text-right font-semibold">{soVn(r.NCC_TongPhaiTra)}</td>
+                <td className="px-3 py-2 text-right text-emerald-700">{r.NCC_DaTra ? soVn(r.NCC_DaTra) : '-'}</td>
+                <td className={`px-3 py-2 text-right font-semibold ${daDu ? 'text-gray-300' : 'text-amber-700'}`}>{soVn(no)}</td>
                 <td className="px-3 py-2 text-right">{soVn(r.tongtienVND)}</td>
                 <td className={`px-3 py-2 text-right font-semibold ${(r.NCC_LaiLo ?? 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                   {soVn(r.NCC_LaiLo)}
@@ -318,10 +479,19 @@ export default function TrangCongNoNcc() {
                 <td className="px-3 py-2">{r.NCC_Tracking || '-'}</td>
                 <td className="px-3 py-2">{r.trangthaiOrder || '-'}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      <SoPhieu
+        nccId={nccId ? Number(nccId) : undefined}
+        tuNgay={tuNgay}
+        denNgay={denNgay}
+        phienBan={phienBan}
+        onDoi={() => setPhienBan((v) => v + 1)}
+      />
     </div>
   );
 }

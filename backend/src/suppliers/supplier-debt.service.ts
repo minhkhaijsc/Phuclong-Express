@@ -6,12 +6,16 @@ import {
   formatSqlEndOfDay,
   parseVietnameseDate,
 } from '../helpers/sql-date.helper';
+import { DA_TRA_SQL, NGUONG_DU } from './supplier-payment.service';
 
 export interface LocCongNoNcc {
   tuNgay?: string;
   denNgay?: string;
   nccId?: number;
-  /** 'con-no' = còn phải trả, 'da-tra' = đã trả xong. Bỏ trống = tất cả. */
+  /**
+   * 'con-no' = còn phải trả, 'da-tra' = đã trả đủ NCC. Bỏ trống = tất cả.
+   * Tính theo PHIẾU THANH TOÁN (từ 23/10/2026), không còn theo trạng thái đơn.
+   */
   trangThai?: 'con-no' | 'da-tra';
   page?: number;
   limit?: number;
@@ -36,6 +40,8 @@ export interface DongCongNoNcc {
   NCC_TongPhaiTra: number | null;
   NCC_Tracking: string | null;
   NCC_LaiLo: number | null;
+  /** Đã trả NCC cho dòng này (tổng các phiếu chưa huỷ). */
+  NCC_DaTra: number;
   trangthaiOrder: string | null;
 }
 
@@ -48,6 +54,8 @@ export interface TongTheoNcc {
   tongPhaiTra: number;
   tongThuKhach: number;
   laiLo: number;
+  /** Đã trả, phân bổ vào các đơn TRONG bộ lọc. */
+  daTra: number;
 }
 
 /**
@@ -123,10 +131,11 @@ export class SupplierDebtService {
       dk.push('dh.NCC_ID = :nccId');
       thay.nccId = loc.nccId;
     }
-    // Chưa có bảng ghi phiếu trả tiền, nên "đã trả" tạm hiểu là đơn đã hoàn
-    // tất. Khi nào có phiếu trả thì sửa đúng ở đây, một chỗ.
-    if (loc.trangThai === 'da-tra') dk.push("dh.trangthaiOrder = 'Completed'");
-    if (loc.trangThai === 'con-no') dk.push("dh.trangthaiOrder <> 'Completed'");
+    // "Đã trả" theo PHIẾU THANH TOÁN NCC (23/10/2026). Trước đó chưa có sổ trả
+    // tiền nên tạm hiểu là đơn Completed — sai nghĩa: đơn xong với khách
+    // không có nghĩa là đã trả tiền nhà cung cấp.
+    if (loc.trangThai === 'da-tra') dk.push(`dh.NCC_TongPhaiTra - ${DA_TRA_SQL} < ${NGUONG_DU}`);
+    if (loc.trangThai === 'con-no') dk.push(`dh.NCC_TongPhaiTra - ${DA_TRA_SQL} >= ${NGUONG_DU}`);
 
     return { sql: dk.join(' AND '), thay };
   }
@@ -147,9 +156,19 @@ export class SupplierDebtService {
               SUM(ISNULL(dh.NCC_NgoaiTe, 0) * ISNULL(dh.NCC_Cong, 0) / 100) AS tongCong,
               SUM(ISNULL(dh.NCC_TongPhaiTra, 0))             AS tongPhaiTra,
               SUM(ISNULL(dh.tongtienVND, 0))                 AS tongThuKhach,
-              SUM(ISNULL(dh.tongtienVND, 0) - ISNULL(dh.NCC_TongPhaiTra, 0)) AS laiLo
+              SUM(ISNULL(dh.tongtienVND, 0) - ISNULL(dh.NCC_TongPhaiTra, 0)) AS laiLo,
+              SUM(ISNULL(tt.daTra, 0))                       AS daTra
        FROM   dbo.DON_HANG dh
        LEFT   JOIN dbo.tbNhaCungCap ncc ON ncc.NhaCungCapID = dh.NCC_ID
+       /* JOIN chứ không dùng DA_TRA_SQL: SQL Server không cho SUM() bọc một
+          truy vấn con ("Cannot perform an aggregate function on an expression
+          containing an aggregate or a subquery"). */
+       LEFT   JOIN (
+         SELECT pd.DonHangID, SUM(pd.SoTien) AS daTra
+         FROM   dbo.tbThanhToanNccDon pd
+         JOIN   dbo.tbThanhToanNcc p ON p.PhieuID = pd.PhieuID AND p.DaXoa = 0
+         GROUP  BY pd.DonHangID
+       ) tt ON tt.DonHangID = dh.ID
        WHERE  ${sql}
        GROUP  BY dh.NCC_ID
        ORDER  BY SUM(ISNULL(dh.NCC_TongPhaiTra, 0)) DESC`,
@@ -180,6 +199,7 @@ export class SupplierDebtService {
               dh.NCC_NgoaiTe, dh.NCC_Cong, dh.NCC_TyGia, dh.NCC_TongPhaiTra,
               dh.NCC_Tracking,
               ISNULL(dh.tongtienVND, 0) - ISNULL(dh.NCC_TongPhaiTra, 0) AS NCC_LaiLo,
+              ${DA_TRA_SQL} AS NCC_DaTra,
               dh.trangthaiOrder
        FROM   dbo.DON_HANG dh
        LEFT   JOIN dbo.tbNhaCungCap ncc ON ncc.NhaCungCapID = dh.NCC_ID
