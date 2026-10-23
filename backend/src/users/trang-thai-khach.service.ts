@@ -54,6 +54,8 @@ export interface KhachKemTrangThai {
   hoTen: string | null;
   phone: string | null;
   email: string | null;
+  /** CSKH phụ trách — để che `phone`/`email` theo người xem (che-lien-he.ts). */
+  cskhPhuTrach: string | null;
   /** Mốc muộn nhất trong ba nguồn, ISO. */
   lanGiaoDichCuoi: string | null;
   soNgayNghi: number | null;
@@ -178,7 +180,7 @@ export class TrangThaiKhachService {
       FROM CONGNO WHERE DaXoa = 0 GROUP BY UserName
     ),
     Khach AS (
-      SELECT us.Id, us.UserName, us.HoTen, us.PhoneNumber, us.Email,
+      SELECT us.Id, us.UserName, us.HoTen, us.PhoneNumber, us.Email, us.CSKHPhuTrach,
              us.TrangThai, us.NgayDoiTrangThai, us.NguoiDoiTrangThai, us.LyDoTrangThai,
              c.lanCuoi,
              ISNULL(n.duNo, 0) AS duNo,
@@ -264,7 +266,7 @@ export class TrangThaiKhachService {
 
     const rows = await this.hoi<any>(
       `${this.khoi()}
-       SELECT Id, UserName, HoTen, PhoneNumber, Email, TrangThai,
+       SELECT Id, UserName, HoTen, PhoneNumber, Email, CSKHPhuTrach, TrangThai,
               NgayDoiTrangThai, NguoiDoiTrangThai, LyDoTrangThai,
               lanCuoi, duNo, nhomTuDong
        FROM Khach
@@ -290,7 +292,7 @@ export class TrangThaiKhachService {
   async motKhach(id: string): Promise<KhachKemTrangThai> {
     const [r] = await this.hoi<any>(
       `${this.khoi(false)}
-       SELECT Id, UserName, HoTen, PhoneNumber, Email, TrangThai,
+       SELECT Id, UserName, HoTen, PhoneNumber, Email, CSKHPhuTrach, TrangThai,
               NgayDoiTrangThai, NguoiDoiTrangThai, LyDoTrangThai,
               lanCuoi, duNo, nhomTuDong, laNhanVien
        FROM Khach WHERE Id = :id`,
@@ -443,6 +445,7 @@ export class TrangThaiKhachService {
       hoTen: r.HoTen ?? null,
       phone: r.PhoneNumber ?? null,
       email: r.Email ?? null,
+      cskhPhuTrach: r.CSKHPhuTrach ? String(r.CSKHPhuTrach).trim() || null : null,
       lanGiaoDichCuoi: lanCuoi ? lanCuoi.toISOString() : null,
       soNgayNghi: lanCuoi ? Math.floor((Date.now() - lanCuoi.getTime()) / 86400000) : null,
       nhomTuDong: String(r.nhomTuDong) as NhomTuDong,

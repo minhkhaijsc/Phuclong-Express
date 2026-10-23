@@ -107,6 +107,18 @@ export class QuyenService {
       for (const l of LE_CUA_CAP[c] ?? []) quyen.add(l);
     }
 
+    // Trưởng phòng / Giám đốc của bộ phận xem được liên hệ khách thì xem được
+    // của MỌI khách và được phân khách cho sales (yêu cầu 23/10/2026, "trừ
+    // TP,PP"). Điều kiện `xemLienHeKhach` là bắt buộc: KETOAN cũng mang cấp
+    // Trưởng phòng, cấp trơn theo cấp là kế toán đọc được hết số điện thoại.
+    if (
+      cap.some((c) => CAP_XEM_DASHBOARD.includes(c)) &&
+      quyen.has(QUYEN_LE.xemLienHeKhach)
+    ) {
+      quyen.add(QUYEN_LE.xemLienHeMoiKhach);
+      quyen.add(QUYEN_LE.phanKhachCskh);
+    }
+
     // Việc cá nhân thì ai đăng nhập cũng làm được.
     quyen.add('rieng.xem');
     quyen.add('rieng.sua');

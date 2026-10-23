@@ -149,6 +149,33 @@ export const QUYEN_LE = {
    * chủ thì mở tab Network là đọc được hết. Xem `users/che-lien-he.ts`.
    */
   xemLienHeKhach: 'xemLienHeKhach',
+  /**
+   * Xem email/số điện thoại của MỌI khách, kể cả khách do sales khác phụ trách.
+   *
+   * Yêu cầu bên khách 23/10/2026, nguyên văn: "gán danh sách khách theo mỗi nv
+   * sales phụ trách chính. Sales chỉ có thể xem thông tin cá nhân của các khách
+   * mình phụ trách, ko xem được thông tin khách của sales khác (trừ TP,PP)".
+   *
+   * Nên `xemLienHeKhach` từ nay chỉ còn nghĩa là "xem được của khách MÌNH phụ
+   * trách" (cùng khách chưa gán cho ai — chốt với anh Quang 23/10: chưa gán
+   * thì để mở, không khoá việc của 15 sales trong lúc chưa gán xong). Mã này
+   * mới là "xem hết".
+   *
+   * Ai có: Admin, và Trưởng phòng / Giám đốc của bộ phận VỐN xem được liên hệ
+   * khách — xem `QuyenService.tinh`. Không cấp theo cấp một cách trơn: tài
+   * khoản KETOAN mang cấp Trưởng phòng, cấp trơn là kế toán đọc được hết số
+   * điện thoại — ngược hẳn yêu cầu 22/10. "PP" (phó phòng) dùng chung ô tick
+   * Trưởng phòng, chưa có cấp riêng.
+   */
+  xemLienHeMoiKhach: 'xemLienHeMoiKhach',
+  /**
+   * Gán / đổi CSKH phụ trách của khách, kể cả nhập hàng loạt bằng Excel.
+   *
+   * Cùng tập người với `xemLienHeMoiKhach`. Không thể cho sales thường tự gán:
+   * gán được là tự kéo khách của người khác về mình, và thế là đọc được số
+   * điện thoại — cái rào vừa dựng ra để chặn.
+   */
+  phanKhachCskh: 'phanKhachCskh',
   /** Thêm/sửa/xoá vai trò, gán bộ phận cho người khác. */
   quanLyRole: 'quanLyRole',
   /**
@@ -233,6 +260,8 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
       QUYEN_LE.taoNhanVien,
       QUYEN_LE.xemDanhSachKhach,
       QUYEN_LE.xemLienHeKhach,
+      QUYEN_LE.xemLienHeMoiKhach,
+      QUYEN_LE.phanKhachCskh,
       QUYEN_LE.quanLyRole,
       QUYEN_LE.baoChuyenKhoan,
     ],

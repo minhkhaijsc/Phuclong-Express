@@ -20,11 +20,13 @@ import {
 } from 'react-icons/fi';
 import apiClient from '@/lib/api-client';
 import { getDanhSachCskh } from '@/lib/api';
+import { useQuyen } from '@/hooks/use-quyen';
 
 interface User {
   Id: string;
   UserName: string;
-  Email: string;
+  /** Thiếu khoá = máy chủ che (khách của sales khác). */
+  Email?: string;
   HoTen: string;
   DiaChi: string;
   TinhThanh: string;
@@ -80,6 +82,14 @@ export default function UserDetailPage() {
 
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<User>>({});
+
+  const { co } = useQuyen();
+  /**
+   * Đổi CSKH phụ trách — chỉ Admin / TP / PP (yêu cầu 23/10/2026). Sales tự
+   * gán được thì kéo khách người khác về mình là đọc được liên hệ. Máy chủ
+   * cũng chặn, ở đây khoá ô cho người dùng khỏi bấm rồi mới thấy lỗi.
+   */
+  const phanKhach = co('phanKhachCskh');
 
   /** Danh sách CSKH cho ô chọn. Hỏng thì im lặng, không chặn màn chi tiết. */
   const [dsCskh, setDsCskh] = useState<{ username: string; hoTen: string }[]>([]);
@@ -343,7 +353,12 @@ export default function UserDetailPage() {
               <div className="px-6 py-2">
                 <InfoRow label="Tên đăng nhập" value={user.UserName} />
                 <InfoRow label="Họ tên" value={user.HoTen} />
-                <InfoRow label="Email" value={user.Email} />
+                {/* Thiếu khoá = máy chủ đã che (khách của sales khác), khác
+                    với khách chưa khai email. Xem che-lien-he.ts. */}
+                <InfoRow
+                  label="Email"
+                  value={'Email' in user ? user.Email : 'Khách của sales khác — không xem được'}
+                />
                 <InfoRow label="Địa chỉ" value={user.DiaChi} />
                 <InfoRow label="Tỉnh / Thành phố" value={user.TinhThanh} />
                 <InfoRow label="Vùng miền" value={user.VungMien} />
@@ -375,7 +390,10 @@ export default function UserDetailPage() {
                       type="text"
                       value={(editForm as Record<string, string>)[key] ?? ''}
                       onChange={e => setEditForm(f => ({ ...f, [key]: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#14264b] focus:outline-none focus:ring-2 focus:ring-[#14264b]/20 transition-all"
+                      // Email bị che thì không sửa được: máy chủ cũng bỏ qua ô này.
+                      disabled={key === 'Email' && !('Email' in user)}
+                      placeholder={key === 'Email' && !('Email' in user) ? 'Khách của sales khác' : undefined}
+                      className="w-full disabled:cursor-not-allowed disabled:bg-slate-50 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#14264b] focus:outline-none focus:ring-2 focus:ring-[#14264b]/20 transition-all"
                     />
                   </div>
                 ))}
@@ -389,7 +407,9 @@ export default function UserDetailPage() {
                   <select
                     value={(editForm as Record<string, string>).CSKHPhuTrach ?? ''}
                     onChange={e => setEditForm(f => ({ ...f, CSKHPhuTrach: e.target.value }))}
-                    className="w-full cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#14264b] focus:outline-none focus:ring-2 focus:ring-[#14264b]/20 transition-all"
+                    disabled={!phanKhach}
+                    title={phanKhach ? undefined : 'Chỉ Admin hoặc Trưởng/Phó phòng được đổi CSKH phụ trách'}
+                    className="w-full disabled:cursor-not-allowed disabled:bg-slate-50 cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#14264b] focus:outline-none focus:ring-2 focus:ring-[#14264b]/20 transition-all"
                   >
                     <option value="">-- Chưa gán --</option>
                     {dsCskh.map(c => (

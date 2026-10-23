@@ -227,7 +227,12 @@ export default function KhachNgungGiaoDichPage() {
                       {k.hoTen || <span className="text-slate-300">—</span>}
                     </td>
                     <td className="max-w-[190px] truncate px-3 py-2.5 text-slate-600">
-                      {k.phone || k.email || <span className="text-slate-300">—</span>}
+                      {!('phone' in k) && !('email' in k) ? (
+                        // Máy chủ che: khách do sales khác phụ trách (23/10/2026).
+                        <span className="text-xs text-slate-400">Khách của {k.cskhPhuTrach}</span>
+                      ) : (
+                        k.phone || k.email || <span className="text-slate-300">—</span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-slate-600">
                       {ngay(k.lanGiaoDichCuoi)}

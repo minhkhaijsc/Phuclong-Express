@@ -20,6 +20,8 @@ const NHAN_QUYEN_LE: Record<string, string> = {
   taoNhanVien: 'tạo tài khoản nhân viên',
   xemDanhSachKhach: 'xem danh sách tài khoản khách hàng',
   xemLienHeKhach: 'xem email và số điện thoại của khách',
+  xemLienHeMoiKhach: 'xem email và số điện thoại của khách do sales khác phụ trách',
+  phanKhachCskh: 'gán CSKH phụ trách cho khách',
   quanLyRole: 'quản lý vai trò',
   baoChuyenKhoan: 'báo đã chuyển khoản',
 };

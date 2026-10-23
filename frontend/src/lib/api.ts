@@ -2601,6 +2601,20 @@ export interface KetQuaDatTuoiNoHangLoat {
   loi: { dong: number; khach: string; lyDo: string }[];
 }
 
+/** Một dòng file Excel gán CSKH phụ trách. `cskh` rỗng = bỏ gán. */
+export interface DongGanCskh {
+  khach: string;
+  cskh: string;
+}
+
+/** Gán CSKH phụ trách cho nhiều khách một lượt (Admin / TP / PP). */
+export const ganCskhHangLoat = async (
+  dong: DongGanCskh[],
+): Promise<KetQuaDatTuoiNoHangLoat> => {
+  const res = await apiClient.post('/users/cskh-phu-trach/hang-loat', { dong });
+  return res.data;
+};
+
 /** Đặt tuổi nợ cho nhiều khách một lượt, từ file Excel. */
 export const datTuoiNoHangLoat = async (
   dong: DongDatTuoiNo[],
@@ -2697,8 +2711,11 @@ export interface KhachKemTrangThai {
   id: string;
   userName: string;
   hoTen: string | null;
-  phone: string | null;
-  email: string | null;
+  /** Thiếu khoá (không phải null) = máy chủ che vì khách do sales khác phụ trách. */
+  phone?: string | null;
+  email?: string | null;
+  /** CSKH phụ trách. */
+  cskhPhuTrach?: string | null;
   lanGiaoDichCuoi: string | null;
   soNgayNghi: number | null;
   /** Suy ra từ dữ liệu, không phải cột trong bảng. */

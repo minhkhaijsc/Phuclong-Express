@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
 import { User, UserModel } from './entities/user.entity';
 import { chuanHoaTuoiNo } from './tuoi-no-khach';
@@ -13,6 +13,9 @@ import bcrypt from 'bcrypt';
  */
 /** Giá trị lọc đặc biệt: những mã chưa gán CSKH nào. */
 export const CHUA_GAN = '(chua-gan)';
+
+/** Trần số dòng một lần gán hàng loạt. Nhiều hơn thì chia file. */
+export const SO_DONG_GAN_TOI_DA = 2000;
 
 // Cùng một ô nhưng có hai đường ghi (màn tài khoản và màn báo cáo Tuổi nợ),
 // nên phần chuẩn hoá để riêng `tuoi-no-khach.ts`. Vẫn xuất lại ở đây cho
@@ -82,6 +85,142 @@ export class UsersService {
         ORDER BY u.UserName`,
     );
     return data as { username: string; hoTen: string }[];
+  }
+
+  /**
+   * Gán CSKH phụ trách cho NHIỀU khách một lượt — từ file Excel hai cột (mã
+   * khách, CSKH phụ trách).
+   *
+   * Yêu cầu bên khách 23/10/2026: "gán danh sách khách theo mỗi nv sales phụ
+   * trách chính". Lúc làm, 943/943 mã khách đều chưa gán — bấm từng người trên
+   * màn chi tiết là cả buổi, nên có đường này.
+   *
+   * Theo đúng mẫu `datTuoiNoHangLoat`: MỘT DÒNG HỎNG KHÔNG CHẶN CẢ FILE. Dòng
+   * nào sai thì báo riêng dòng đó (kèm số dòng Excel), phần còn lại vẫn ghi.
+   *
+   * Chỉ nhận:
+   *   • mã khách có thật và là KHÁCH (không vai trò) — gán CSKH cho tài khoản
+   *     nhân viên là vô nghĩa, và lẫn vào thì làm rối luật che liên hệ
+   *   • CSKH đang làm (cùng danh sách ô chọn trên màn chi tiết). Ô để trống =
+   *     bỏ gán, trả khách về "chưa gán".
+   */
+  async ganCskhHangLoat(
+    dong: { khach?: unknown; cskh?: unknown }[],
+    nguoiSua = 'system',
+  ): Promise<{
+    soDaGhi: number;
+    soKhongDoi: number;
+    loi: { dong: number; khach: string; lyDo: string }[];
+  }> {
+    const ds = Array.isArray(dong) ? dong : [];
+    if (!ds.length) throw new BadRequestException('Không có dòng nào để ghi.');
+    if (ds.length > SO_DONG_GAN_TOI_DA) {
+      throw new BadRequestException(`Mỗi lần chỉ nhập tối đa ${SO_DONG_GAN_TOI_DA} dòng.`);
+    }
+
+    const [khachRows] = await this.sequelize.query(
+      `SELECT u.UserName, u.CSKHPhuTrach,
+              CASE WHEN EXISTS (SELECT 1 FROM dbo.AspNetUserRoles r WHERE r.UserId = u.Id)
+                   THEN 1 ELSE 0 END AS laNhanVien
+         FROM dbo.AspNetUsers u`,
+    );
+    const bang = new Map<string, { ten: string; phuTrach: string | null; laNhanVien: boolean }>();
+    for (const r of khachRows as any[]) {
+      const ten = String(r.UserName ?? '').trim();
+      bang.set(ten.toUpperCase(), {
+        ten,
+        phuTrach: String(r.CSKHPhuTrach ?? '').trim() || null,
+        laNhanVien: Number(r.laNhanVien) === 1,
+      });
+    }
+    const cskh = new Map<string, string>();
+    for (const c of await this.danhSachCskh()) {
+      const ten = String(c.username ?? '').trim();
+      cskh.set(ten.toUpperCase(), ten);
+    }
+
+    const loi: { dong: number; khach: string; lyDo: string }[] = [];
+    const daGap = new Map<string, number>();
+    const canGhi: { khach: string; cskh: string | null }[] = [];
+    let soKhongDoi = 0;
+
+    ds.forEach((d, i) => {
+      // Dòng 1 là tiêu đề, nên dòng dữ liệu thứ i nằm ở dòng Excel i + 2.
+      const soDong = i + 2;
+      const ten = String(d?.khach ?? '').trim();
+      if (!ten) {
+        loi.push({ dong: soDong, khach: '', lyDo: 'Thiếu mã khách' });
+        return;
+      }
+      const khoa = ten.toUpperCase();
+      const lanTruoc = daGap.get(khoa);
+      if (lanTruoc) {
+        loi.push({ dong: soDong, khach: ten, lyDo: `Trùng với dòng ${lanTruoc}` });
+        return;
+      }
+      daGap.set(khoa, soDong);
+
+      const k = bang.get(khoa);
+      if (!k) {
+        loi.push({ dong: soDong, khach: ten, lyDo: 'Không có mã khách này' });
+        return;
+      }
+      const goCskh = String(d?.cskh ?? '').trim();
+      if (k.laNhanVien) {
+        // File mẫu đổ nguyên danh sách User, có cả nhân viên. Dòng nhân viên để
+        // trống thì bỏ qua lặng lẽ; chỉ báo lỗi khi ai đó cố gán CSKH cho nó.
+        if (goCskh) {
+          loi.push({ dong: soDong, khach: ten, lyDo: 'Đây là tài khoản nhân viên, không phải khách' });
+        } else {
+          soKhongDoi++;
+        }
+        return;
+      }
+
+      let moi: string | null = null;
+      if (goCskh) {
+        const that = cskh.get(goCskh.toUpperCase());
+        if (!that) {
+          loi.push({
+            dong: soDong,
+            khach: ten,
+            lyDo: `"${goCskh}" không phải CSKH đang làm (gõ đúng tên đăng nhập, vd CSKHMAILINH)`,
+          });
+          return;
+        }
+        moi = that;
+      }
+
+      if ((k.phuTrach ?? '').toUpperCase() === (moi ?? '').toUpperCase()) {
+        soKhongDoi++;
+        return;
+      }
+      canGhi.push({ khach: k.ten, cskh: moi });
+    });
+
+    for (const g of canGhi) {
+      await this.sequelize.query(
+        `UPDATE dbo.AspNetUsers SET CSKHPhuTrach = :cskh WHERE UserName = :khach`,
+        { replacements: { cskh: g.cskh, khach: g.khach } },
+      );
+    }
+
+    if (canGhi.length) {
+      await this.systemLogsService
+        .create({
+          nguoiTao: nguoiSua,
+          nguon: 'CSKHPhuTrach:GanHangLoat',
+          hanhDong: 'Chinh sua',
+          doiTuong: '',
+          // Ghi trọn danh sách: sau này cần truy "ai chuyển khách X sang sales Y".
+          noiDung:
+            `${canGhi.length} ma khach; ` +
+            canGhi.map((g) => `${g.khach}=${g.cskh ?? '(bo gan)'}`).join(', '),
+        })
+        .catch((err) => console.error('[SystemLog]', err?.message ?? err));
+    }
+
+    return { soDaGhi: canGhi.length, soKhongDoi, loi };
   }
 
   /**

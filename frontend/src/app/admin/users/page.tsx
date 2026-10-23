@@ -25,12 +25,14 @@ import { HopDoiTrangThai } from '@/app/components/hop-doi-trang-thai';
 import { HopXoaTaiKhoan } from '@/app/components/hop-xoa-tai-khoan';
 import { getDanhSachCskh } from '@/lib/api';
 import { useQuyen } from '@/hooks/use-quyen';
+import { GanCskhHangLoat } from '@/app/components/cskh/gan-hang-loat';
 
 interface User {
   Id: string;
   UserName: string;
-  Email: string;
-  PhoneNumber: string;
+  /** Thiếu khoá = máy chủ che (khách của sales khác / người xem là kế toán). */
+  Email?: string;
+  PhoneNumber?: string;
   HoTen: string;
   DiaChi: string;
   TinhThanh: string;
@@ -66,6 +68,9 @@ export default function ListUserPage() {
    * thay vì để một cột rỗng rộng 36 đơn vị giữa bảng.
    */
   const coThaoTac = xemChiTiet || suaTaiKhoan || xoaDuoc;
+  /** Gán CSKH phụ trách hàng loạt — Admin / TP / PP (yêu cầu 23/10/2026). */
+  const phanKhach = co('phanKhachCskh');
+  const [moGan, setMoGan] = useState(false);
 
   const [keyword, setKeyword] = useState('');
   /** Lọc theo CSKH phụ trách. '' = tất cả, CHUA_GAN = những mã chưa ai nhận. */
@@ -155,6 +160,14 @@ export default function ListUserPage() {
    * Dù sao máy chủ cũng đã cắt hai khoá đó khỏi JSON, nên để nguyên danh sách
    * cũ thì cột cũng chỉ toàn rỗng — bỏ hẳn là cách đọc đúng duy nhất.
    */
+  /**
+   * Từ 23/10/2026 sales thường chỉ thấy liên hệ của khách MÌNH phụ trách (và
+   * khách chưa gán). Máy chủ cắt hai khoá khỏi những dòng còn lại, nên ở đây
+   * nhận ra dòng bị che bằng việc THIẾU KHOÁ — khác với khách chưa khai email
+   * (khoá còn, giá trị rỗng). Xem backend/src/users/che-lien-he.ts.
+   */
+  const biChe = (u: User) => !('Email' in u) && !('PhoneNumber' in u);
+
   const handleExport = () => {
     const headers = [
       'ID', 'UserName', 'HoTen', 'CSKH phụ trách', 'Tuổi nợ (ngày)', 'DiaChi',
@@ -166,7 +179,11 @@ export default function ListUserPage() {
       u.Id, u.UserName || '', u.HoTen || '', tenCskh(u.CSKHPhuTrach),
       u.TuoiNo === null || u.TuoiNo === undefined ? '' : String(u.TuoiNo),
       u.DiaChi || '',
-      ...(xemLienHe ? [u.Email || '', u.PhoneNumber || ''] : []),
+      ...(xemLienHe
+        ? biChe(u)
+          ? ['(khách của sales khác)', '(khách của sales khác)']
+          : [u.Email || '', u.PhoneNumber || '']
+        : []),
       u.TinhThanh || '', u.SoTaiKhoan || '',
       u.HinhThucNhanHang || '', u.KhachBuon ? 'true' : 'false', u.LinkTaiKhoanMang || '',
     ]);
@@ -201,6 +218,15 @@ export default function ListUserPage() {
             <FiDownload className="h-4 w-4" />
             Export Excel
           </button>
+          {phanKhach && !moGan && (
+            <button
+              onClick={() => setMoGan(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
+            >
+              <FiUsers className="h-4 w-4" />
+              Gán CSKH hàng loạt
+            </button>
+          )}
           {suaTaiKhoan && (
             <Link
               href="/admin/users/new"
@@ -232,6 +258,15 @@ export default function ListUserPage() {
             Xem danh sách
           </Link>
         </div>
+      )}
+
+      {phanKhach && moGan && (
+        <GanCskhHangLoat
+          danhSach={users}
+          dsCskh={dsCskh}
+          onXong={() => fetchUsers(keyword, locCskh)}
+          onDong={() => setMoGan(false)}
+        />
       )}
 
       {/* Search bar */}
@@ -351,8 +386,21 @@ export default function ListUserPage() {
                     <td className="px-3 py-2.5 truncate text-slate-600" title={user.HoTen || ''}>{user.HoTen || <span className="text-slate-300">—</span>}</td>
                     {xemLienHe && (
                       <>
-                        <td className="px-3 py-2.5 truncate text-slate-600" title={user.Email || ''}>{user.Email || <span className="text-slate-300">—</span>}</td>
-                        <td className="px-3 py-2.5 truncate text-slate-600">{user.PhoneNumber || <span className="text-slate-300">—</span>}</td>
+                        {biChe(user) ? (
+                          <td
+                            colSpan={2}
+                            className="px-3 py-2.5 truncate text-xs text-slate-400"
+                            title={`Khách do ${tenCskh(user.CSKHPhuTrach)} phụ trách — chỉ người phụ trách và TP/PP xem được liên hệ`}
+                          >
+                            <FiLock className="mr-1 inline h-3 w-3" />
+                            Khách của {tenCskh(user.CSKHPhuTrach)}
+                          </td>
+                        ) : (
+                          <>
+                            <td className="px-3 py-2.5 truncate text-slate-600" title={user.Email || ''}>{user.Email || <span className="text-slate-300">—</span>}</td>
+                            <td className="px-3 py-2.5 truncate text-slate-600">{user.PhoneNumber || <span className="text-slate-300">—</span>}</td>
+                          </>
+                        )}
                       </>
                     )}
                     <td className="px-3 py-2.5 truncate text-slate-600" title={user.TinhThanh || ''}>{user.TinhThanh || <span className="text-slate-300">—</span>}</td>

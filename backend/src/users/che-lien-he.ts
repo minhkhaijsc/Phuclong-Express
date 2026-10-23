@@ -39,3 +39,69 @@ export const cheLienHeDanhSach = <T extends Record<string, any>>(rows: T[]): T[]
  */
 export const coXemLienHe = (req: any): boolean =>
   req?.quyen?.quyen?.includes('xemLienHeKhach') === true;
+
+// ---------------------------------------------------------------------------
+// CHE THEO NGƯỜI PHỤ TRÁCH — yêu cầu bên khách 23/10/2026:
+//
+//   "gán danh sách khách theo mỗi nv sales phụ trách chính. Sales chỉ có thể
+//    xem thông tin cá nhân của các khách mình phụ trách, ko xem được thông tin
+//    khách của sales khác (trừ TP,PP)"
+//
+// Ba mức:
+//   • tatCa   — `xemLienHeMoiKhach` (Admin, TP/GĐ của bộ phận xem được liên hệ)
+//   • cuaMinh — chỉ `xemLienHeKhach` (sales thường): thấy khách mình phụ trách
+//               và khách CHƯA GÁN cho ai
+//   • khong   — kế toán và mọi bộ phận còn lại: che hết, như 22/10
+//
+// Khách chưa gán thì để mở là quyết định của anh Quang 23/10: lúc làm, cả 985
+// tài khoản đều chưa gán. Che luôn khách chưa gán là từ phút đẩy lên, 15 sales
+// không gọi được khách nào cho tới khi gán xong cả nghìn mã.
+// ---------------------------------------------------------------------------
+
+export type MucXemLienHe = 'tatCa' | 'cuaMinh' | 'khong';
+
+export const mucXemLienHe = (req: any): MucXemLienHe => {
+  const q: unknown = req?.quyen?.quyen;
+  if (!Array.isArray(q)) return 'khong';
+  if (q.includes('xemLienHeMoiKhach')) return 'tatCa';
+  if (q.includes('xemLienHeKhach')) return 'cuaMinh';
+  return 'khong';
+};
+
+/** So tên đăng nhập: bỏ khoảng trắng hai đầu, không phân biệt hoa thường. */
+const cungTen = (a: unknown, b: unknown): boolean => {
+  const x = String(a ?? '').trim().toUpperCase();
+  return x !== '' && x === String(b ?? '').trim().toUpperCase();
+};
+
+/**
+ * Người đang gọi có được xem liên hệ của dòng này không.
+ *
+ * `phuTrach`/`tenDong` truyền vào riêng chứ không đọc thẳng khoá trên dòng:
+ * mỗi đường trả dữ liệu đặt tên khác nhau (`CSKHPhuTrach`/`UserName` ở danh
+ * sách User, `cskhPhuTrach`/`userName` ở màn trạng thái khách).
+ */
+export const duocXemLienHeCua = (
+  req: any,
+  phuTrach: unknown,
+  tenDong?: unknown,
+): boolean => {
+  const muc = mucXemLienHe(req);
+  if (muc === 'tatCa') return true;
+  if (muc === 'khong') return false;
+  const toi = req?.user?.username;
+  // Chính tài khoản của mình thì luôn xem được.
+  if (tenDong !== undefined && cungTen(tenDong, toi)) return true;
+  // Chưa gán ai → mở (xem ghi chú đầu khối).
+  if (!String(phuTrach ?? '').trim()) return true;
+  return cungTen(phuTrach, toi);
+};
+
+/** Che một dòng của `AspNetUsers` (khoá `Email`, `PhoneNumber`) theo người xem. */
+export const cheTheoNguoiXem = <T extends Record<string, any>>(req: any, row: T): T => {
+  if (!row || typeof row !== 'object') return row;
+  return duocXemLienHeCua(req, row.CSKHPhuTrach, row.UserName) ? row : cheLienHe(row);
+};
+
+export const cheTheoNguoiXemDanhSach = <T extends Record<string, any>>(req: any, rows: T[]): T[] =>
+  (rows ?? []).map((r) => cheTheoNguoiXem(req, r));

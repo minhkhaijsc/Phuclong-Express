@@ -116,6 +116,39 @@ describe('QuyenService', () => {
     });
   });
 
+  describe('23/10/2026 — sales chỉ xem khách mình phụ trách (trừ TP, PP)', () => {
+    it('CSKH thường KHÔNG xem được khách của sales khác, KHÔNG tự gán được', () => {
+      const x = s.tinh(['CSKH']);
+      expect(x.quyen).toContain('xemLienHeKhach');
+      expect(x.quyen).not.toContain('xemLienHeMoiKhach');
+      expect(x.quyen).not.toContain('phanKhachCskh');
+    });
+
+    it('CSKH + Trưởng phòng (TP/PP) xem được hết và gán được', () => {
+      const x = s.tinh(['CSKH', 'TruongPhong']);
+      expect(x.quyen).toContain('xemLienHeMoiKhach');
+      expect(x.quyen).toContain('phanKhachCskh');
+    });
+
+    it('KETOAN mang cấp Trưởng phòng vẫn KHÔNG xem được liên hệ khách', () => {
+      // Cấp trơn theo cấp là lộ hết số điện thoại cho kế toán — ngược yêu cầu 22/10.
+      const x = s.tinh(['KeToan', 'TruongPhong']);
+      expect(x.quyen).not.toContain('xemLienHeKhach');
+      expect(x.quyen).not.toContain('xemLienHeMoiKhach');
+      expect(x.quyen).not.toContain('phanKhachCskh');
+    });
+
+    it('Kho mang cấp Trưởng phòng cũng không', () => {
+      expect(s.tinh(['Kho', 'TruongPhong']).quyen).not.toContain('xemLienHeMoiKhach');
+    });
+
+    it('Admin xem hết và gán được', () => {
+      const x = s.tinh(['Admin']);
+      expect(x.quyen).toContain('xemLienHeMoiKhach');
+      expect(x.quyen).toContain('phanKhachCskh');
+    });
+  });
+
   describe('5 & 6. Vận chuyển và MKT — xem all, KHÔNG được sửa', () => {
     for (const bp of [BO_PHAN.VanChuyen, BO_PHAN.MKT]) {
       it(`${bp} xem được nhưng không sửa được gì`, () => {

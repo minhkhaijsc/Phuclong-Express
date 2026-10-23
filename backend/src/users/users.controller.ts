@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Controller,
   Get,
   Post,
@@ -27,7 +28,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 import { MienQuyen, Quyen } from '../auth/quyen/quyen.decorator';
-import { cheLienHe, cheLienHeDanhSach, coXemLienHe } from './che-lien-he';
+import { cheTheoNguoiXem, cheTheoNguoiXemDanhSach, duocXemLienHeCua } from './che-lien-he';
 /**
  * Users Controller
  *
@@ -77,7 +78,9 @@ export class UsersController {
     @Query('cskh') cskh?: string,
   ): Promise<User[]> {
     const rows = await this.usersService.findAll(keyword, cskh);
-    return coXemLienHe(req) ? rows : cheLienHeDanhSach(rows);
+    // Che theo dòng: kế toán che hết, sales thường chỉ thấy khách mình phụ
+    // trách (và khách chưa gán), Admin/TP/PP thấy hết. Xem `che-lien-he.ts`.
+    return cheTheoNguoiXemDanhSach(req, rows);
   }
 
   // ---------------- TRẠNG THÁI KHÁCH HÀNG ----------------
@@ -108,22 +111,54 @@ export class UsersController {
   }
 
   /**
+   * POST /users/cskh-phu-trach/hang-loat
+   *
+   * Gán CSKH phụ trách cho nhiều khách từ file Excel. Chỉ Admin / TP / PP
+   * (`phanKhachCskh`) — xem ghi chú ở `bo-phan.ts`.
+   *
+   * Khai TRƯỚC các route `:id`.
+   */
+  @Quyen('phanKhachCskh')
+  @Post('cskh-phu-trach/hang-loat')
+  async ganCskhHangLoat(
+    @Body() body: { dong?: { khach?: unknown; cskh?: unknown }[] },
+    @Request() req: any,
+  ) {
+    return this.usersService.ganCskhHangLoat(body?.dong ?? [], req.user?.username || 'system');
+  }
+
+  /**
    * GET /users/trang-thai
    * Danh sách khách kèm tình trạng giao dịch. `nhom=can-dong-ma` cho việc cần làm.
    */
   @Get('trang-thai')
   async trangThaiDanhSach(
+    @Request() req: any,
     @Query('nhom') nhom?: string,
     @Query('tuKhoa') tuKhoa?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.trangThaiKhachService.danhSach({
+    const kq = await this.trangThaiKhachService.danhSach({
       nhom,
       tuKhoa,
       page: Number(page) || 1,
       limit: Number(limit) || 50,
     });
+    return { ...kq, data: kq.data.map((k) => this.cheTrangThai(req, k)) };
+  }
+
+  /**
+   * Màn trạng thái khách cũng trả số điện thoại và email — che theo đúng luật
+   * của danh sách User, không thì sales mở màn này là đọc được khách người khác.
+   */
+  private cheTrangThai<T extends { phone?: unknown; email?: unknown; cskhPhuTrach?: unknown; userName?: unknown }>(
+    req: any,
+    k: T,
+  ): T {
+    if (duocXemLienHeCua(req, k.cskhPhuTrach, k.userName)) return k;
+    const { phone: _p, email: _e, ...con } = k;
+    return con as T;
   }
 
   /**
@@ -136,8 +171,8 @@ export class UsersController {
    * KHÔNG lọc theo vai trò: tài khoản nhân viên cũng phải mở được ở đây.
    */
   @Get('trang-thai/mot/:id')
-  async motTrangThai(@Param('id') id: string) {
-    return this.trangThaiKhachService.motKhach(id);
+  async motTrangThai(@Param('id') id: string, @Request() req: any) {
+    return this.cheTrangThai(req, await this.trangThaiKhachService.motKhach(id));
   }
 
   /**
@@ -181,7 +216,7 @@ export class UsersController {
     // Hôm nay là vô hại — đường này đòi `taiKhoan.xem`, mà ai có mã đó cũng có
     // `xemLienHeKhach`. Để sẵn vì ngày nào đó cấp `taiKhoan.xem` cho thêm một
     // bộ phận là email chảy ra đây, trong khi màn danh sách vẫn che đúng.
-    return coXemLienHe(req) ? user : cheLienHe(user);
+    return cheTheoNguoiXem(req, user);
   }
 
   /**
@@ -239,7 +274,36 @@ export class UsersController {
     @Request() req: any,
   ): Promise<User> {
     await this.taoTaiKhoanService.chanNeuLaNhanVien(id, req.quyen);
-    return this.usersService.update(id, userData, req.user?.username || 'system');
+    const hienTai = await this.usersService.findByStringId(id);
+    const duLieu: Partial<User> = { ...(userData ?? {}) };
+
+    // ĐỔI người phụ trách chỉ Admin / TP / PP làm được (`phanKhachCskh`). Sales
+    // thường tự gán được thì kéo khách của người khác về mình là đọc được số
+    // điện thoại — đúng cái rào yêu cầu 23/10/2026 dựng ra để chặn. Gửi lại
+    // đúng giá trị cũ thì cho qua: màn sửa gửi nguyên form, có cả ô này.
+    if ('CSKHPhuTrach' in duLieu) {
+      const chuan = (v: unknown) => String(v ?? '').trim().toUpperCase();
+      if (chuan(duLieu.CSKHPhuTrach) !== chuan(hienTai.CSKHPhuTrach)) {
+        if (!req?.quyen?.quyen?.includes('phanKhachCskh')) {
+          throw new ForbiddenException(
+            'Chỉ Admin hoặc Trưởng/Phó phòng được đổi CSKH phụ trách của khách.',
+          );
+        }
+        duLieu.CSKHPhuTrach = String(duLieu.CSKHPhuTrach ?? '').trim() || null;
+      } else {
+        delete duLieu.CSKHPhuTrach;
+      }
+    }
+
+    // Không xem được email/SĐT của khách này thì cũng không được ghi vào hai ô
+    // đó. Màn sửa nhận dòng ĐÃ CHE (thiếu hai khoá), nên nếu nó gửi lên chuỗi
+    // rỗng thì không chặn ở đây là xoá trắng liên hệ thật của khách.
+    if (!duocXemLienHeCua(req, hienTai.CSKHPhuTrach, hienTai.UserName)) {
+      delete duLieu.Email;
+      delete duLieu.PhoneNumber;
+    }
+
+    return this.usersService.update(id, duLieu, req.user?.username || 'system');
   }
 
   /**

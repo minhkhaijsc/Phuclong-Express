@@ -1,4 +1,12 @@
-import { cheLienHe, cheLienHeDanhSach, coXemLienHe } from './che-lien-he';
+import {
+  cheLienHe,
+  cheLienHeDanhSach,
+  coXemLienHe,
+  cheTheoNguoiXem,
+  cheTheoNguoiXemDanhSach,
+  duocXemLienHeCua,
+  mucXemLienHe,
+} from './che-lien-he';
 
 describe('che-lien-he — cắt email/sđt khỏi dữ liệu khách', () => {
   const khach = {
@@ -54,5 +62,60 @@ describe('che-lien-he — cắt email/sđt khỏi dữ liệu khách', () => {
       expect(coXemLienHe(undefined)).toBe(false);
       expect(coXemLienHe({ quyen: {} })).toBe(false);
     });
+  });
+});
+
+describe('che theo người phụ trách — yêu cầu 23/10/2026', () => {
+  const nguoi = (username: string, ...quyen: string[]) => ({ user: { username }, quyen: { quyen } });
+  const sales = nguoi('CSKHMAILINH', 'xemLienHeKhach');
+  const tp = nguoi('CSKHTHUPHUONG', 'xemLienHeKhach', 'xemLienHeMoiKhach');
+  const keToan = nguoi('KETOANDIEP', 'xemDanhSachKhach');
+  const dong = (CSKHPhuTrach: string | null, UserName = 'HP1') => ({
+    UserName,
+    CSKHPhuTrach,
+    Email: 'a@x.vn',
+    PhoneNumber: '0900000000',
+  });
+
+  it('sales thấy khách MÌNH phụ trách', () => {
+    expect('PhoneNumber' in cheTheoNguoiXem(sales, dong('CSKHMAILINH'))).toBe(true);
+  });
+
+  it('so tên bỏ khoảng trắng, không phân biệt hoa thường', () => {
+    expect('PhoneNumber' in cheTheoNguoiXem(sales, dong(' cskhmailinh '))).toBe(true);
+  });
+
+  it('sales KHÔNG thấy khách của sales khác', () => {
+    const ra = cheTheoNguoiXem(sales, dong('CSKHNGA'));
+    expect('PhoneNumber' in ra).toBe(false);
+    expect('Email' in ra).toBe(false);
+    expect(ra.UserName).toBe('HP1');
+  });
+
+  it('khách CHƯA GÁN thì sales nào cũng thấy (chốt 23/10)', () => {
+    expect('PhoneNumber' in cheTheoNguoiXem(sales, dong(null))).toBe(true);
+    expect('PhoneNumber' in cheTheoNguoiXem(sales, dong('   '))).toBe(true);
+  });
+
+  it('TP/PP thấy cả khách của sales khác', () => {
+    expect('PhoneNumber' in cheTheoNguoiXem(tp, dong('CSKHNGA'))).toBe(true);
+  });
+
+  it('kế toán vẫn bị che hết, kể cả khách chưa gán', () => {
+    expect('PhoneNumber' in cheTheoNguoiXem(keToan, dong(null))).toBe(false);
+  });
+
+  it('không có req.quyen (route chưa qua guard) thì che', () => {
+    expect(duocXemLienHeCua({}, null)).toBe(false);
+    expect(mucXemLienHe(undefined)).toBe('khong');
+  });
+
+  it('luôn thấy chính tài khoản của mình', () => {
+    expect(duocXemLienHeCua(sales, 'CSKHNGA', 'CSKHMAILINH')).toBe(true);
+  });
+
+  it('che cả danh sách theo từng dòng', () => {
+    const ra = cheTheoNguoiXemDanhSach(sales, [dong('CSKHMAILINH', 'A'), dong('CSKHNGA', 'B'), dong(null, 'C')]);
+    expect(ra.map((r) => 'PhoneNumber' in r)).toEqual([true, false, true]);
   });
 });
