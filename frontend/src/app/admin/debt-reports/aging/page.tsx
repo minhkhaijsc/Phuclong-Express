@@ -48,9 +48,12 @@ const tienNgan = (v: number) => {
 /** Một chỗ duy nhất định nghĩa tên và màu của bốn nhóm — dùng lại ở 3 nơi. */
 const NHOM = [
   { khoa: 'chuaToiHan', nhan: 'Chưa tới hạn', mau: 'bg-slate-400' },
-  { khoa: 'n0_30', nhan: 'Quá hạn ≤ 30 ngày', mau: 'bg-emerald-500' },
-  { khoa: 'n31_60', nhan: 'Quá hạn 31-60 ngày', mau: 'bg-amber-400' },
-  { khoa: 'tren60', nhan: 'Quá hạn > 60 ngày', mau: 'bg-red-600' },
+  // Ba nhóm này gom CẢ hai loại khách: có tuổi nợ thì đếm ngày quá hạn, chưa
+  // đặt thì đếm từ ngày ghi nợ. Vì vậy nhãn KHÔNG ghi "Quá hạn" — với khách
+  // chưa đặt, 750 ngày là tuổi khoản nợ chứ chưa phải trễ hẹn 750 ngày.
+  { khoa: 'n0_30', nhan: '≤ 30 ngày', mau: 'bg-emerald-500' },
+  { khoa: 'n31_60', nhan: '31-60 ngày', mau: 'bg-amber-400' },
+  { khoa: 'tren60', nhan: '> 60 ngày', mau: 'bg-red-600' },
 ] as const;
 
 function O({ nhan, giaTri, phu, mau }: { nhan: string; giaTri: string; phu?: string; mau: string }) {
@@ -123,7 +126,10 @@ export default function TuoiNoPage() {
   });
 
   const t = tongHop.data;
-  const quaHan = t ? t.n0_30 + t.n31_60 + t.tren60 : 0;
+  // Quá hạn THẬT chỉ tính khách có tuổi nợ. Phần của khách chưa đặt vẫn nằm
+  // trong ba nhóm tuổi nhưng được tách ra ô riêng — chưa thoả thuận thì chưa
+  // có hạn để quá. Ba ô quá hạn + chưa đặt + chưa tới hạn = tổng còn nợ.
+  const quaHan = t ? Math.max(0, t.n0_30 + t.n31_60 + t.tren60 - (t.chuaDatTuoiNo ?? 0)) : 0;
   const tyLeGia = t && t.tongConNo > 0 ? Math.round((t.tren60 / t.tongConNo) * 100) : 0;
 
   /** Thanh chia tỷ lệ bốn nhóm của một khách. */
@@ -167,7 +173,7 @@ export default function TuoiNoPage() {
         <div className="p-6 text-sm text-red-600">{(tongHop.error as Error).message}</div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <O
               nhan="Tổng còn nợ"
               giaTri={tien(t?.tongConNo ?? 0)}
@@ -177,11 +183,17 @@ export default function TuoiNoPage() {
             <O
               nhan="Đang quá hạn"
               giaTri={tien(quaHan)}
-              phu="Đã tới hạn mà chưa trả"
+              phu="Khách có tuổi nợ, đã quá hạn mà chưa trả"
               mau="border-amber-200 bg-amber-50 text-amber-700"
             />
             <O
-              nhan="Quá hạn trên 60 ngày"
+              nhan="Chưa đặt tuổi nợ"
+              giaTri={tien(t?.chuaDatTuoiNo ?? 0)}
+              phu="Chưa có thoả thuận — tính tuổi từ ngày ghi nợ"
+              mau="border-blue-200 bg-blue-50 text-blue-700"
+            />
+            <O
+              nhan="Nợ trên 60 ngày"
               giaTri={tien(t?.tren60 ?? 0)}
               phu={`${tyLeGia}% tổng nợ — khó đòi nhất`}
               mau="border-red-300 bg-red-50 text-red-700"
@@ -215,6 +227,11 @@ export default function TuoiNoPage() {
                 </span>
               ))}
             </div>
+            <p className="mt-2 text-xs text-gray-400">
+              Khách có tuổi nợ: đếm số ngày <strong className="font-medium">quá hạn</strong>. Khách
+              chưa đặt tuổi nợ: đếm từ <strong className="font-medium">ngày ghi nợ</strong> — đó là
+              tuổi của khoản nợ, chưa phải số ngày trễ hẹn.
+            </p>
           </div>
         </>
       )}
@@ -275,7 +292,7 @@ export default function TuoiNoPage() {
                   <th className="p-3 text-center">Tuổi nợ</th>
                   <th className="p-3 text-right">Còn nợ</th>
                   <th className="p-3 text-center">Phân bố</th>
-                  <th className="p-3 text-right">Quá hạn</th>
+                  <th className="p-3 text-right">Số ngày nợ</th>
                   <th className="p-3 text-right">Trên 60 ngày</th>
                   <th className="p-3 text-right">Phát sinh cuối</th>
                 </tr>
@@ -371,6 +388,11 @@ export default function TuoiNoPage() {
                         title={`Khoản cũ nhất: ${d.soNgayCuNhat} ngày kể từ ngày ghi nợ`}
                       >
                         {d.soNgayQuaHan > 0 ? `${d.soNgayQuaHan} ngày` : 'Chưa tới hạn'}
+                        {d.soNgayQuaHan > 0 && (
+                          <div className="text-[11px] font-normal text-gray-400">
+                            {d.tuoiNo === null ? 'từ ngày ghi nợ' : 'quá hạn'}
+                          </div>
+                        )}
                       </td>
                       <td className="p-3 text-right text-red-600">
                         {d.tren60 > 0 ? tien(d.tren60) : '—'}

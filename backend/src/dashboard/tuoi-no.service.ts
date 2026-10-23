@@ -79,6 +79,16 @@ export interface TongHopTuoiNo {
   soKhachConNo: number;
   tongConNo: number;
   chuaToiHan: number;
+  /**
+   * Phần nợ của khách CHƯA ĐẶT tuổi nợ. Phần này vẫn nằm trong ba nhóm tuổi
+   * (đếm từ ngày ghi nợ), nhưng KHÔNG được gọi là "quá hạn": chưa có thoả
+   * thuận thì chưa có hạn mà quá.
+   *
+   * Thiếu con số này, màn hình lấy cả ba nhóm làm "đang quá hạn" — đúng cái
+   * kế toán bắt được 23/10/2026: 0/985 khách có tuổi nợ, nên "đang quá hạn"
+   * bằng y tổng còn nợ.
+   */
+  chuaDatTuoiNo: number;
   n0_30: number;
   n31_60: number;
   tren60: number;
@@ -207,13 +217,15 @@ export class TuoiNoService {
                SUM(CASE WHEN nhom = 0 THEN conLai ELSE 0 END) AS chuaToiHan,
                SUM(CASE WHEN nhom = 1 THEN conLai ELSE 0 END) AS n0_30,
                SUM(CASE WHEN nhom = 2 THEN conLai ELSE 0 END) AS n31_60,
-               SUM(CASE WHEN nhom = 3 THEN conLai ELSE 0 END) AS tren60
+               SUM(CASE WHEN nhom = 3 THEN conLai ELSE 0 END) AS tren60,
+               SUM(CASE WHEN TuoiNo IS NULL THEN conLai ELSE 0 END) AS chuaDatTuoiNo
         FROM PhanNhom WHERE conLai >= 1
         GROUP BY UserName
       )
       SELECT COUNT(*) AS soKhachConNo,
              SUM(tong) AS tongConNo,
              SUM(chuaToiHan) AS chuaToiHan,
+             SUM(chuaDatTuoiNo) AS chuaDatTuoiNo,
              SUM(n0_30) AS n0_30, SUM(n31_60) AS n31_60, SUM(tren60) AS tren60
       FROM TheoKhach WHERE tong > 1000`);
 
@@ -221,6 +233,7 @@ export class TuoiNoService {
       soKhachConNo: Number(r?.soKhachConNo ?? 0),
       tongConNo: Number(r?.tongConNo ?? 0),
       chuaToiHan: Number(r?.chuaToiHan ?? 0),
+      chuaDatTuoiNo: Number(r?.chuaDatTuoiNo ?? 0),
       n0_30: Number(r?.n0_30 ?? 0),
       n31_60: Number(r?.n31_60 ?? 0),
       tren60: Number(r?.tren60 ?? 0),

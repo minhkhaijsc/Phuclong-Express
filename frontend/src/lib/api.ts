@@ -2531,6 +2531,8 @@ export interface TuoiNoTongHop {
   tongConNo: number;
   /** Khoản chưa tới hạn trả — chỉ khách CÓ tuổi nợ mới có phần này. */
   chuaToiHan: number;
+  /** Nợ của khách chưa đặt tuổi nợ — nằm trong ba nhóm nhưng KHÔNG phải quá hạn. */
+  chuaDatTuoiNo: number;
   n0_30: number;
   n31_60: number;
   tren60: number;

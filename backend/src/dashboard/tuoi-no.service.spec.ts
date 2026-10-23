@@ -78,6 +78,27 @@ describe('TuoiNoService', () => {
   });
 
   describe('tongHop', () => {
+    it('tách phần của khách CHƯA ĐẶT tuổi nợ — phần đó không phải quá hạn', async () => {
+      // 23/10/2026: 0/985 khách có tuổi nợ, nên "đang quá hạn" hiện bằng y
+      // tổng còn nợ. Ba ô quá hạn thật + chưa đặt + chưa tới hạn = tổng.
+      traVe([
+        {
+          soKhachConNo: 148,
+          tongConNo: 382303029,
+          chuaToiHan: 0,
+          chuaDatTuoiNo: 382303029,
+          n0_30: 300000000,
+          n31_60: 38478268,
+          tren60: 43824761,
+        },
+      ]);
+      const kq = await service.tongHop();
+      const quaHanThat = kq.n0_30 + kq.n31_60 + kq.tren60 - kq.chuaDatTuoiNo;
+      expect(quaHanThat).toBe(0);
+      expect(quaHanThat + kq.chuaDatTuoiNo + kq.chuaToiHan).toBe(kq.tongConNo);
+      expect(sqlLanDau()).toContain('SUM(CASE WHEN TuoiNo IS NULL THEN conLai ELSE 0 END) AS chuaDatTuoiNo');
+    });
+
     it('trả đủ cả ô "chưa tới hạn" — thiếu nó là bốn nhóm cộng không ra tổng', async () => {
       traVe([
         {
@@ -99,6 +120,7 @@ describe('TuoiNoService', () => {
         soKhachConNo: 0,
         tongConNo: 0,
         chuaToiHan: 0,
+        chuaDatTuoiNo: 0,
         n0_30: 0,
         n31_60: 0,
         tren60: 0,
