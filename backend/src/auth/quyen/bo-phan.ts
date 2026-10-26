@@ -124,6 +124,16 @@ export const QUYEN_LE = {
    * không gộp cho gọn rồi mở rộng hơn mức bên khách cho.
    */
   congNoNcc: 'congNoNcc',
+  /**
+   * Xem bảng tỷ giá trong khu quản trị (/admin/exchange-rates), CHỈ XEM.
+   *
+   * Yêu cầu bên khách 26/10/2026: "mục tỷ giá anh mở các tk của Kho xem giúp e".
+   * Tách riêng khỏi miền `danhMuc` vì cho Kho cả miền đó là mở luôn kỳ, danh
+   * sách website, tài khoản ngân hàng, công mua hàng — rộng hơn mức được hỏi.
+   * Ai đã xem được `danhMuc` thì tự có quyền này (xem QuyenService.tinh).
+   * Sửa tỷ giá vẫn đòi `danhMuc.sua`.
+   */
+  xemTyGia: 'xemTyGia',
   /** Duyệt dòng công nợ khách báo chuyển khoản. */
   duyetCongNo: 'duyetCongNo',
   /** Tạo tài khoản khách hàng. */
@@ -434,14 +444,14 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
     nhan: 'Kho',
     tienTo: ['KHO'],
     mien: { vanChuyen: SUA, muaHang: SUA, congNo: SUA, rieng: SUA },
-    le: [QUYEN_LE.baoChuyenKhoan],
+    le: [QUYEN_LE.baoChuyenKhoan, QUYEN_LE.xemTyGia],
   },
 
   [BO_PHAN.KhoSG]: {
     nhan: 'Kho Sài Gòn',
     tienTo: ['KHOSG'],
     mien: { vanChuyen: SUA, muaHang: SUA, congNo: SUA, rieng: SUA },
-    le: [QUYEN_LE.baoChuyenKhoan],
+    le: [QUYEN_LE.baoChuyenKhoan, QUYEN_LE.xemTyGia],
   },
 };
 

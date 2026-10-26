@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FiTrendingUp, FiEdit2, FiCheck, FiX, FiRefreshCw, FiClock, FiEdit3 } from 'react-icons/fi';
 import apiClient from '@/lib/api-client';
+import { useQuyen } from '@/hooks/use-quyen';
 
 interface ExchangeRate {
   Name: string;
@@ -22,6 +23,9 @@ interface ExchangeRateHistory {
 type BulkEdits = Record<string, { tyGiaVND: string; congShipVeVN: string }>;
 
 export default function ExchangeRatesPage() {
+  /** Kho chỉ được XEM tỷ giá (quyền `xemTyGia`), nút sửa chỉ hiện khi sửa được danh mục. */
+  const { co } = useQuyen();
+  const suaDuoc = co('danhMuc.sua');
   const [rates, setRates] = useState<ExchangeRate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -230,7 +234,7 @@ export default function ExchangeRatesPage() {
         </div>
 
         {/* Bulk edit toggle */}
-        {!loading && rates.length > 0 && !editingName && (
+        {suaDuoc && !loading && rates.length > 0 && !editingName && (
           bulkMode ? (
             <div className="flex items-center gap-2">
               <button
@@ -409,13 +413,13 @@ export default function ExchangeRatesPage() {
                         </>
                       ) : (
                         <>
-                          <button
+                          {suaDuoc && <button
                             onClick={() => startEdit(rate)}
                             className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-800"
                           >
                             <FiEdit2 className="h-3.5 w-3.5" />
                             Sửa
-                          </button>
+                          </button>}
                           <button
                             onClick={() => openHistory(rate.Name)}
                             className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700"

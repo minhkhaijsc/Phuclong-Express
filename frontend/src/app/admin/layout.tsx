@@ -145,7 +145,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       icon: FiSettings,
       submenu: [
         { href: '/admin/periods', label: 'Danh mục kỳ', canQuyen: 'danhMuc.xem' },
-        { href: '/admin/exchange-rates', label: 'Tỷ giá', canQuyen: 'danhMuc.xem' },
+        { href: '/admin/exchange-rates', label: 'Tỷ giá', canQuyen: 'xemTyGia' },
         { href: '/admin/websites', label: 'Danh sách website', canQuyen: 'danhMuc.xem' },
         { href: '/admin/bank-accounts', label: 'Tài khoản ngân hàng', canQuyen: 'danhMuc.xem' },
         { href: '/admin/service-fees', label: 'Công mua hàng', canQuyen: 'danhMuc.xem' },

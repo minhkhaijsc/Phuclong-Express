@@ -461,6 +461,23 @@ describe('QuyenService', () => {
     });
   });
 
+  describe('Xem tỷ giá (26/10/2026)', () => {
+    it('Kho và Kho SG xem được tỷ giá nhưng KHÔNG mở cả miền danh mục', () => {
+      for (const bp of [BO_PHAN.Kho, BO_PHAN.KhoSG]) {
+        const r = q(bp).quyen;
+        expect(r).toContain('xemTyGia');
+        expect(r).not.toContain('danhMuc.xem');
+        expect(r).not.toContain('danhMuc.sua');
+      }
+    });
+
+    it('ai xem được danh mục thì vẫn xem được tỷ giá như trước, kể cả khách', () => {
+      expect(q(BO_PHAN.Admin).quyen).toContain('xemTyGia');
+      expect(q(BO_PHAN.CSKH).quyen).toContain('xemTyGia');
+      expect(q().quyen).toContain('xemTyGia');
+    });
+  });
+
   describe('Tên bộ phận để hiện trong thông báo lỗi', () => {
     it('đọc được, không phải mã', () => {
       expect(s.tenBoPhan(q(BO_PHAN.Kho))).toBe('Kho');

@@ -4,7 +4,7 @@ import type { UpdateExchangeRateDto } from './exchange-rates.service';
 import { ExchangeRateSchedulerService } from './exchange-rate-scheduler.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-import { MienQuyen } from '../auth/quyen/quyen.decorator';
+import { MienQuyen, Quyen } from '../auth/quyen/quyen.decorator';
 import { Public } from '../common/decorators/public.decorator';
 @Controller('exchange-rates')
 @MienQuyen('danhMuc')
@@ -14,6 +14,8 @@ export class ExchangeRatesController {
     private readonly schedulerService: ExchangeRateSchedulerService,
   ) {}
 
+  /** Kho chỉ xem được tỷ giá, không được cả miền danh mục — xem `xemTyGia`. */
+  @Quyen('xemTyGia')
   @Get()
   async findAll() {
     const data = await this.exchangeRatesService.findAll();
@@ -42,6 +44,7 @@ export class ExchangeRatesController {
     return { data };
   }
 
+  @Quyen('xemTyGia')
   @Get(':name')
   async findOne(@Param('name') name: string) {
     const data = await this.exchangeRatesService.findOne(name);

@@ -84,6 +84,8 @@ export class QuyenService {
         if (q?.sua) quyen.add(`${mien as Mien}.sua`);
       }
       for (const l of LE_CUA_KHACH) quyen.add(l);
+      // Khách xem được danh mục (trang tạo đơn nạp tỷ giá) — giữ như cũ.
+      if (quyen.has(`${'danhMuc' as Mien}.xem`)) quyen.add(QUYEN_LE.xemTyGia);
       return { boPhan, cap, laKhach, quyen: [...quyen] };
     }
 
@@ -118,6 +120,9 @@ export class QuyenService {
       quyen.add(QUYEN_LE.xemLienHeMoiKhach);
       quyen.add(QUYEN_LE.phanKhachCskh);
     }
+
+    // Xem được danh mục là xem được tỷ giá — tỷ giá nằm trong danh mục.
+    if (quyen.has(`${'danhMuc' as Mien}.xem`)) quyen.add(QUYEN_LE.xemTyGia);
 
     // Việc cá nhân thì ai đăng nhập cũng làm được.
     quyen.add('rieng.xem');
