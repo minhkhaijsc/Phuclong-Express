@@ -87,6 +87,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         { label: 'BẢNG CÂN ĐỐI CÔNG NỢ', href: '/bao-cao-cong-no' },
       ],
     },
+    { label: 'HỢP ĐỒNG', href: '/hop-dong' },
     { label: 'TIN TỨC', href: '/tin-tuc' },
     { label: 'HỎI ĐÁP', href: '/hoi-dap' },
   ];

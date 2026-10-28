@@ -16,6 +16,7 @@ const NHAN_QUYEN_LE: Record<string, string> = {
   giaNcc: 'xem giá nhà cung cấp',
   congNoNcc: 'xem công nợ phải trả nhà cung cấp',
   xemTyGia: 'xem tỷ giá',
+  hopDong: 'tạo hợp đồng cho khách',
   duyetCongNo: 'duyệt công nợ',
   taoKhach: 'tạo tài khoản khách hàng',
   taoNhanVien: 'tạo tài khoản nhân viên',

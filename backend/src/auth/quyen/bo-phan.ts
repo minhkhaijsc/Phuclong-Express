@@ -134,6 +134,11 @@ export const QUYEN_LE = {
    * Sửa tỷ giá vẫn đòi `danhMuc.sua`.
    */
   xemTyGia: 'xemTyGia',
+  /**
+   * Hợp đồng mẫu + tạo link hợp đồng cho khách ký online (/admin/hop-dong).
+   * Yêu cầu bên khách 28/10/2026: "cả 3" — Admin, CSKH, Kế toán.
+   */
+  hopDong: 'hopDong',
   /** Duyệt dòng công nợ khách báo chuyển khoản. */
   duyetCongNo: 'duyetCongNo',
   /** Tạo tài khoản khách hàng. */
@@ -274,6 +279,7 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
       QUYEN_LE.phanKhachCskh,
       QUYEN_LE.quanLyRole,
       QUYEN_LE.baoChuyenKhoan,
+      QUYEN_LE.hopDong,
     ],
   },
 
@@ -324,6 +330,7 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
       // CSKH phải gọi và gửi mail cho khách — hai cột liên hệ là việc của họ.
       QUYEN_LE.xemLienHeKhach,
       QUYEN_LE.baoChuyenKhoan,
+      QUYEN_LE.hopDong,
     ],
   },
 
@@ -377,6 +384,7 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
        */
       QUYEN_LE.xemDanhSachKhach,
       QUYEN_LE.baoChuyenKhoan,
+      QUYEN_LE.hopDong,
     ],
   },
 

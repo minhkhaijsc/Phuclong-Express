@@ -478,6 +478,16 @@ describe('QuyenService', () => {
     });
   });
 
+  describe('Hợp đồng (28/10/2026)', () => {
+    it('Admin, CSKH, Kế toán tạo được hợp đồng; bộ phận khác và khách thì không', () => {
+      for (const bp of [BO_PHAN.Admin, BO_PHAN.CSKH, BO_PHAN.KeToan]) expect(q(bp).quyen).toContain('hopDong');
+      for (const bp of [BO_PHAN.Kho, BO_PHAN.KhoSG, BO_PHAN.MuaHang, BO_PHAN.MKT, BO_PHAN.VanChuyen]) {
+        expect(q(bp).quyen).not.toContain('hopDong');
+      }
+      expect(q().quyen).not.toContain('hopDong');
+    });
+  });
+
   describe('Tên bộ phận để hiện trong thông báo lỗi', () => {
     it('đọc được, không phải mã', () => {
       expect(s.tenBoPhan(q(BO_PHAN.Kho))).toBe('Kho');

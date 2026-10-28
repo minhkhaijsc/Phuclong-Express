@@ -17,6 +17,7 @@
     "axios": "^1.13.6",
     "country-flag-icons": "^1.6.16",
     "date-fns": "^4.1.0",
+    "docx-preview": "^0.3.7",
     "exceljs": "^4.4.0",
     "flatpickr": "^4.6.13",
     "next": "15.3.9",

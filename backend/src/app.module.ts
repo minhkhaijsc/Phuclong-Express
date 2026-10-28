@@ -26,6 +26,7 @@ import { InStockItemsModule } from './in-stock-items/in-stock-items.module';
 import { PurchasedItemsModule } from './purchased-items/purchased-items.module';
 import { ShippersModule } from './shippers/shippers.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { HopDongModule } from './hop-dong/hop-dong.module';
 import { QnaModule } from './qna/qna.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ArticlesModule } from './articles/articles.module';
@@ -70,6 +71,7 @@ import { QuyenGuard } from './auth/guards/quyen.guard';
     NotificationsModule,
     ArticlesModule,
     DashboardModule,
+    HopDongModule,
   ],
   controllers: [AppController],
   providers: [

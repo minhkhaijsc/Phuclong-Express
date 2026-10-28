@@ -137,6 +137,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         { href: '/admin/roles', label: 'Role', canQuyen: 'taiKhoan.xem' },
         { href: '/admin/users', label: 'User', canQuyen: 'xemDanhSachKhach' },
         { href: '/admin/khach-ngung-giao-dich', label: 'Khách ngừng giao dịch', canQuyen: 'taiKhoan.xem' },
+        { href: '/admin/hop-dong', label: 'Hợp đồng khách', canQuyen: 'hopDong' },
         { href: '/admin/clear-user-data', label: 'Xóa dữ liệu theo user', canQuyen: 'quanLyRole' },
       ],
     },
