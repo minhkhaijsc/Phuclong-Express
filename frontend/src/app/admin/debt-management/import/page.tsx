@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import { useQuyen } from '@/hooks/use-quyen';
 import { downloadDataAsExcel, readExcelSheetNames, readExcelSheetRows } from '@/lib/excel-download';
+import { TIEN_MAT } from '@/lib/tien-mat';
 
 /**
  * Debt Import Page — bulk "Thêm mới công nợ" from Excel
@@ -116,7 +117,8 @@ function parseImportRows(
    * ghi y hệt các dòng công nợ đã có của khách đó, không tách làm hai mã.
    */
   const userMap = new Map(users.map((u) => [u.UserName.trim().toLowerCase(), u.UserName]));
-  const bankSet = new Set(bankAccounts.map((b) => b.TenTaiKhoanNganHang.toLowerCase()));
+  // "Tiền mặt" là phương thức thu thứ hai cạnh các tài khoản ngân hàng.
+  const bankSet = new Set([TIEN_MAT, ...bankAccounts.map((b) => b.TenTaiKhoanNganHang)].map((t) => t.toLowerCase()));
   const countryMap = new Map(countries.map((c) => [c.TenQuocGia.toLowerCase(), c.QuocGiaID]));
 
   const dataRows = rawRows
@@ -311,7 +313,7 @@ export default function DebtImportPage() {
     const countryNames = (countries || []).map((c) => c.TenQuocGia);
     const dropdowns: Record<string, string[]> = {};
     if (usernames.length > 0) dropdowns['User'] = usernames;
-    if (bankAccountNames.length > 0) dropdowns['Tài khoản'] = bankAccountNames;
+    dropdowns['Tài khoản'] = [TIEN_MAT, ...bankAccountNames];
     if (countryNames.length > 0) dropdowns['Tuyến'] = countryNames;
     dropdowns['Loại phát sinh'] = Object.values(LOAI_PHAT_SINH_LABELS);
 

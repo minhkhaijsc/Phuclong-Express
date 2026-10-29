@@ -47,6 +47,7 @@ import {
   FiLoader,
 } from 'react-icons/fi';
 import { downloadDataAsExcel } from '@/lib/excel-download';
+import { GHI_CHU_TIEN_MAT, TIEN_MAT } from '@/lib/tien-mat';
 
 /**
  * Tính tổng sản lượng (kg) từ chuỗi nhiều số cách nhau bằng dấu cách.
@@ -1039,19 +1040,25 @@ export default function DebtManagementPage() {
               )}
 
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-700">Tài khoản</label>
+                <label className="text-xs font-medium text-slate-700">Thu tiền (TM / CK)</label>
                 <div className="relative">
+                  {/* Hai phương thức thu: Tiền mặt → ghi chú "Thu tiền mặt";
+                      chọn tài khoản ngân hàng → "Báo chuyển khoản - <TK>".
+                      Chỉ ghi khi có Tiền Có (CR). */}
                   <select
                     value={newDebt.bankAccount}
                     onChange={(e) => setNewDebt({ ...newDebt, bankAccount: e.target.value })}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all bg-white cursor-pointer appearance-none"
                   >
-                    <option value="">--Chọn tài khoản--</option>
-                    {bankAccounts?.map((bank) => (
-                      <option key={bank.ID} value={bank.TenTaiKhoanNganHang || ''}>
-                        {bank.TenTaiKhoanNganHang}
-                      </option>
-                    ))}
+                    <option value="">--Chọn phương thức--</option>
+                    <option value={TIEN_MAT}>{TIEN_MAT}</option>
+                    <optgroup label="Chuyển khoản">
+                      {bankAccounts?.map((bank) => (
+                        <option key={bank.ID} value={bank.TenTaiKhoanNganHang || ''}>
+                          {bank.TenTaiKhoanNganHang}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                   <FiChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                 </div>
@@ -1284,6 +1291,7 @@ export default function DebtManagementPage() {
                   className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:border-[#14264b] focus:ring-2 focus:ring-[#14264b]/20 transition-all bg-white cursor-pointer"
                 >
                   <option value="">--Tất cả tài khoản--</option>
+                  <option value={GHI_CHU_TIEN_MAT}>{TIEN_MAT}</option>
                   {bankAccounts?.map((bank) => (
                     <option key={bank.ID} value={bank.GhiChu || ''}>
                       {bank.TenTaiKhoanNganHang}

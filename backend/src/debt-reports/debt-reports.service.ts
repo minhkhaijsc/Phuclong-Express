@@ -2,6 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
 import { formatSqlDate, formatSqlEndOfDay, parseVietnameseDate } from '../helpers/sql-date.helper';
 import { NotificationsService } from '../notifications/notifications.service';
+import { GHI_CHU_TIEN_MAT, laTienMat } from './tien-mat';
 
 /**
  * Debt Reports Service
@@ -1379,8 +1380,12 @@ export class DebtReportsService {
       let ghiChu = dto.ghiChu?.trim() || '';
       // Matches C# ManageCongNo.cs btDongY_Click logic:
       // 1. Append bank transfer info if bank selected AND CR != 0
+      //    Thu tiền mặt: ô "Tài khoản" có thêm lựa chọn "Tiền mặt" (CSKH xin hai
+      //    phương thức thu TM và CK) — ghi chú khi đó là "Thu tiền mặt".
       if (dto.bankAccount && dto.cr !== undefined && dto.cr !== 0) {
-        ghiChu = ghiChu + (ghiChu ? ' - ' : '') + 'Báo chuyển khoản - ' + dto.bankAccount;
+        ghiChu = laTienMat(dto.bankAccount)
+          ? ghiChu + (ghiChu ? ' - ' : '') + GHI_CHU_TIEN_MAT
+          : ghiChu + (ghiChu ? ' - ' : '') + 'Báo chuyển khoản - ' + dto.bankAccount;
       }
       // 2. Ghi lô hàng vào ghi chú — CHỈ với loại phát sinh "Cân Kg" (8).
       //    Lô hàng chỉ có nghĩa với loại này; các loại khác (ck công nợ, phát
