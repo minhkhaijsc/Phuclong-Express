@@ -34,13 +34,15 @@ export class SupplierDebtController {
       tuNgay: q.tuNgay || undefined,
       denNgay: q.denNgay || undefined,
       nccId: q.nccId ? Number(q.nccId) : undefined,
+      quocGiaId: q.quocGiaId ? Number(q.quocGiaId) : undefined,
       trangThai: q.trangThai === 'con-no' || q.trangThai === 'da-tra' ? q.trangThai : undefined,
       page: q.page ? Number(q.page) : 1,
       limit: q.limit ? Number(q.limit) : 50,
     };
 
-    const [theoNcc, chiTiet, soDonChuaNhap] = await Promise.all([
+    const [theoNcc, theoTuyen, chiTiet, soDonChuaNhap] = await Promise.all([
       this.service.tongTheoNcc(loc),
+      this.service.tongTheoTuyen(loc),
       this.service.chiTiet(loc),
       this.service.soDonChuaNhap(loc),
     ]);
@@ -58,7 +60,7 @@ export class SupplierDebtController {
       { soDon: 0, tongNgoaiTe: 0, tongCong: 0, tongPhaiTra: 0, tongThuKhach: 0, laiLo: 0, daTra: 0 },
     );
 
-    return { tongHop, theoNcc, chiTiet, soDonChuaNhap };
+    return { tongHop, theoNcc, theoTuyen, chiTiet, soDonChuaNhap };
   }
 
   // ---------------- THANH TOÁN NCC (23/10/2026) ----------------

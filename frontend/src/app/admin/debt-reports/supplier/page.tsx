@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { layCongNoNcc, layNhaCungCap, laySoDuNcc, traNccTheoDon, type DongCongNoNcc } from '@/lib/api';
+import { getQuocGia, layCongNoNcc, layNhaCungCap, laySoDuNcc, traNccTheoDon, type DongCongNoNcc } from '@/lib/api';
 import { OTien, SoPhieu, TraGop } from '@/app/components/ncc/thanh-toan-ncc';
 import { useQuyen } from '@/hooks/use-quyen';
 import { downloadDataAsExcel } from '@/lib/excel-download';
@@ -23,6 +23,11 @@ import { downloadDataAsExcel } from '@/lib/excel-download';
  * THANH TOÁN NCC (23/10/2026): "có thể lựa chọn thanh toán theo đơn hàng, hoặc
  * k theo đơn hàng". Theo đơn = tick dòng ở bảng chi tiết + số tiền từng dòng;
  * không theo đơn = khối "Thanh toán gộp", tự trừ đơn cũ nhất của NCC đó.
+ *
+ * THEO TUYẾN (02/11/2026): "muốn xem tổng theo tuyến… 3 NCC tuyến UK, k xem
+ * tổng được", và thẻ VN 9852 "dùng chung cho các tuyến" cần thấy từng tuyến
+ * bao nhiêu. Ô lọc Tuyến + bảng "Theo tuyến"; tuyến lấy trên ĐƠN chứ không
+ * suy từ tên NCC, vì một NCC (thẻ) mua cho nhiều tuyến.
  */
 const soVn = (v: number | null | undefined) => (v ?? 0).toLocaleString('vi-VN');
 
@@ -38,6 +43,7 @@ export default function TrangCongNoNcc() {
   const [tuNgay, setTuNgay] = useState(dauThang);
   const [denNgay, setDenNgay] = useState(homNay);
   const [nccId, setNccId] = useState('');
+  const [quocGiaId, setQuocGiaId] = useState('');
   const [trangThai, setTrangThai] = useState<'' | 'con-no' | 'da-tra'>('');
   const [page, setPage] = useState(1);
 
@@ -54,6 +60,7 @@ export default function TrangCongNoNcc() {
     tuNgay,
     denNgay,
     nccId: nccId ? Number(nccId) : undefined,
+    quocGiaId: quocGiaId ? Number(quocGiaId) : undefined,
     trangThai: trangThai || undefined,
     page,
     limit: 100,
@@ -69,6 +76,14 @@ export default function TrangCongNoNcc() {
   const { data: dsNcc = [] } = useQuery({
     queryKey: ['nha-cung-cap', true],
     queryFn: () => layNhaCungCap(true),
+    enabled: xemCongNoNcc,
+  });
+
+  // Tuyến ĐANG DÙNG, như ô lọc ở QL công nợ. Nợ của tuyến đã ẩn vẫn hiện ở
+  // bảng "Theo tuyến" khi để Tất cả.
+  const { data: dsTuyen = [] } = useQuery({
+    queryKey: ['countries'],
+    queryFn: () => getQuocGia(),
     enabled: xemCongNoNcc,
   });
 
@@ -219,6 +234,19 @@ export default function TrangCongNoNcc() {
           </select>
         </div>
         <div>
+          <label className="mb-1 block text-xs font-medium text-gray-600">Tuyến</label>
+          <select
+            value={quocGiaId}
+            onChange={(e) => { setQuocGiaId(e.target.value); setPage(1); }}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          >
+            <option value="">Tất cả</option>
+            {dsTuyen.map((q) => (
+              <option key={q.QuocGiaID} value={q.QuocGiaID}>{q.TenQuocGia}</option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">Thanh toán NCC</label>
           <select
             value={trangThai}
@@ -314,6 +342,82 @@ export default function TrangCongNoNcc() {
               <tr key={r.NCC_ID ?? 'chua-ro'}>
                 <td className="px-4 py-2.5 font-medium">
                   {r.TenNhaCungCap || <span className="text-gray-400">Chưa chọn NCC</span>}
+                </td>
+                <td className="px-4 py-2.5 text-right">{soVn(r.soDon)}</td>
+                <td className="px-4 py-2.5 text-right">{soVn(r.tongNgoaiTe)}</td>
+                <td className="px-4 py-2.5 text-right">{soVn(r.tongCong)}</td>
+                <td className="px-4 py-2.5 text-right font-semibold">{soVn(r.tongPhaiTra)}</td>
+                <td className="px-4 py-2.5 text-right text-emerald-700">{soVn(r.daTra)}</td>
+                <td className="px-4 py-2.5 text-right font-semibold text-amber-700">{soVn(r.tongPhaiTra - r.daTra)}</td>
+                <td className="px-4 py-2.5 text-right">{soVn(r.tongThuKhach)}</td>
+                <td className={`px-4 py-2.5 text-right font-semibold ${r.laiLo < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                  {soVn(r.laiLo)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Gộp theo tuyến của đơn — bấm một dòng để lọc cả trang theo tuyến đó */}
+      <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
+        <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
+          <h2 className="text-sm font-semibold text-gray-700">
+            Theo tuyến
+            {nccId && (
+              <span className="ml-2 font-normal text-gray-500">
+                — của {dsNcc.find((n) => String(n.NhaCungCapID) === nccId)?.TenNhaCungCap ?? 'NCC đang chọn'}
+              </span>
+            )}
+          </h2>
+          {quocGiaId && (
+            <button
+              type="button"
+              onClick={() => { setQuocGiaId(''); setPage(1); }}
+              className="text-xs font-medium text-[#14264b] underline"
+            >
+              Bỏ lọc tuyến
+            </button>
+          )}
+        </div>
+        <table className="min-w-full divide-y divide-gray-100 text-sm">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Tuyến</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Số đơn</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Ngoại tệ</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Tiền công</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Phải trả</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Đã trả</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Còn nợ</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Thu khách</th>
+              <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Lãi/Lỗ</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {isLoading && (
+              <tr><td colSpan={9} className="px-4 py-6 text-center text-gray-400">Đang tải…</td></tr>
+            )}
+            {!isLoading && (data?.theoTuyen?.length ?? 0) === 0 && (
+              <tr>
+                <td colSpan={9} className="px-4 py-6 text-center text-gray-400">
+                  Chưa có đơn nào nhập giá nhà cung cấp trong khoảng này.
+                </td>
+              </tr>
+            )}
+            {(data?.theoTuyen ?? []).map((r) => (
+              <tr
+                key={r.QuocGiaID ?? 'chua-ro'}
+                onClick={() => {
+                  if (r.QuocGiaID == null) return;
+                  setQuocGiaId(String(r.QuocGiaID));
+                  setPage(1);
+                }}
+                className={r.QuocGiaID != null ? 'cursor-pointer hover:bg-gray-50' : ''}
+                title={r.QuocGiaID != null ? 'Bấm để lọc theo tuyến này' : undefined}
+              >
+                <td className="px-4 py-2.5 font-medium">
+                  {r.TenQuocGia || <span className="text-gray-400">Chưa chọn tuyến</span>}
                 </td>
                 <td className="px-4 py-2.5 text-right">{soVn(r.soDon)}</td>
                 <td className="px-4 py-2.5 text-right">{soVn(r.tongNgoaiTe)}</td>

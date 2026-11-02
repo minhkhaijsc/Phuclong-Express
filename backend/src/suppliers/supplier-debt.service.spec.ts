@@ -85,4 +85,39 @@ describe('SupplierDebtService', () => {
       expect(sql).toContain('dh.NCC_TongPhaiTra IS NOT NULL');
     });
   });
+
+  describe('theo tuyến (02/11/2026)', () => {
+    it('lọc theo tuyến của ĐƠN, áp cho cả bảng NCC, bảng tuyến và chi tiết', async () => {
+      await service.tongTheoNcc({ quocGiaId: 3 });
+      await service.tongTheoTuyen({ quocGiaId: 3 });
+      for (const lan of [0, 1]) {
+        expect(cauLenh(lan)).toContain('dh.QuocGiaID = :quocGiaId');
+        expect(thamSo(lan).quocGiaId).toBe(3);
+      }
+    });
+
+    it('cảnh báo "đơn chưa nhập giá" cũng theo tuyến đang lọc', async () => {
+      mockSequelize.query.mockResolvedValueOnce([{ soDon: 0 }]);
+      await service.soDonChuaNhap({ quocGiaId: 3 });
+      expect(cauLenh()).toContain('dh.QuocGiaID = :quocGiaId');
+    });
+
+    it('thẻ dùng chung: lọc NCC vẫn tách được theo tuyến', async () => {
+      await service.tongTheoTuyen({ nccId: 9 });
+      expect(cauLenh()).toContain('dh.NCC_ID = :nccId');
+      expect(cauLenh()).toContain('GROUP  BY dh.QuocGiaID');
+    });
+
+    it('cộng cùng kiểu với bảng NCC — tổng hai bảng phải khớp nhau', async () => {
+      await service.tongTheoNcc({});
+      await service.tongTheoTuyen({});
+      const cot = (sql: string) => sql.slice(sql.indexOf('COUNT(*)'), sql.indexOf('FROM'));
+      expect(cot(cauLenh(1))).toBe(cot(cauLenh(0)));
+    });
+
+    it('không lọc tuyến thì không thêm điều kiện', async () => {
+      await service.tongTheoTuyen({});
+      expect(cauLenh()).not.toContain(':quocGiaId');
+    });
+  });
 });

@@ -2972,6 +2972,12 @@ export interface TongTheoNcc {
   daTra: number;
 }
 
+/** Gộp theo TUYẾN của đơn — cùng các cột cộng dồn như theo NCC. */
+export interface TongTheoTuyen extends Omit<TongTheoNcc, 'NCC_ID' | 'TenNhaCungCap'> {
+  QuocGiaID: number | null;
+  TenQuocGia: string | null;
+}
+
 export interface CongNoNccResponse {
   tongHop: {
     soDon: number;
@@ -2983,6 +2989,7 @@ export interface CongNoNccResponse {
     daTra: number;
   };
   theoNcc: TongTheoNcc[];
+  theoTuyen: TongTheoTuyen[];
   chiTiet: { data: DongCongNoNcc[]; total: number; page: number; limit: number };
   /** Số đơn trong cùng khoảng CHƯA ai nhập giá NCC — để trang nói thật về độ phủ. */
   soDonChuaNhap: number;
@@ -2992,6 +2999,7 @@ export const layCongNoNcc = async (loc: {
   tuNgay?: string;
   denNgay?: string;
   nccId?: number;
+  quocGiaId?: number;
   trangThai?: 'con-no' | 'da-tra';
   page?: number;
   limit?: number;
