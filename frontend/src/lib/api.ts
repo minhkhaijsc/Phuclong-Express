@@ -2494,17 +2494,44 @@ export interface BangSanLuongKhach {
     soDong: number;
   };
   canhBao: { dongThieuKg: number; kgChuaRoTuyen: number };
+  /** Chính các dòng cân không đọc được kg — thêm 03/11/2026. */
+  dsThieuKg: DongThieuKg[];
 }
+
+export interface DongThieuKg {
+  congNoId: number;
+  ngay: string | null;
+  maKh: string;
+  tenKhach: string | null;
+  tuyen: string;
+  noiDung: string | null;
+  ghiChu: string | null;
+  kgTho: number | null;
+  tien: number;
+  phuThu: number;
+  nguoiTao: string | null;
+  lyDo: string;
+}
+
+/** Giá trị ô lọc CSKH = "khách chưa gán CSKH" — khớp `CSKH_CHUA_GAN` ở backend. */
+export const CSKH_CHUA_GAN = '__chua-gan';
 
 export const getSanLuongKhach = async (
   fromDate?: string,
   toDate?: string,
   quocGiaId?: number,
   khach?: string,
+  cskh?: string,
 ): Promise<BangSanLuongKhach> => {
-  const res = await apiClient.get(
-    `/dashboard/san-luong-khach?${thamSoVanHanh(fromDate, toDate, quocGiaId, khach)}`,
-  );
+  const p = new URLSearchParams(thamSoVanHanh(fromDate, toDate, quocGiaId, khach));
+  if (cskh) p.set('cskh', cskh);
+  const res = await apiClient.get(`/dashboard/san-luong-khach?${p.toString()}`);
+  return res.data;
+};
+
+/** CSKH cho ô lọc của báo cáo sản lượng khách — cùng quyền dashboard. */
+export const getSanLuongKhachCskh = async (): Promise<{ username: string; hoTen: string }[]> => {
+  const res = await apiClient.get('/dashboard/san-luong-khach/cskh');
   return res.data;
 };
 

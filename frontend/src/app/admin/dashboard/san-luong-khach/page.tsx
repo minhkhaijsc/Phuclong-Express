@@ -7,7 +7,9 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { FiArrowLeft, FiDownload } from 'react-icons/fi';
 import {
+  CSKH_CHUA_GAN,
   getSanLuongKhach,
+  getSanLuongKhachCskh,
   getSanLuongKhachTuyen,
   type DongSanLuongKhach,
 } from '@/lib/api';
@@ -57,7 +59,9 @@ export default function TrangSanLuongKhach() {
   const [tuyenId, setTuyenId] = useState(0);
   const [khachGo, setKhachGo] = useState('');
   const [khach, setKhach] = useState('');
+  const [cskh, setCskh] = useState('');
   const [sap, setSap] = useState<Sap>('tong');
+  const [moThieuKg, setMoThieuKg] = useState(false);
 
   const { data: tuyens = [] } = useQuery({
     queryKey: ['san-luong-khach-tuyen', applied.fromDate, applied.toDate],
@@ -65,11 +69,26 @@ export default function TrangSanLuongKhach() {
     enabled: xemDuoc,
   });
 
+  const { data: dsCskh = [] } = useQuery({
+    queryKey: ['san-luong-khach-cskh'],
+    queryFn: getSanLuongKhachCskh,
+    enabled: xemDuoc,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['san-luong-khach', applied.fromDate, applied.toDate, tuyenId, khach],
-    queryFn: () => getSanLuongKhach(applied.fromDate, applied.toDate, tuyenId, khach || undefined),
+    queryKey: ['san-luong-khach', applied.fromDate, applied.toDate, tuyenId, khach, cskh],
+    queryFn: () =>
+      getSanLuongKhach(applied.fromDate, applied.toDate, tuyenId, khach || undefined, cskh || undefined),
     enabled: xemDuoc,
   });
+
+  const tenCskhDangLoc =
+    cskh === CSKH_CHUA_GAN
+      ? 'ChuaGanCSKH'
+      : cskh
+        ? cskh
+        : '';
 
   /**
    * Sắp xếp ở trình duyệt, không gọi lại máy chủ: cả bảng đã nằm sẵn trong tay
@@ -112,7 +131,8 @@ export default function TrangSanLuongKhach() {
       ]),
     ];
     const ky = `${applied.fromDate}-${applied.toDate}`.replace(/\//g, '');
-    downloadDataAsExcel(rows, `SanLuongKhachHang_${ky}.xlsx`, undefined, undefined, undefined, 'Sản lượng khách hàng');
+    const duoi = tenCskhDangLoc ? `_${tenCskhDangLoc}` : '';
+    downloadDataAsExcel(rows, `SanLuongKhachHang_${ky}${duoi}.xlsx`, undefined, undefined, undefined, 'Sản lượng khách hàng');
   };
 
   if (dangNap) {
@@ -181,6 +201,22 @@ export default function TrangSanLuongKhach() {
             </select>
           </div>
           <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">CSKH</label>
+            <select
+              value={cskh}
+              onChange={(e) => setCskh(e.target.value)}
+              className="max-w-[14rem] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#14264b] focus:outline-none"
+            >
+              <option value="">— Tất cả CSKH —</option>
+              <option value={CSKH_CHUA_GAN}>Chưa gán CSKH</option>
+              {dsCskh.map((c) => (
+                <option key={c.username} value={c.username}>
+                  {c.hoTen && c.hoTen !== c.username ? `${c.hoTen} (${c.username})` : c.username}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Mã khách hàng</label>
             <input
               value={khachGo}
@@ -233,11 +269,71 @@ export default function TrangSanLuongKhach() {
             <span>
               {data.canhBao.dongThieuKg} dòng cân không đọc được số kg (tiền vẫn tính đủ, chỉ thiếu
               kg).{' '}
+              {(data.dsThieuKg?.length ?? 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setMoThieuKg((v) => !v)}
+                  className="font-semibold text-amber-900 underline hover:text-amber-700"
+                >
+                  {moThieuKg ? 'Ẩn chi tiết' : 'Xem các dòng này'}
+                </button>
+              )}{' '}
             </span>
           )}
           {data.canhBao.kgChuaRoTuyen > 0 && (
             <span>{can(data.canhBao.kgChuaRoTuyen)} kg chưa tra được tuyến, xếp ở dòng “Chưa rõ tuyến”.</span>
           )}
+        </div>
+      )}
+
+      {/*
+        Yêu cầu bên khách 03/11/2026: "8 dòng không đọc được cho em xem chi tiết".
+        Mỗi dòng là một dòng công nợ cân kg — sửa Sản lượng ở màn công nợ của
+        khách đó thì lần xem sau dòng tự biến khỏi đây.
+      */}
+      {moThieuKg && !!data?.dsThieuKg?.length && (
+        <div className="overflow-x-auto rounded-xl border border-amber-200 bg-white">
+          <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900">
+            Các dòng cân không đọc được số kg — sửa Sản lượng ở công nợ của khách thì dòng sẽ hết cảnh báo
+          </div>
+          <table className="min-w-full divide-y divide-gray-100 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold text-gray-500">Ngày</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-500">Mã khách</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-500">Tuyến</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-500">Nội dung</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-500">Số kg ghi</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-500">Tiền (VNĐ)</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-500">Người tạo</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-500">Vì sao không đọc được</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {data.dsThieuKg.map((d) => (
+                <tr key={d.congNoId} className="align-top hover:bg-gray-50">
+                  <td className="whitespace-nowrap px-3 py-2 text-gray-600">
+                    {d.ngay ? new Date(d.ngay).toLocaleDateString('vi-VN', { timeZone: 'UTC' }) : '—'}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-gray-900">{d.maKh}</div>
+                    {d.tenKhach && <div className="text-xs text-gray-400">{d.tenKhach}</div>}
+                  </td>
+                  <td className="px-3 py-2 text-gray-600">{d.tuyen}</td>
+                  <td className="px-3 py-2 text-gray-600">
+                    <div>{d.noiDung || '—'}</div>
+                    {d.ghiChu && <div className="text-xs text-gray-400">{d.ghiChu}</div>}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {d.kgTho === null ? '—' : can(d.kgTho)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{tien(d.tien)}</td>
+                  <td className="px-3 py-2 text-gray-600">{d.nguoiTao || '—'}</td>
+                  <td className="px-3 py-2 text-xs text-amber-800">{d.lyDo}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

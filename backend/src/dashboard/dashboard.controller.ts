@@ -79,7 +79,14 @@ export class DashboardController {
       q.toDate,
       Number(q.quocGiaId) || undefined,
       q.khach,
+      q.cskh,
     );
+  }
+
+  /** CSKH cho ô lọc của màn đó — cùng quyền dashboard, không cần quyền xem khách. */
+  @Get('san-luong-khach/cskh')
+  async sanLuongKhachCskh() {
+    return this.sanLuongKhachService.dsCskh();
   }
 
   /** Tuyến CÓ dữ liệu trong kỳ — đổ vào ô lọc của chính màn đó. */

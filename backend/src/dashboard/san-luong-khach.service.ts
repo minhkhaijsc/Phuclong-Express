@@ -3,6 +3,9 @@ import { Sequelize } from 'sequelize-typescript';
 import { formatSqlDate, formatSqlEndOfDay, parseVietnameseDate } from '../helpers/sql-date.helper';
 import {
   DEM_KHONG_DOC_DUOC,
+  DON_GIA_MAX,
+  DON_GIA_MIN,
+  KG,
   KG_CROSS_APPLY,
   STYLE_CAN_KG,
   TONG_KG,
@@ -78,10 +81,79 @@ export interface BangSanLuongKhach {
     /** kg nằm ở nhóm chưa rõ tuyến. */
     kgChuaRoTuyen: number;
   };
+  /**
+   * Chính các dòng cân đếm trong `canhBao.dongThieuKg`, để người xem mở ra sửa
+   * — yêu cầu bên khách 03/11/2026 ("8 dòng không đọc được xem ở đâu").
+   */
+  dsThieuKg: DongThieuKg[];
 }
+
+/** Một dòng công nợ cân kg mà không lần ra được số kg. */
+export interface DongThieuKg {
+  congNoId: number;
+  ngay: string | null;
+  maKh: string;
+  tenKhach: string | null;
+  tuyen: string;
+  noiDung: string | null;
+  ghiChu: string | null;
+  /** Số kg thô đọc được (Sản lượng, hoặc số trong ghi chú); null nếu không có. */
+  kgTho: number | null;
+  tien: number;
+  phuThu: number;
+  nguoiTao: string | null;
+  /** Vì sao không nhận số kg này — viết cho người sửa đọc. */
+  lyDo: string;
+}
+
+/** Trần số dòng thiếu kg trả về một lần — thường chỉ vài dòng một tháng. */
+export const GIOI_HAN_THIEU_KG = 500;
+
+/** Giá trị ô lọc CSKH nghĩa là "khách chưa gán CSKH nào". */
+export const CSKH_CHUA_GAN = '__chua-gan';
 
 /** Nhãn cho nhóm không tra được tuyến. Không gán bừa vào một nước nào. */
 export const NHAN_CHUA_RO_TUYEN = 'Chưa rõ tuyến';
+
+/**
+ * Lọc theo CSKH phụ trách của khách (`u` = tài khoản khách). Giá trị
+ * `CSKH_CHUA_GAN` lọc ra khách chưa gán ai.
+ */
+const LOC_CSKH = `(:cskh IS NULL
+          OR (:cskh = :chuaGan AND ISNULL(LTRIM(RTRIM(u.CSKHPhuTrach)), '') = '')
+          OR LTRIM(RTRIM(u.CSKHPhuTrach)) = :cskh)`;
+
+const vnd = (v: number) => Math.round(v).toLocaleString('vi-VN');
+
+/** Dòng thô → dòng thiếu kg, kèm lý do viết cho người sửa đọc. */
+export function docDongThieuKg(r: any): DongThieuKg {
+  const kgTho = r.kgTho === null || r.kgTho === undefined ? null : Number(r.kgTho);
+  const tien = Number(r.tien) || 0;
+  const phuThu = Number(r.phuThu) || 0;
+  let lyDo: string;
+  if (kgTho === null || !(kgTho > 0)) {
+    lyDo = 'Không có số kg (Sản lượng trống hoặc 0, ghi chú không phải số)';
+  } else {
+    lyDo =
+      `${vnd(tien)}đ cho ${kgTho.toLocaleString('vi-VN', { maximumFractionDigits: 3 })} kg ` +
+      `= ${vnd(tien / kgTho)}đ/kg, ngoài khoảng ${vnd(DON_GIA_MIN)}–${vnd(DON_GIA_MAX)}đ/kg nên nghi nhập sai kg`;
+    if (phuThu > 0) lyDo += ` (trong tiền có ${vnd(phuThu)}đ phụ thu)`;
+  }
+  return {
+    congNoId: Number(r.congNoId),
+    ngay: r.ngay ? new Date(r.ngay).toISOString() : null,
+    maKh: String(r.maKh ?? ''),
+    tenKhach: r.tenKhach ?? null,
+    tuyen: r.tuyen || NHAN_CHUA_RO_TUYEN,
+    noiDung: r.noiDung ?? null,
+    ghiChu: r.ghiChu ?? null,
+    kgTho,
+    tien,
+    phuThu,
+    nguoiTao: r.nguoiTao ?? null,
+    lyDo,
+  };
+}
 
 @Injectable()
 export class SanLuongKhachService {
@@ -116,6 +188,7 @@ export class SanLuongKhachService {
     denNgay?: string,
     quocGiaId?: number,
     khach?: string,
+    cskh?: string,
   ): Promise<BangSanLuongKhach> {
     const { tu, den } = this.khoang(tuNgay, denNgay);
     const p = {
@@ -123,6 +196,8 @@ export class SanLuongKhachService {
       den,
       quocGiaId: quocGiaId && quocGiaId > 0 ? quocGiaId : null,
       khach: khach && khach.trim() ? khach.trim() : null,
+      cskh: cskh && cskh.trim() ? cskh.trim() : null,
+      chuaGan: CSKH_CHUA_GAN,
     };
 
     /*
@@ -182,9 +257,35 @@ export class SanLuongKhachService {
         LEFT JOIN AspNetUsers u ON u.UserName = COALESCE(can.maKh, mua.maKh)
         LEFT JOIN AspNetUsers cs ON cs.UserName = u.CSKHPhuTrach
        WHERE (:quocGiaId IS NULL OR COALESCE(can.tuyenId, mua.tuyenId) = :quocGiaId)
+         AND ${LOC_CSKH}
        ORDER BY ISNULL(can.cuoc, 0) + ISNULL(mua.phiMua, 0) DESC`;
 
-    const tho = await this.hoi<any>(cauLenh, p);
+    /*
+     * Cùng bộ lọc với bảng chính, để danh sách này khớp đúng con số cảnh báo.
+     * Chỉ lấy dòng có tiền (DR > 0) — xem ghi chú ở `DEM_KHONG_DOC_DUOC`.
+     */
+    const cauThieuKg = `
+      SELECT TOP ${GIOI_HAN_THIEU_KG}
+             c.CongNo_ID AS congNoId, c.NgayGhiNo AS ngay, c.UserName AS maKh,
+             u.HoTen AS tenKhach, q.TenQuocGia AS tuyen,
+             c.NoiDung AS noiDung, c.GhiChu AS ghiChu,
+             t.tho AS kgTho, c.DR AS tien, ISNULL(c.PhuThu, 0) AS phuThu,
+             c.NguoiTao AS nguoiTao
+        FROM CONGNO c ${KG_CROSS_APPLY} ${TUYEN_CROSS_APPLY}
+        LEFT JOIN tbQuocGia q ON q.QuocGiaID = ${TUYEN_ID}
+        LEFT JOIN AspNetUsers u ON u.UserName = c.UserName
+       WHERE c.DaXoa = 0 AND c.style = ${STYLE_CAN_KG}
+         AND c.DR > 0 AND ${KG} IS NULL
+         AND c.NgayGhiNo BETWEEN :tu AND :den
+         AND (:khach IS NULL OR c.UserName = :khach)
+         AND (:quocGiaId IS NULL OR ${TUYEN_ID} = :quocGiaId)
+         AND ${LOC_CSKH}
+       ORDER BY c.NgayGhiNo, c.CongNo_ID`;
+
+    const [tho, thieuKg] = await Promise.all([
+      this.hoi<any>(cauLenh, p),
+      this.hoi<any>(cauThieuKg, p),
+    ]);
 
     const dong: DongSanLuongKhach[] = tho.map((r) => ({
       maKh: String(r.maKh ?? ''),
@@ -218,7 +319,37 @@ export class SanLuongKhachService {
           .filter((d) => d.tuyenId === null)
           .reduce((a, d) => a + d.kg, 0),
       },
+      dsThieuKg: thieuKg.map(docDongThieuKg),
     };
+  }
+
+  /**
+   * CSKH cho ô lọc: CSKH đang làm, cộng những mã đang được gán cho khách dù đã
+   * nghỉ — lọc theo người cũ vẫn phải ra được khách của họ.
+   *
+   * Không dùng `GET /users/cskh`: đường đó cần quyền xem danh sách khách, mà
+   * Kế toán / MKT xem được báo cáo này thì chưa chắc có quyền đó.
+   */
+  async dsCskh(): Promise<{ username: string; hoTen: string }[]> {
+    const rows = await this.hoi<any>(
+      `SELECT x.username, ISNULL(MAX(cs.HoTen), x.username) AS hoTen
+         FROM (
+           SELECT u.UserName AS username
+             FROM AspNetUsers u
+             JOIN AspNetUserRoles ur ON ur.UserId = u.Id
+             JOIN AspNetRoles r ON r.Id = ur.RoleId
+            WHERE r.Name = 'CSKH' AND ISNULL(u.TrangThai, '') <> 'dong-ma'
+           UNION
+           SELECT DISTINCT LTRIM(RTRIM(k.CSKHPhuTrach))
+             FROM AspNetUsers k
+            WHERE ISNULL(LTRIM(RTRIM(k.CSKHPhuTrach)), '') <> ''
+         ) x
+         LEFT JOIN AspNetUsers cs ON cs.UserName = x.username
+        GROUP BY x.username
+        ORDER BY 2`,
+      {},
+    );
+    return rows.map((r) => ({ username: String(r.username), hoTen: String(r.hoTen ?? r.username) }));
   }
 
   /**

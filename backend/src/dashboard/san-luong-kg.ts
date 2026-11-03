@@ -91,8 +91,14 @@ export const KG = 'k.kg';
 /** Tổng kg, bỏ qua dòng không đọc được. */
 export const TONG_KG = `SUM(ISNULL(${KG}, 0))`;
 
-/** Đếm số dòng cân KHÔNG đọc được kg — để màn hình nói thật về độ phủ. */
-export const DEM_KHONG_DOC_DUOC = `SUM(CASE WHEN c.style = ${STYLE_CAN_KG} AND ${KG} IS NULL THEN 1 ELSE 0 END)`;
+/**
+ * Đếm số dòng cân KHÔNG đọc được kg — để màn hình nói thật về độ phủ.
+ *
+ * Chỉ đếm dòng có tiền (DR > 0). Dòng mang style cân mà DR = 0 là phiếu khách
+ * trả tiền ("ck công nợ", tiền nằm ở CR) bị ghi nhầm loại — tháng 10/2026 có 3
+ * trong 8 dòng "thiếu kg" là loại này. Nó không thiếu kg gì cả.
+ */
+export const DEM_KHONG_DOC_DUOC = `SUM(CASE WHEN c.style = ${STYLE_CAN_KG} AND c.DR > 0 AND ${KG} IS NULL THEN 1 ELSE 0 END)`;
 
 /**
  * TUYẾN của một dòng cân — cũng phải lần ra từ chữ.

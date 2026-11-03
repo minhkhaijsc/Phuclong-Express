@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  CSKH_CHUA_GAN,
+  docDongThieuKg,
   MA_DON_CUOI_NOI_DUNG,
   NHAN_CHUA_RO_TUYEN,
   SanLuongKhachService,
   STYLE_PHI_MUA,
 } from './san-luong-khach.service';
-import { STYLE_CAN_KG } from './san-luong-kg';
+import { DEM_KHONG_DOC_DUOC, STYLE_CAN_KG } from './san-luong-kg';
 
 /**
  * Báo cáo sản lượng khách hàng.
@@ -105,7 +107,9 @@ describe('SanLuongKhachService', () => {
       ]);
       const kq = await service.bang();
 
-      expect(mockSequelize.query).toHaveBeenCalledTimes(1);
+      // Câu thứ hai là danh sách dòng thiếu kg (03/11/2026), không phải câu tổng.
+      expect(mockSequelize.query).toHaveBeenCalledTimes(2);
+      expect(mockSequelize.query.mock.calls[1][0]).not.toContain('SUM(');
       expect(kq.tong.kg).toBeCloseTo(2102.718, 3);
       expect(kq.tong.cuoc).toBe(1281548011 + 118121502);
       expect(kq.tong.phiMua).toBe(984849241);
@@ -198,6 +202,58 @@ describe('SanLuongKhachService', () => {
         { id: 1, ten: 'Mỹ' },
         { id: 8, ten: 'Hàn Quốc' },
       ]);
+    });
+  });
+
+  describe('lọc theo CSKH — yêu cầu 03/11/2026', () => {
+    it('bind mã CSKH vào cả bảng chính lẫn danh sách thiếu kg', async () => {
+      mockSequelize.query.mockResolvedValue([]);
+      await service.bang(undefined, undefined, undefined, undefined, ' CSKHMAILINH ');
+
+      expect(mockSequelize.query).toHaveBeenCalledTimes(2);
+      for (const [sql, opts] of mockSequelize.query.mock.calls) {
+        expect(sql).toContain('u.CSKHPhuTrach');
+        expect(sql).toContain(':cskh');
+        expect(sql).not.toContain('CSKHMAILINH');
+        expect(opts.replacements.cskh).toBe('CSKHMAILINH');
+        expect(opts.replacements.chuaGan).toBe(CSKH_CHUA_GAN);
+      }
+    });
+
+    it('không chọn CSKH thì không lọc', async () => {
+      mockSequelize.query.mockResolvedValue([]);
+      await service.bang();
+      expect(mockSequelize.query.mock.calls[0][1].replacements.cskh).toBeNull();
+    });
+  });
+
+  describe('dòng thiếu kg', () => {
+    it('không đếm phiếu trả tiền ghi nhầm style cân (DR = 0)', () => {
+      expect(DEM_KHONG_DOC_DUOC).toContain('c.DR > 0');
+    });
+
+    it('trả về danh sách dòng thiếu kg kèm lý do', async () => {
+      mockSequelize.query
+        .mockResolvedValueOnce([dong({ dongThieuKg: 2 })])
+        .mockResolvedValueOnce([
+          { congNoId: 136299, ngay: new Date('2026-10-09'), maKh: 'HP1350', tuyen: 'Mỹ', kgTho: 0, tien: 28980, phuThu: 0 },
+          { congNoId: 139532, ngay: new Date('2026-10-30'), maKh: 'HP2703', tuyen: 'Mỹ', kgTho: 0.651, tien: 1730460, phuThu: 1561200 },
+        ]);
+      const kq = await service.bang();
+
+      expect(kq.dsThieuKg).toHaveLength(2);
+      expect(kq.dsThieuKg[0].lyDo).toContain('Không có số kg');
+      expect(kq.dsThieuKg[1].lyDo).toContain('đ/kg');
+      expect(kq.dsThieuKg[1].lyDo).toContain('phụ thu');
+      const [sql] = mockSequelize.query.mock.calls[1];
+      expect(sql).toContain('c.DR > 0');
+      expect(sql).toContain('IS NULL');
+    });
+
+    it('kg thô null thì không chia, không ra NaN', () => {
+      const d = docDongThieuKg({ congNoId: 1, maKh: 'X', kgTho: null, tien: 1000 });
+      expect(d.kgTho).toBeNull();
+      expect(d.lyDo).not.toContain('NaN');
     });
   });
 });
