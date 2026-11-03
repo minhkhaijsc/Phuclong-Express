@@ -47,6 +47,10 @@ export const MA_DON_CUOI_NOI_DUNG = `TRY_CONVERT(int, RIGHT(c.NoiDung, CHARINDEX
 export interface DongSanLuongKhach {
   maKh: string;
   tenKhach: string | null;
+  /** CSKH phụ trách khách (`AspNetUsers.CSKHPhuTrach`, mã đăng nhập) — thêm 03/11/2026. */
+  cskh: string | null;
+  /** Họ tên CSKH đó; null nếu mã không còn tài khoản. */
+  tenCskh: string | null;
   tuyenId: number | null;
   tuyen: string;
   kg: number;
@@ -160,6 +164,8 @@ export class SanLuongKhachService {
       )
       SELECT COALESCE(can.maKh, mua.maKh) AS maKh,
              u.HoTen AS tenKhach,
+             u.CSKHPhuTrach AS cskh,
+             cs.HoTen AS tenCskh,
              COALESCE(can.tuyenId, mua.tuyenId) AS tuyenId,
              q.TenQuocGia AS tuyen,
              ISNULL(can.kg, 0) AS kg,
@@ -174,6 +180,7 @@ export class SanLuongKhachService {
               OR (mua.tuyenId IS NULL AND can.tuyenId IS NULL))
         LEFT JOIN tbQuocGia q ON q.QuocGiaID = COALESCE(can.tuyenId, mua.tuyenId)
         LEFT JOIN AspNetUsers u ON u.UserName = COALESCE(can.maKh, mua.maKh)
+        LEFT JOIN AspNetUsers cs ON cs.UserName = u.CSKHPhuTrach
        WHERE (:quocGiaId IS NULL OR COALESCE(can.tuyenId, mua.tuyenId) = :quocGiaId)
        ORDER BY ISNULL(can.cuoc, 0) + ISNULL(mua.phiMua, 0) DESC`;
 
@@ -182,6 +189,8 @@ export class SanLuongKhachService {
     const dong: DongSanLuongKhach[] = tho.map((r) => ({
       maKh: String(r.maKh ?? ''),
       tenKhach: r.tenKhach ?? null,
+      cskh: r.cskh ? String(r.cskh).trim() || null : null,
+      tenCskh: r.tenCskh ?? null,
       tuyenId: r.tuyenId ?? null,
       tuyen: r.tuyen || NHAN_CHUA_RO_TUYEN,
       kg: Number(r.kg) || 0,

@@ -89,6 +89,8 @@ export default function TrangSanLuongKhach() {
       [
         'Mã khách hàng',
         'Tên khách hàng',
+        'CSKH',
+        'Mã CSKH',
         'Tuyến',
         'Sản lượng (kg)',
         'Cước cân (VNĐ)',
@@ -99,6 +101,8 @@ export default function TrangSanLuongKhach() {
       ...dong.map((d) => [
         d.maKh,
         d.tenKhach || '',
+        d.tenCskh || d.cskh || '',
+        d.cskh || '',
         d.tuyen,
         d.kg,
         d.cuoc,
@@ -243,6 +247,7 @@ export default function TrangSanLuongKhach() {
             <tr>
               <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Mã khách hàng</th>
               <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Tên khách hàng</th>
+              <th className="px-4 py-2.5 text-left font-semibold text-gray-500">CSKH</th>
               <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Tuyến</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Sản lượng (kg)</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Cước cân (VNĐ)</th>
@@ -254,21 +259,21 @@ export default function TrangSanLuongKhach() {
           <tbody className="divide-y divide-gray-50">
             {isLoading && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={9} className="px-4 py-6 text-center text-gray-400">
                   Đang tải…
                 </td>
               </tr>
             )}
             {isError && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-red-500">
+                <td colSpan={9} className="px-4 py-6 text-center text-red-500">
                   Không lấy được số liệu. Thử lại hoặc thu hẹp khoảng ngày.
                 </td>
               </tr>
             )}
             {!isLoading && !isError && dong.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-400">
+                <td colSpan={9} className="px-4 py-6 text-center text-gray-400">
                   Không có dữ liệu trong khoảng đã chọn.
                 </td>
               </tr>
@@ -277,6 +282,9 @@ export default function TrangSanLuongKhach() {
               <tr key={`${d.maKh}-${d.tuyenId ?? 'x'}`} className="hover:bg-gray-50">
                 <td className="px-4 py-2.5 font-medium text-gray-900">{d.maKh}</td>
                 <td className="px-4 py-2.5 text-gray-600">{d.tenKhach || '—'}</td>
+                <td className="px-4 py-2.5 text-gray-600" title={d.cskh || ''}>
+                  {d.cskh ? d.tenCskh || d.cskh : <span className="text-gray-300">Chưa gán</span>}
+                </td>
                 <td className="px-4 py-2.5">
                   {d.tuyenId === null ? (
                     <span className="text-amber-700">{d.tuyen}</span>
@@ -299,7 +307,7 @@ export default function TrangSanLuongKhach() {
           {dong.length > 0 && (
             <tfoot className="bg-gray-50 font-semibold">
               <tr>
-                <td className="px-4 py-2.5" colSpan={3}>
+                <td className="px-4 py-2.5" colSpan={4}>
                   Tổng cộng
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums">{can(tong?.kg ?? 0)}</td>

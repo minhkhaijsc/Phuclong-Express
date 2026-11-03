@@ -2472,6 +2472,9 @@ export const getVanHanhTuyen = async (): Promise<KienTheoTuyen[]> => {
 export interface DongSanLuongKhach {
   maKh: string;
   tenKhach: string | null;
+  /** CSKH phụ trách (mã đăng nhập) và họ tên. */
+  cskh: string | null;
+  tenCskh: string | null;
   tuyenId: number | null;
   tuyen: string;
   kg: number;
