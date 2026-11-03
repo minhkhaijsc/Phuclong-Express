@@ -264,6 +264,16 @@ export class UsersController {
   }
 
   /**
+   * POST /users/:id/doi-ma — đổi mã đăng nhập của KHÁCH, kéo theo mọi bảng
+   * nhớ mã đó, trong một giao dịch. Cùng quyền với chuyển/xoá tài khoản.
+   */
+  @Quyen('taiKhoan.sua', 'quanLyRole')
+  @Post(':id/doi-ma')
+  async doiMa(@Param('id') id: string, @Body() body: { maMoi?: string; lyDo?: string }, @Request() req: any) {
+    return this.duLieuTaiKhoanService.doiMa(id, body ?? {}, req.user?.username || 'system');
+  }
+
+  /**
    * PUT /users/:id
    * Update user
    */

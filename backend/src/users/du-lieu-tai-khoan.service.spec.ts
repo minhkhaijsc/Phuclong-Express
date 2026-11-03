@@ -325,4 +325,47 @@ describe('DuLieuTaiKhoanService', () => {
       }
     });
   });
+
+  describe('đổi mã khách (03/11/2026)', () => {
+    beforeEach(() => {
+      taiKhoan = { Id: 'id-9', UserName: 'HP3028', HoTen: 'Khách' };
+    });
+
+    it('đổi mọi cột trong bản đồ + chính UserName, trong một giao dịch', async () => {
+      soDong = { 'CONGNO.UserName': 120, 'DON_HANG.username': 30, 'tbHopDong.UserName': 1, 'AspNetUsers.UserName': 1 };
+      const kq = await service.doiMa('id-9', { maMoi: 'HP3028A', lyDo: 'khách xin đổi' }, 'admin');
+
+      expect(mockSequelize.transaction).toHaveBeenCalled();
+      for (const c of COT_THAM_CHIEU) {
+        expect(daChay.some((q) => q.startsWith(`UPDATE ${c.bang} SET ${c.cot} = :moi`))).toBe(true);
+      }
+      expect(daChay.some((q) => /UPDATE AspNetUsers SET UserName = :moi WHERE Id = :id/.test(q))).toBe(true);
+      expect(kq.tongDaDoi).toBe(151);
+      expect(kq.maCu).toBe('HP3028');
+    });
+
+    it('không đụng nhật ký hệ thống', async () => {
+      await service.doiMa('id-9', { maMoi: 'HP3028A', lyDo: 'x' }, 'admin');
+      expect(daChay.some((q) => /UPDATE tbSystemLogs/.test(q))).toBe(false);
+    });
+
+    it('từ chối mã đã có người dùng', async () => {
+      await expect(service.doiMa('id-9', { maMoi: 'HP220', lyDo: 'x' }, 'admin')).rejects.toThrow('đã có tài khoản');
+    });
+
+    it('từ chối mã có dấu cách / có dấu', async () => {
+      await expect(service.doiMa('id-9', { maMoi: 'HP 30', lyDo: 'x' }, 'admin')).rejects.toThrow(BadRequestException);
+      await expect(service.doiMa('id-9', { maMoi: 'HPĐ30', lyDo: 'x' }, 'admin')).rejects.toThrow(BadRequestException);
+    });
+
+    it('bắt ghi lý do', async () => {
+      await expect(service.doiMa('id-9', { maMoi: 'HP3028A', lyDo: ' ' }, 'admin')).rejects.toThrow('lý do');
+    });
+
+    it('không đổi mã nhân viên', async () => {
+      vaiTro = ['CSKH'];
+      await expect(service.doiMa('id-9', { maMoi: 'CSKHMOI', lyDo: 'x' }, 'admin')).rejects.toThrow('KHÁCH');
+      expect(daChay.some((q) => /^UPDATE/.test(q.trim()))).toBe(false);
+    });
+  });
 });

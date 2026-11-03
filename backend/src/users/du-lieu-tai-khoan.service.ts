@@ -286,6 +286,85 @@ export class DuLieuTaiKhoanService {
     };
   }
 
+  // ----------------------------------------------------------------
+  // ĐỔI MÃ (đổi UserName) — yêu cầu 03/11/2026: "user bọn em có đổi tên user
+  // được không, sau khi đã tạo tài khoản".
+  // ----------------------------------------------------------------
+
+  /**
+   * Đổi mã đăng nhập của một KHÁCH, kéo theo mọi dòng đang nhớ mã đó.
+   *
+   * Không có khoá ngoại nào, mọi bảng nhớ khách bằng CHUỖI UserName — đổi riêng
+   * AspNetUsers là tách khách khỏi toàn bộ đơn, công nợ, kiện hàng. Nên đổi
+   * theo ĐÚNG bản đồ `COT_THAM_CHIEU` mà luồng chuyển/xoá đang dùng (cả hai
+   * nhóm: khách tự nhập đơn thì `usernamesave` cũng là mã của họ), trong MỘT
+   * giao dịch: hỏng giữa chừng thì không bảng nào bị đổi.
+   *
+   * Chỉ cho tài khoản KHÁCH. Mã nhân viên còn nằm trong quyền, nhật ký, CSKH
+   * phụ trách của hàng trăm khách — việc đó khác hẳn, chưa ai yêu cầu.
+   * Nhật ký hệ thống KHÔNG đổi: nó là bằng chứng ai làm gì dưới mã cũ.
+   */
+  async doiMa(
+    id: string,
+    yc: { maMoi?: string; lyDo?: string },
+    nguoiLam: string,
+  ): Promise<{ maCu: string; maMoi: string; tongDaDoi: number; daDoi: { bang: string; cot: string; so: number }[] }> {
+    const kk = await this.kiemKe(id);
+    const maMoi = String(yc.maMoi ?? '').trim();
+    const lyDo = String(yc.lyDo ?? '').trim().slice(0, 500);
+
+    if (kk.laNhanVien) {
+      throw new BadRequestException('Chỉ đổi được mã của tài khoản KHÁCH, không đổi mã nhân viên.');
+    }
+    if (!/^[A-Za-z0-9._-]{2,50}$/.test(maMoi)) {
+      throw new BadRequestException('Mã mới chỉ gồm chữ không dấu, số và . _ - (2–50 ký tự), không có dấu cách.');
+    }
+    if (maMoi === kk.userName) {
+      throw new BadRequestException('Mã mới giống hệt mã hiện tại.');
+    }
+    if (!lyDo) {
+      throw new BadRequestException('Phải ghi lý do đổi mã.');
+    }
+    // Đổi hoa/thường của chính nó (hp123 → HP123) thì cho; trùng mã người khác thì không.
+    const [trung] = await this.hoi<any>(
+      `SELECT UserName FROM AspNetUsers WHERE UserName = :ma AND Id <> :id`,
+      { ma: maMoi, id: kk.id },
+    );
+    if (trung) throw new BadRequestException(`Mã "${maMoi}" đã có tài khoản dùng.`);
+
+    const daDoi: { bang: string; cot: string; so: number }[] = [];
+    await this.sequelize.transaction(async (t) => {
+      // Khoá dòng tài khoản trước, để hai người đổi cùng lúc không đè nhau.
+      await this.hoi(`SELECT Id FROM AspNetUsers WITH (UPDLOCK, HOLDLOCK) WHERE Id = :id`, { id: kk.id }, t);
+      for (const c of COT_THAM_CHIEU) {
+        const [kq] = await this.hoi<any>(
+          `UPDATE ${tenAnToan(c.bang)} SET ${tenAnToan(c.cot)} = :moi WHERE ${tenAnToan(c.cot)} = :cu;
+           SELECT @@ROWCOUNT AS so`,
+          { moi: maMoi, cu: kk.userName },
+          t,
+        );
+        const so = Number(kq?.so ?? 0);
+        if (so > 0) daDoi.push({ bang: c.bang, cot: c.cot, so });
+      }
+      await this.hoi(`UPDATE AspNetUsers SET UserName = :moi WHERE Id = :id`, { moi: maMoi, id: kk.id }, t);
+    });
+
+    const tongDaDoi = daDoi.reduce((a, x) => a + x.so, 0);
+    await this.systemLogsService
+      .create({
+        nguoiTao: nguoiLam,
+        nguon: 'Users:DoiMaKhach',
+        hanhDong: 'Chinh sua',
+        doiTuong: kk.id,
+        noiDung:
+          `MaCu: ${kk.userName}; MaMoi: ${maMoi}; HoTen: ${kk.hoTen ?? ''}; SoDongDaDoi: ${tongDaDoi}; ` +
+          `ChiTiet: ${daDoi.map((x) => `${x.bang}.${x.cot}=${x.so}`).join(',') || '(khong)'}; LyDo: ${lyDo}`,
+      })
+      .catch((err) => console.error('[SystemLog]', err?.message ?? err));
+
+    return { maCu: kk.userName, maMoi, tongDaDoi, daDoi };
+  }
+
   /** Mã nhận phải có thật và khác mã nguồn. */
   private async kiemMaNhan(ma: string, nguon: string): Promise<string> {
     if (ma.toLowerCase() === nguon.toLowerCase()) {

@@ -111,6 +111,34 @@ export default function UserDetailPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [removingRole, setRemovingRole] = useState<string | null>(null);
+
+  /**
+   * Đổi mã khách (03/11/2026: "user bọn em có đổi tên user được không, sau
+   * khi đã tạo tài khoản"). Máy chủ đổi mọi bảng nhớ mã này trong một giao
+   * dịch; chỉ cho tài khoản KHÁCH, cùng quyền với chuyển/xoá tài khoản.
+   */
+  const doiMaDuoc = co('taiKhoan.sua') || co('quanLyRole');
+  const [maMoi, setMaMoi] = useState('');
+  const [lyDoDoiMa, setLyDoDoiMa] = useState('');
+  const [hoiDoiMa, setHoiDoiMa] = useState(false);
+  const [dangDoiMa, setDangDoiMa] = useState(false);
+
+  const handleDoiMa = async () => {
+    setDangDoiMa(true);
+    try {
+      const { data } = await apiClient.post(`/users/${userId}/doi-ma`, { maMoi: maMoi.trim(), lyDo: lyDoDoiMa.trim() });
+      showFeedback('success', `Đã đổi ${data.maCu} → ${data.maMoi} (${Number(data.tongDaDoi).toLocaleString('vi-VN')} dòng dữ liệu đi theo). Khách đăng nhập bằng mã mới.`);
+      setMaMoi('');
+      setLyDoDoiMa('');
+      setHoiDoiMa(false);
+      await fetchData();
+    } catch (err: any) {
+      showFeedback('error', err?.response?.data?.message || 'Không đổi được mã');
+      setHoiDoiMa(false);
+    } finally {
+      setDangDoiMa(false);
+    }
+  };
   const [addingRole, setAddingRole] = useState(false);
 
   useEffect(() => {
@@ -531,6 +559,63 @@ export default function UserDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Đổi mã khách — chỉ tài khoản KHÁCH (không vai trò) */}
+          {doiMaDuoc && user && roles.length === 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center gap-2.5 border-b border-slate-100 px-6 py-4">
+                <FiEdit2 className="h-4 w-4 text-slate-400" />
+                <h2 className="text-sm font-semibold text-slate-700">Đổi mã khách</h2>
+              </div>
+              <div className="space-y-3 p-6">
+                <p className="text-xs text-slate-500">
+                  Đổi tên đăng nhập <b>{user.UserName}</b> sang mã mới. Toàn bộ đơn, công nợ, kiện hàng, hợp đồng… đi theo
+                  sang mã mới. Khách phải đăng nhập bằng mã mới.
+                </p>
+                <input
+                  value={maMoi}
+                  onChange={(e) => { setMaMoi(e.target.value.replace(/\s/g, '')); setHoiDoiMa(false); }}
+                  placeholder="Mã mới, vd HP3100"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#14264b] focus:outline-none focus:ring-2 focus:ring-[#14264b]/20"
+                />
+                <input
+                  value={lyDoDoiMa}
+                  onChange={(e) => setLyDoDoiMa(e.target.value)}
+                  placeholder="Lý do đổi (bắt buộc)"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-[#14264b] focus:outline-none focus:ring-2 focus:ring-[#14264b]/20"
+                />
+                {!hoiDoiMa ? (
+                  <button
+                    type="button"
+                    disabled={!maMoi.trim() || !lyDoDoiMa.trim()}
+                    onClick={() => setHoiDoiMa(true)}
+                    className="inline-flex w-full items-center justify-center rounded-xl bg-slate-800 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                  >
+                    Đổi mã
+                  </button>
+                ) : (
+                  <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    <p>
+                      Đổi <b>{user.UserName}</b> → <b>{maMoi.trim()}</b>? Mã cũ sẽ không đăng nhập được nữa.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDoiMa}
+                        disabled={dangDoiMa}
+                        className="rounded-lg bg-amber-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50 cursor-pointer"
+                      >
+                        {dangDoiMa ? 'Đang đổi…' : 'Đổi thật'}
+                      </button>
+                      <button type="button" onClick={() => setHoiDoiMa(false)} className="rounded-lg border border-amber-300 px-3 py-1.5 cursor-pointer">
+                        Thôi
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Password reset card */}
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">

@@ -54,6 +54,9 @@ export const COT_THAM_CHIEU: readonly CotThamChieu[] = [
   { bang: 'HanMucKhachHang', cot: 'UserName', nhom: 'khach', nhan: 'Hạn mức công nợ' },
   { bang: 'THACMAC', cot: 'username', nhom: 'khach', nhan: 'Thắc mắc' },
   { bang: 'tbLoHang', cot: 'UserName', nhom: 'khach', nhan: 'Lô hàng' },
+  // Thêm 03/11/2026 — các bảng dựng sau lần quét 09/10 (hợp đồng 28/10, thanh
+  // toán NCC 23/10). Thiếu ở đây thì xoá/gộp/đổi mã bỏ sót chúng.
+  { bang: 'tbHopDong', cot: 'UserName', nhom: 'khach', nhan: 'Hợp đồng' },
 
   // ---- Dấu vết AI ĐÃ NHẬP ----
   { bang: 'CONGNO', cot: 'NguoiTao', nhom: 'nhap', nhan: 'Dòng công nợ đã nhập' },
@@ -67,6 +70,12 @@ export const COT_THAM_CHIEU: readonly CotThamChieu[] = [
   { bang: 'tbAnhTracking', cot: 'NguoiXoa', nhom: 'nhap', nhan: 'Ảnh kiện hàng đã xoá' },
   { bang: 'tbLoHang', cot: 'NguoiTao', nhom: 'nhap', nhan: 'Lô hàng đã tạo' },
   { bang: 'TY_GIA_HISTORY', cot: 'NguoiCapNhat', nhom: 'nhap', nhan: 'Lần đổi tỷ giá' },
+  { bang: 'tbHopDong', cot: 'NguoiTao', nhom: 'nhap', nhan: 'Hợp đồng đã lập' },
+  { bang: 'tbHopDong', cot: 'UserKy', nhom: 'nhap', nhan: 'Hợp đồng đã bấm ký' },
+  { bang: 'tbHopDongMau', cot: 'NguoiTao', nhom: 'nhap', nhan: 'Mẫu hợp đồng đã tạo' },
+  { bang: 'tbNhaCungCap', cot: 'NguoiTao', nhom: 'nhap', nhan: 'Nhà cung cấp đã tạo' },
+  { bang: 'tbThanhToanNcc', cot: 'NguoiTao', nhom: 'nhap', nhan: 'Phiếu thanh toán NCC đã lập' },
+  { bang: 'tbThanhToanNcc', cot: 'NguoiXoa', nhom: 'nhap', nhan: 'Phiếu thanh toán NCC đã huỷ' },
 ];
 
 /** Nhật ký hệ thống — chỉ đếm, tuyệt đối không chuyển và không xoá. */
