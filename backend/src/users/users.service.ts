@@ -5,6 +5,7 @@ import { chuanHoaTuoiNo } from './tuoi-no-khach';
 import { SystemLogsService } from '../system-logs/system-logs.service';
 import Excel from 'exceljs';
 import bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
 /**
  * Users Service
@@ -355,203 +356,241 @@ export class UsersService {
     }
   }
 
-  /**
-   * Validate import data from Excel
-   */
+  // ---------------- NHẬP USER BẰNG EXCEL ----------------
+  //
+  // Viết lại 03/11/2026. Bản trước ghi vào các cột `ho_ten`, `dia_chi`… KHÔNG
+  // CÓ trong AspNetUsers (cột thật là HoTen, DiaChi…), nên dòng nào cũng lỗi rồi
+  // bị đếm lặng lẽ — trên hệ mới chưa từng nhập được user nào bằng Excel. Kèm
+  // theo: ghép chuỗi thẳng vào SQL (tên có dấu nháy là vỡ câu lệnh), và đọc
+  // `editableColumns` (chuỗi JSON từ form) bằng `.includes(số)` trên CHUỖI.
+  //
+  // Cột 13 = CSKH phụ trách, BẮT BUỘC khi thêm mới — cùng luật với màn tạo
+  // user (03/11/2026: "bắt buộc CSKH gán tên vào user thì mới tạo được").
+
+  /** Cột sửa được ở chế độ 'edit', theo đúng thứ tự ô tick trên web. */
+  private static readonly COT_SUA: { cot: string; truong: string }[] = [
+    { cot: 'HoTen', truong: 'hoTen' },
+    { cot: 'VungMien', truong: 'vungMien' },
+    { cot: 'DiaChi', truong: 'diaChi' },
+    { cot: 'TinhThanh', truong: 'tinhThanh' },
+    { cot: 'PhoneNumber', truong: 'phoneNumber' },
+    { cot: 'Email', truong: 'email' },
+    { cot: 'SoTaiKhoan', truong: 'soTaiKhoan' },
+    { cot: 'HinhThucNhanHang', truong: 'hinhThucNhanHang' },
+    { cot: 'KhachBuon', truong: 'khachBuon' },
+    { cot: 'LinkTaiKhoanMang', truong: 'linkTaiKhoanMang' },
+    { cot: 'CSKHPhuTrach', truong: 'cskhPhuTrach' },
+  ];
+  private static readonly SUA_CSKH = 10;
+
+  /** `editableColumns` tới từ form dạng chuỗi JSON "[0,5]" — đổi về mảng số. */
+  docCotSua(v: unknown): number[] {
+    let a: unknown = v;
+    if (typeof v === 'string') {
+      try {
+        a = JSON.parse(v);
+      } catch {
+        a = [];
+      }
+    }
+    return Array.isArray(a) ? a.map(Number).filter((n) => Number.isInteger(n)) : [];
+  }
+
+  private async docDongImport(file: Express.Multer.File, sheetName: string): Promise<any[] | null> {
+    const workbook = new Excel.Workbook();
+    await workbook.xlsx.load(file.buffer as any);
+    const ws = workbook.getWorksheet(sheetName);
+    if (!ws) return null;
+    const o = (row: Excel.Row, i: number) => {
+      const v: any = row.getCell(i).value;
+      const t = v && typeof v === 'object' ? (v.text ?? v.result ?? '') : (v ?? '');
+      return String(t).trim();
+    };
+    const dong: any[] = [];
+    ws.eachRow((row, n) => {
+      if (n < 2 || !o(row, 1)) return;
+      dong.push({
+        excelRowIndex: n,
+        username: o(row, 1),
+        password: o(row, 2),
+        hoTen: o(row, 3),
+        vungMien: o(row, 4),
+        diaChi: o(row, 5),
+        tinhThanh: o(row, 6),
+        phoneNumber: o(row, 7),
+        email: o(row, 8),
+        soTaiKhoan: o(row, 9),
+        hinhThucNhanHang: o(row, 10),
+        khachBuon: o(row, 11),
+        linkTaiKhoanMang: o(row, 12),
+        cskhPhuTrach: o(row, 13),
+        error: false,
+      });
+    });
+    return dong;
+  }
+
+  /** Kiểm từng dòng, đánh dấu `error` và trả danh sách lỗi (HTML như bản cũ). */
+  async kiemTraImport(dong: any[], mode: string, cotSua: number[]): Promise<string[]> {
+    const errors: string[] = [];
+    const [users]: any[] = await this.sequelize.query(`SELECT UserName, Email FROM dbo.AspNetUsers`);
+    const daCo = new Set(users.map((u: any) => String(u.UserName).toLowerCase()));
+    const emailCua = new Map<string, string>();
+    for (const u of users) if (u.Email) emailCua.set(String(u.Email).toLowerCase(), u.UserName);
+    const cskh = new Set((await this.danhSachCskh()).map((c) => c.username.toLowerCase()));
+    const trongFile = new Set<string>();
+    const emailTrongFile = new Set<string>();
+    const loi = (d: any, msg: string) => {
+      errors.push(`Dòng <b>${d.excelRowIndex}</b>: ${msg}`);
+      d.error = true;
+    };
+
+    for (const d of dong) {
+      const ten = d.username.toLowerCase();
+      if (mode === 'edit') {
+        if (!daCo.has(ten)) loi(d, `User <b>${d.username}</b> không có trong danh mục`);
+        if (cotSua.includes(UsersService.SUA_CSKH) && !cskh.has(d.cskhPhuTrach.toLowerCase())) {
+          loi(d, d.cskhPhuTrach ? `<b>${d.cskhPhuTrach}</b> không phải CSKH đang làm` : 'thiếu <b>CSKH phụ trách</b>');
+        }
+        continue;
+      }
+      if (daCo.has(ten)) loi(d, `User <b>${d.username}</b> đã có trong danh mục`);
+      if (trongFile.has(ten)) loi(d, `User <b>${d.username}</b> bị lặp trong file`);
+      trongFile.add(ten);
+      if (!d.password) loi(d, 'thiếu <b>Password</b>');
+      if (!d.hoTen) loi(d, 'thiếu <b>HoTen</b>');
+      if (!d.cskhPhuTrach) loi(d, 'thiếu <b>CSKH phụ trách</b> (cột 13)');
+      else if (!cskh.has(d.cskhPhuTrach.toLowerCase())) loi(d, `<b>${d.cskhPhuTrach}</b> không phải CSKH đang làm`);
+      if (d.email) {
+        const e = d.email.toLowerCase();
+        if (emailCua.has(e)) loi(d, `Email <b>${d.email}</b> đã dùng cho tài khoản ${emailCua.get(e)}`);
+        if (emailTrongFile.has(e)) loi(d, `Email <b>${d.email}</b> bị lặp trong file`);
+        emailTrongFile.add(e);
+      }
+    }
+    return errors;
+  }
+
   async validateImportData(
     file: Express.Multer.File,
     sheetName: string,
     mode: string,
-    editableColumns: number[],
+    editableColumns: unknown,
   ): Promise<{ data: any[]; errors: string[]; successCount: number; errorCount: number }> {
-    const errors: string[] = [];
-    const userData: any[] = [];
-
     try {
-      const workbook = new Excel.Workbook();
-      await workbook.xlsx.load(file.buffer as any);
-      const worksheet = workbook.getWorksheet(sheetName);
-
-      if (!worksheet) {
-        errors.push('Sheet not found');
-        return { data: [], errors, successCount: 0, errorCount: 0 };
-      }
-
-      // Get existing usernames
-      const [existingUsers]: any[] = await this.sequelize.query(`
-        SELECT UserName FROM dbo.AspNetUsers
-      `);
-      const existingUsernames = new Set(existingUsers.map((u: any) => u.UserName));
-
-      const headerRow = worksheet.getRow(1);
-      const startRow = 2;
-
-      worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber < startRow) return;
-        if (!row.getCell(1).value) return;
-
-        const rowData: any = {
-          excelRowIndex: rowNumber,
-          username: String(row.getCell(1).value || ''),
-          password: String(row.getCell(2).value || ''),
-          hoTen: String(row.getCell(3).value || ''),
-          vungMien: String(row.getCell(4).value || ''),
-          diaChi: String(row.getCell(5).value || ''),
-          tinhThanh: String(row.getCell(6).value || ''),
-          phoneNumber: String(row.getCell(7).value || ''),
-          email: String(row.getCell(8).value || ''),
-          soTaiKhoan: String(row.getCell(9).value || ''),
-          hinhThucNhanHang: String(row.getCell(10).value || ''),
-          khachBuon: String(row.getCell(11).value || ''),
-          linkTaiKhoanMang: String(row.getCell(12).value || ''),
-          error: false,
-        };
-
-        // Validate username
-        if (!rowData.username) {
-          errors.push(`Dòng <b>${rowNumber}</b>: thiếu <b>UserName</b>`);
-          rowData.error = true;
-        } else if (mode === 'edit') {
-          if (!existingUsernames.has(rowData.username)) {
-            errors.push(`Dòng <b>${rowNumber}</b>: User <b>${rowData.username}</b> không có trong danh mục`);
-            rowData.error = true;
-          }
-        } else {
-          if (existingUsernames.has(rowData.username)) {
-            errors.push(`Dòng <b>${rowNumber}</b>: User <b>${rowData.username}</b> đã có trong danh mục`);
-            rowData.error = true;
-          }
-        }
-
-        // Validate password for create mode
-        if (mode !== 'edit' && !rowData.password) {
-          errors.push(`Dòng <b>${rowNumber}</b>: thiếu <b>Password</b>`);
-          rowData.error = true;
-        }
-
-        // Validate hoTen for create mode
-        if (mode !== 'edit' && !rowData.hoTen) {
-          errors.push(`Dòng <b>${rowNumber}</b>: thiếu <b>HoTen</b>`);
-          rowData.error = true;
-        }
-
-        userData.push(rowData);
-      });
-
-      const errorCount = userData.filter(d => d.error).length;
-      return {
-        data: userData,
-        errors,
-        successCount: userData.length - errorCount,
-        errorCount,
-      };
+      const dong = await this.docDongImport(file, sheetName);
+      if (!dong) return { data: [], errors: ['Sheet not found'], successCount: 0, errorCount: 0 };
+      const errors = await this.kiemTraImport(dong, mode, this.docCotSua(editableColumns));
+      const errorCount = dong.filter((d) => d.error).length;
+      return { data: dong, errors, successCount: dong.length - errorCount, errorCount };
     } catch (error) {
       console.error('Error validating import data:', error.message);
-      errors.push('Có lỗi trong quá trình đọc file Excel');
-      return { data: [], errors, successCount: 0, errorCount: 0 };
+      return { data: [], errors: ['Có lỗi trong quá trình đọc file Excel'], successCount: 0, errorCount: 0 };
     }
   }
 
   /**
-   * Execute import from Excel
+   * Ghi. KIỂM LẠI từ đầu chứ không tin bước xem trước (giữa hai bước có thể đã
+   * có người tạo trùng mã), và BỎ QUA dòng lỗi thay vì cố ghi.
    */
   async executeImport(
     file: Express.Multer.File,
     sheetName: string,
     mode: string,
-    editableColumns: number[],
+    editableColumns: unknown,
+    nguoiLam = 'system',
   ): Promise<{ successCount: number; errorCount: number }> {
     let successCount = 0;
     let errorCount = 0;
-
     try {
-      const workbook = new Excel.Workbook();
-      await workbook.xlsx.load(file.buffer as any);
-      const worksheet = workbook.getWorksheet(sheetName);
+      const dong = await this.docDongImport(file, sheetName);
+      if (!dong) return { successCount: 0, errorCount: 0 };
+      const cotSua = this.docCotSua(editableColumns);
+      await this.kiemTraImport(dong, mode, cotSua);
 
-      if (!worksheet) {
-        return { successCount: 0, errorCount: 0 };
-      }
-
-      // Get existing usernames
-      const [existingUsers]: any[] = await this.sequelize.query(`
-        SELECT Id, UserName FROM dbo.AspNetUsers
-      `);
-      const userMap = new Map(existingUsers.map((u: any) => [u.UserName, u.Id]));
-
-      const columnFields = ['hoTen', 'vungMien', 'diaChi', 'tinhThanh', 'phoneNumber', 'email', 'soTaiKhoan', 'hinhThucNhanHang', 'khachBuon', 'linkTaiKhoanMang'];
-
-      // Collect rows first
-      const rows: any[] = [];
-      worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber < 2) return;
-        if (!row.getCell(1).value) return;
-
-        rows.push({
-          rowNumber,
-          username: String(row.getCell(1).value || ''),
-          password: String(row.getCell(2).value || ''),
-          hoTen: String(row.getCell(3).value || ''),
-          vungMien: String(row.getCell(4).value || ''),
-          diaChi: String(row.getCell(5).value || ''),
-          tinhThanh: String(row.getCell(6).value || ''),
-          phoneNumber: String(row.getCell(7).value || ''),
-          email: String(row.getCell(8).value || ''),
-          soTaiKhoan: String(row.getCell(9).value || ''),
-          hinhThucNhanHang: String(row.getCell(10).value || ''),
-          khachBuon: String(row.getCell(11).value || '').toLowerCase() === 'true',
-          linkTaiKhoanMang: String(row.getCell(12).value || ''),
-        });
-      });
-
-      // Process rows outside callback
-      for (const rowData of rows) {
-        const { username, password, hoTen, vungMien, diaChi, tinhThanh, phoneNumber, email, soTaiKhoan, hinhThucNhanHang, khachBuon, linkTaiKhoanMang } = rowData;
-
+      for (const d of dong) {
+        if (d.error) {
+          errorCount++;
+          continue;
+        }
+        const khachBuon = ['true', '1', 'x', 'có', 'co'].includes(String(d.khachBuon).toLowerCase());
         try {
           if (mode === 'edit') {
-            const userId = userMap.get(username);
-            if (userId) {
-              let updateFields = '';
-              if (editableColumns.includes(0)) updateFields += `ho_ten = N'${hoTen}', `;
-              if (editableColumns.includes(1)) updateFields += `vung_mien = N'${vungMien}', `;
-              if (editableColumns.includes(2)) updateFields += `dia_chi = N'${diaChi}', `;
-              if (editableColumns.includes(3)) updateFields += `tinh_thanh = N'${tinhThanh}', `;
-              if (editableColumns.includes(4)) updateFields += `PhoneNumber = '${phoneNumber}', `;
-              if (editableColumns.includes(5)) updateFields += `Email = '${email}', `;
-              if (editableColumns.includes(6)) updateFields += `so_tai_khoan = N'${soTaiKhoan}', `;
-              if (editableColumns.includes(7)) updateFields += `hinh_thuc_nhan_hang = N'${hinhThucNhanHang}', `;
-              if (editableColumns.includes(8)) updateFields += `khach_buon = ${khachBuon ? 1 : 0}, `;
-              if (editableColumns.includes(9)) updateFields += `link_tai_khoan_mang = N'${linkTaiKhoanMang}', `;
-
-              if (updateFields) {
-                updateFields = updateFields.slice(0, -2);
-                await this.sequelize.query(`
-                  UPDATE dbo.AspNetUsers SET ${updateFields} WHERE Id = '${userId}'
-                `);
-              }
+            const sua = UsersService.COT_SUA.filter((_, i) => cotSua.includes(i));
+            if (!sua.length) {
               successCount++;
+              continue;
             }
+            const thay: Record<string, unknown> = { u: d.username };
+            const set = sua.map(({ cot, truong }) => {
+              thay[truong] = truong === 'khachBuon' ? (khachBuon ? 1 : 0) : d[truong] || null;
+              return `${cot} = :${truong}`;
+            });
+            await this.sequelize.query(`UPDATE dbo.AspNetUsers SET ${set.join(', ')} WHERE UserName = :u`, {
+              replacements: thay,
+            });
+            await this.systemLogsService
+              .create({
+                nguoiTao: nguoiLam,
+                nguon: 'ListUser_Import:EditUser',
+                hanhDong: 'Sua',
+                doiTuong: d.username,
+                noiDung: `UserName: ${d.username}; Cot: ${sua.map((x) => x.cot).join(',')}`,
+              })
+              .catch(() => undefined);
           } else {
-            const passwordHash = await bcrypt.hash(password, 10);
-            const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            await this.sequelize.query(`
-              INSERT INTO dbo.AspNetUsers (Id, UserName, Email, PasswordHash, ho_ten, dia_chi, tinh_thanh, so_tai_khoan, hinh_thuc_nhan_hang, khach_buon, link_tai_khoan_mang, vung_mien)
-              VALUES ('${id}', N'${username}', N'${email}', '${passwordHash}', N'${hoTen}', N'${diaChi}', N'${tinhThanh}', N'${soTaiKhoan}', N'${hinhThucNhanHang}', ${khachBuon ? 1 : 0}, N'${linkTaiKhoanMang}', N'${vungMien}')
-            `);
-            successCount++;
+            const passwordHash = await bcrypt.hash(d.password, 10);
+            await this.sequelize.query(
+              `INSERT INTO dbo.AspNetUsers
+                 (Id, UserName, Email, EmailConfirmed, PasswordHash, PhoneNumber, PhoneNumberConfirmed,
+                  TwoFactorEnabled, LockoutEnabled, AccessFailedCount,
+                  HoTen, DiaChi, TinhThanh, SoTaiKhoan, HinhThucNhanHang, KhachBuon,
+                  LinkTaiKhoanMang, VungMien, CSKHPhuTrach, NgayTao)
+               VALUES
+                 (:id, :username, :email, 0, :hash, :phone, 0,
+                  0, 0, 0,
+                  :hoTen, :diaChi, :tinhThanh, :soTaiKhoan, :hinhThuc, :khachBuon,
+                  :link, :vungMien, :cskh, GETDATE())`,
+              {
+                replacements: {
+                  id: crypto.randomUUID(),
+                  username: d.username,
+                  // Như màn tạo user: để trống email thì đặt email giữ chỗ theo mã.
+                  email: d.email || `${d.username}@example.com`,
+                  hash: passwordHash,
+                  phone: d.phoneNumber || null,
+                  hoTen: d.hoTen,
+                  diaChi: d.diaChi || null,
+                  tinhThanh: d.tinhThanh || null,
+                  soTaiKhoan: d.soTaiKhoan || null,
+                  hinhThuc: d.hinhThucNhanHang || null,
+                  khachBuon: khachBuon ? 1 : 0,
+                  link: d.linkTaiKhoanMang || null,
+                  vungMien: d.vungMien || null,
+                  cskh: d.cskhPhuTrach,
+                },
+              },
+            );
+            await this.systemLogsService
+              .create({
+                nguoiTao: nguoiLam,
+                nguon: 'ListUser_Import:CreateUser',
+                hanhDong: 'Them moi',
+                doiTuong: d.username,
+                noiDung: `UserName: ${d.username}; HoTen: ${d.hoTen}; CSKH: ${d.cskhPhuTrach}`,
+              })
+              .catch(() => undefined);
           }
-        } catch (err) {
-          console.error(`Error importing user ${username}:`, err);
+          successCount++;
+        } catch (err: any) {
+          console.error(`Error importing user ${d.username}:`, err?.message ?? err);
           errorCount++;
         }
       }
-
       return { successCount, errorCount };
     } catch (error) {
       console.error('Error executing import:', error.message);
-      return { successCount: 0, errorCount: 0 };
+      return { successCount, errorCount };
     }
   }
 

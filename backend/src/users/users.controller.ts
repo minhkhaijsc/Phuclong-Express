@@ -409,7 +409,7 @@ export class UsersController {
   @UseInterceptors(FileInterceptor('file'))
   async validateImport(
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { sheet: string; mode: string; editableColumns: number[] },
+    @Body() body: { sheet: string; mode: string; editableColumns: unknown },
   ) {
     return this.usersService.validateImportData(file, body.sheet, body.mode, body.editableColumns);
   }
@@ -423,9 +423,12 @@ export class UsersController {
   @UseInterceptors(FileInterceptor('file'))
   async executeImport(
     @UploadedFile() file: Express.Multer.File,
-    @Body() body: { sheet: string; mode: string; editableColumns: number[] },
+    @Body() body: { sheet: string; mode: string; editableColumns: unknown },
+    @Request() req: any,
   ) {
-    return this.usersService.executeImport(file, body.sheet, body.mode, body.editableColumns);
+    return this.usersService.executeImport(
+      file, body.sheet, body.mode, body.editableColumns, req.user?.username || 'system',
+    );
   }
 
   /**

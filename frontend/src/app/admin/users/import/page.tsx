@@ -20,6 +20,8 @@ interface UserData {
   hinhThucNhanHang: string;
   khachBuon: string;
   linkTaiKhoanMang: string;
+  /** Cột 13 — bắt buộc khi thêm mới (03/11/2026). */
+  cskhPhuTrach: string;
   error: boolean;
 }
 
@@ -261,7 +263,7 @@ function ImportUsersPageContent() {
                   </td>
                   <td className="ms-formbody" style={{ width: '70%' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                      {['Họ tên', 'Vùng miền', 'Địa chỉ', 'Tỉnh/Thành phố', 'Số điện thoại', 'Email', 'Số tài khoản', 'Hình thức nhận hàng', 'Khách buôn', 'Link FB'].map((label, idx) => (
+                      {['Họ tên', 'Vùng miền', 'Địa chỉ', 'Tỉnh/Thành phố', 'Số điện thoại', 'Email', 'Số tài khoản', 'Hình thức nhận hàng', 'Khách buôn', 'Link FB', 'CSKH phụ trách'].map((label, idx) => (
                         <label key={idx}>
                           <input
                             type="checkbox"
@@ -345,6 +347,7 @@ function ImportUsersPageContent() {
                             <td>Hình thức nhận hàng</td>
                             <td>Khách buôn</td>
                             <td>Link FB</td>
+                            <td>CSKH phụ trách</td>
                           </tr>
                         </thead>
                         <tbody>
@@ -367,6 +370,7 @@ function ImportUsersPageContent() {
                               <td>{row.hinhThucNhanHang}</td>
                               <td>{row.khachBuon}</td>
                               <td>{row.linkTaiKhoanMang}</td>
+                              <td>{row.cskhPhuTrach}</td>
                             </tr>
                           ))}
                         </tbody>
