@@ -277,10 +277,16 @@ export class SupplierPaymentService {
   }
 
   /** Danh sách phiếu, lọc theo NCC và NGÀY TRẢ. */
-  async danhSach(loc: { nccId?: number; tuNgay?: string; denNgay?: string; coPhieuHuy?: boolean }) {
+  /**
+   * `phieuHuy`: 'an' (mặc định) = chỉ phiếu đang hiệu lực, 'ca' = cả phiếu đã
+   * huỷ, 'chi' = CHỈ phiếu đã huỷ (03/11/2026: "các phiếu huỷ… xem được là huỷ
+   * của NCC nào") — lọc NCC vẫn áp, nên chọn NCC + 'chi' ra đúng phiếu huỷ của NCC đó.
+   */
+  async danhSach(loc: { nccId?: number; tuNgay?: string; denNgay?: string; phieuHuy?: 'an' | 'ca' | 'chi' }) {
     const dk = ['1 = 1'];
     const thay: Record<string, unknown> = {};
-    if (!loc.coPhieuHuy) dk.push('p.DaXoa = 0');
+    if (!loc.phieuHuy || loc.phieuHuy === 'an') dk.push('p.DaXoa = 0');
+    if (loc.phieuHuy === 'chi') dk.push('p.DaXoa = 1');
     if (loc.nccId) {
       dk.push('p.NCC_ID = :nccId');
       thay.nccId = loc.nccId;

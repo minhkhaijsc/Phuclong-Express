@@ -134,3 +134,27 @@ describe('SupplierPaymentService — chốt chặn khi lập phiếu', () => {
     expect(String(query.mock.calls[1][0])).toContain('ORDER  BY ngay, ID');
   });
 });
+
+describe('SupplierPaymentService.danhSach — lọc phiếu huỷ (03/11/2026)', () => {
+  const query = jest.fn().mockResolvedValue([]);
+  const svc = new SupplierPaymentService({ query } as any, { create: jest.fn() } as any);
+  const sql = () => query.mock.calls[0][0] as string;
+  beforeEach(() => query.mockClear());
+
+  it('mặc định chỉ phiếu đang hiệu lực', async () => {
+    await svc.danhSach({});
+    expect(sql()).toContain('p.DaXoa = 0');
+  });
+
+  it("'ca' lấy cả phiếu đã huỷ", async () => {
+    await svc.danhSach({ phieuHuy: 'ca' });
+    expect(sql()).not.toContain('p.DaXoa =');
+  });
+
+  it("'chi' chỉ phiếu đã huỷ, vẫn theo NCC đang lọc", async () => {
+    await svc.danhSach({ phieuHuy: 'chi', nccId: 7 });
+    expect(sql()).toContain('p.DaXoa = 1');
+    expect(sql()).not.toContain('p.DaXoa = 0');
+    expect(sql()).toContain('p.NCC_ID = :nccId');
+  });
+});

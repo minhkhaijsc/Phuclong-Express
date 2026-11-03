@@ -96,7 +96,8 @@ export class SupplierDebtController {
       nccId: nccId ? Number(nccId) : undefined,
       tuNgay,
       denNgay,
-      coPhieuHuy: coPhieuHuy === '1',
+      // '1' là giá trị cũ của ô tick "Hiện cả phiếu đã huỷ".
+      phieuHuy: coPhieuHuy === 'chi' ? 'chi' : coPhieuHuy === '1' || coPhieuHuy === 'ca' ? 'ca' : 'an',
     });
   }
 

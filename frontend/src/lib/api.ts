@@ -3084,11 +3084,12 @@ export const layPhieuThanhToanNcc = async (loc: {
   nccId?: number;
   tuNgay?: string;
   denNgay?: string;
-  coPhieuHuy?: boolean;
+  /** 'an' = chỉ phiếu đang hiệu lực, 'ca' = cả phiếu đã huỷ, 'chi' = chỉ phiếu đã huỷ. */
+  phieuHuy?: 'an' | 'ca' | 'chi';
 }): Promise<PhieuThanhToanNcc[]> =>
   (
     await apiClient.get<PhieuThanhToanNcc[]>('/supplier-debt/thanh-toan', {
-      params: { ...loc, coPhieuHuy: loc.coPhieuHuy ? '1' : undefined },
+      params: { nccId: loc.nccId, tuNgay: loc.tuNgay, denNgay: loc.denNgay, coPhieuHuy: loc.phieuHuy === 'an' ? undefined : loc.phieuHuy },
     })
   ).data;
 

@@ -173,14 +173,14 @@ export function SoPhieu({
   phienBan: number;
   onDoi: () => void;
 }) {
-  const [coPhieuHuy, setCoPhieuHuy] = useState(false);
+  const [phieuHuy, setPhieuHuy] = useState<'an' | 'ca' | 'chi'>('an');
   const [mo, setMo] = useState<number | null>(null);
   const [hoiHuy, setHoiHuy] = useState<number | null>(null);
   const [loi, setLoi] = useState('');
 
   const { data: ds = [], refetch } = useQuery({
-    queryKey: ['phieu-ncc', nccId, tuNgay, denNgay, coPhieuHuy, phienBan],
-    queryFn: () => layPhieuThanhToanNcc({ nccId, tuNgay, denNgay, coPhieuHuy }),
+    queryKey: ['phieu-ncc', nccId, tuNgay, denNgay, phieuHuy, phienBan],
+    queryFn: () => layPhieuThanhToanNcc({ nccId, tuNgay, denNgay, phieuHuy }),
   });
 
   const { data: chiTiet = [] } = useQuery({
@@ -201,33 +201,38 @@ export function SoPhieu({
         <h2 className="text-sm font-semibold text-gray-700">
           Phiếu thanh toán NCC ({ds.length}) <span className="font-normal text-gray-400">— lọc theo ngày thanh toán</span>
         </h2>
-        <label className="flex items-center gap-1.5 text-xs text-gray-500">
-          <input type="checkbox" checked={coPhieuHuy} onChange={(e) => setCoPhieuHuy(e.target.checked)} />
-          Hiện cả phiếu đã huỷ
-        </label>
+        <select
+          value={phieuHuy}
+          onChange={(e) => setPhieuHuy(e.target.value as 'an' | 'ca' | 'chi')}
+          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600"
+        >
+          <option value="an">Phiếu đang hiệu lực</option>
+          <option value="ca">Cả phiếu đã huỷ</option>
+          <option value="chi">Chỉ phiếu đã huỷ</option>
+        </select>
       </div>
       {loi && <p className="px-4 py-2 text-sm text-red-600">{loi}</p>}
       <table className="min-w-full divide-y divide-gray-100 text-xs">
         <thead className="bg-gray-50">
           <tr>
-            {['#', 'Ngày TT', 'Nhà cung cấp', 'Cách trả', 'Số tiền', 'Trừ vào', 'Ghi chú', 'Người ghi', ''].map((h) => (
+            {['#', 'Ngày TT', 'Nhà cung cấp', 'Cách trả', 'Số tiền', 'Trừ vào', 'Ghi chú', 'Người ghi', 'Trạng thái', ''].map((h) => (
               <th key={h} className="px-3 py-2.5 text-left font-semibold text-gray-500">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
           {ds.length === 0 && (
-            <tr><td colSpan={9} className="px-4 py-6 text-center text-gray-400">Chưa có phiếu nào trong khoảng này.</td></tr>
+            <tr><td colSpan={10} className="px-4 py-6 text-center text-gray-400">Chưa có phiếu nào trong khoảng này.</td></tr>
           )}
           {ds.map((p) => {
             const du = Number(p.SoTien) - Number(p.daPhanBo);
             return [
-              <tr key={p.PhieuID} className={p.DaXoa ? 'text-gray-400 line-through' : ''}>
+              <tr key={p.PhieuID} className={p.DaXoa ? 'bg-red-50/40 text-gray-500' : ''}>
                 <td className="px-3 py-2">{p.PhieuID}</td>
                 <td className="px-3 py-2">{new Date(p.NgayTra).toLocaleDateString('vi-VN')}</td>
-                <td className="px-3 py-2">{p.TenNhaCungCap || p.NCC_ID}</td>
+                <td className={`px-3 py-2 ${p.DaXoa ? 'font-semibold text-gray-700' : ''}`}>{p.TenNhaCungCap || p.NCC_ID}</td>
                 <td className="px-3 py-2">{p.Loai === 'gop' ? 'Gộp (tự trừ đơn cũ)' : 'Theo đơn'}</td>
-                <td className="px-3 py-2 text-right font-semibold">{soVn(p.SoTien)}</td>
+                <td className={`px-3 py-2 text-right font-semibold ${p.DaXoa ? 'line-through' : ''}`}>{soVn(p.SoTien)}</td>
                 <td className="px-3 py-2">
                   <button type="button" className="text-[#14264b] underline" onClick={() => setMo(mo === p.PhieuID ? null : p.PhieuID)}>
                     {p.soDon} đơn
@@ -235,9 +240,17 @@ export function SoPhieu({
                   {du >= 1 && <span className="ml-1 text-amber-700">· dư {soVn(du)}</span>}
                 </td>
                 <td className="px-3 py-2">{p.GhiChu || '-'}</td>
+                <td className="px-3 py-2">{p.NguoiTao}</td>
                 <td className="px-3 py-2">
-                  {p.NguoiTao}
-                  {p.DaXoa && <div className="no-underline">huỷ: {p.NguoiXoa}</div>}
+                  {p.DaXoa ? (
+                    <span className="text-red-600">
+                      Đã huỷ
+                      {p.NgayXoa ? ` ${new Date(p.NgayXoa).toLocaleString('vi-VN')}` : ''}
+                      {p.NguoiXoa ? ` · ${p.NguoiXoa}` : ''}
+                    </span>
+                  ) : (
+                    <span className="text-emerald-700">Hiệu lực</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {!p.DaXoa &&
@@ -264,7 +277,7 @@ export function SoPhieu({
               </tr>,
               mo === p.PhieuID && (
                 <tr key={`ct-${p.PhieuID}`} className="bg-gray-50">
-                  <td colSpan={9} className="px-6 py-2">
+                  <td colSpan={10} className="px-6 py-2">
                     {chiTiet.length === 0 ? (
                       <span className="text-gray-400">Phiếu này chưa trừ vào đơn nào (toàn bộ là trả dư).</span>
                     ) : (
