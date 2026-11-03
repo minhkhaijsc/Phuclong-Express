@@ -65,6 +65,22 @@ export interface TongTheoTuyen extends Omit<TongTheoNcc, 'NCC_ID' | 'TenNhaCungC
   TenQuocGia: string | null;
 }
 
+/** Một đơn chưa nhập giá NCC — đủ để tìm ra đơn mà nhập bù. */
+export interface DongChuaNhap {
+  ID: number;
+  ordernumber: string | null;
+  username: string | null;
+  usernamesave: string | null;
+  ngayMua: Date | null;
+  TenQuocGia: string | null;
+  WebsiteName: string | null;
+  linkweb: string | null;
+  soluong: number | null;
+  loaitien: string | null;
+  tongtienVND: number | null;
+  trangthaiOrder: string | null;
+}
+
 /**
  * Các cột cộng dồn, DÙNG CHUNG cho gộp theo NCC và gộp theo tuyến — hai bảng
  * phải cộng cùng một kiểu thì tổng hai bảng mới khớp nhau và khớp ô tổng hợp.
@@ -266,21 +282,51 @@ export class SupplierDebtService {
   }
 
   /**
-   * Số dòng CHƯA NHẬP giá nhà cung cấp trong cùng khoảng — để trang nói thật
-   * về độ phủ. Không có con số này thì người xem tưởng tổng phải trả đã là
-   * toàn bộ, trong khi có thể mới nhập được một phần.
+   * Điều kiện "CHƯA NHẬP giá NCC" — dùng chung cho con số cảnh báo và danh
+   * sách xem chi tiết, để hai chỗ luôn ra cùng một tập đơn.
    */
-  async soDonChuaNhap(loc: LocCongNoNcc): Promise<number> {
+  private dieuKienChuaNhap(loc: LocCongNoNcc): { sql: string; thay: Record<string, any> } {
     const dk = ['dh.DaXoa = 0', 'dh.NCC_TongPhaiTra IS NULL'];
     const thay: Record<string, any> = {};
     this.locTheoNgay(loc, dk, thay);
     // Tuyến thì biết ngay trên đơn (khác NCC — đơn chưa nhập giá thường chưa có
     // NCC), nên lọc tuyến thì cảnh báo "còn N đơn chưa nhập" cũng theo tuyến đó.
     this.locTheoTuyen(loc, dk, thay);
+    return { sql: dk.join(' AND '), thay };
+  }
+
+  /**
+   * Số dòng CHƯA NHẬP giá nhà cung cấp trong cùng khoảng — để trang nói thật
+   * về độ phủ. Không có con số này thì người xem tưởng tổng phải trả đã là
+   * toàn bộ, trong khi có thể mới nhập được một phần.
+   */
+  async soDonChuaNhap(loc: LocCongNoNcc): Promise<number> {
+    const { sql, thay } = this.dieuKienChuaNhap(loc);
     const [r] = await this.sequelize.query<{ soDon: number }>(
-      `SELECT COUNT(*) AS soDon FROM dbo.DON_HANG dh WHERE ${dk.join(' AND ')}`,
+      `SELECT COUNT(*) AS soDon FROM dbo.DON_HANG dh WHERE ${sql}`,
       { replacements: thay, type: QueryTypes.SELECT },
     );
     return Number(r?.soDon ?? 0);
+  }
+
+  /**
+   * Danh sách các đơn chưa nhập giá NCC (yêu cầu 03/11/2026: "làm sao để
+   * check được 43 đơn này là đơn nào… cho em xin mục xem thêm"). Cùng điều
+   * kiện với `soDonChuaNhap` nên số dòng khớp đúng con số cảnh báo.
+   * Chặn 2000 dòng: đây là danh sách để đi nhập bù, không phải báo cáo.
+   */
+  async dsChuaNhap(loc: LocCongNoNcc): Promise<DongChuaNhap[]> {
+    const { sql, thay } = this.dieuKienChuaNhap(loc);
+    return this.sequelize.query<DongChuaNhap>(
+      `SELECT TOP 2000 dh.ID, dh.ordernumber, dh.username, dh.usernamesave,
+              COALESCE(dh.ngaymuahang, dh.ngaysaveLink) AS ngayMua,
+              qg.TenQuocGia, dh.WebsiteName, dh.linkweb, dh.soluong, dh.loaitien,
+              dh.tongtienVND, dh.trangthaiOrder
+       FROM   dbo.DON_HANG dh
+       LEFT   JOIN dbo.tbQuocGia qg ON qg.QuocGiaID = dh.QuocGiaID
+       WHERE  ${sql}
+       ORDER  BY COALESCE(dh.ngaymuahang, dh.ngaysaveLink) DESC, dh.ID DESC`,
+      { replacements: thay, type: QueryTypes.SELECT },
+    );
   }
 }

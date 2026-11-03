@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { getQuocGia, layCongNoNcc, layNhaCungCap, laySoDuNcc, traNccTheoDon, type DongCongNoNcc } from '@/lib/api';
+import { getQuocGia, layCongNoNcc, layDonChuaNhapNcc, layNhaCungCap, laySoDuNcc, traNccTheoDon, type DongCongNoNcc } from '@/lib/api';
 import { OTien, SoPhieu, TraGop } from '@/app/components/ncc/thanh-toan-ncc';
 import { useQuyen } from '@/hooks/use-quyen';
 import { downloadDataAsExcel } from '@/lib/excel-download';
@@ -86,6 +86,43 @@ export default function TrangCongNoNcc() {
     queryFn: () => getQuocGia(),
     enabled: xemCongNoNcc,
   });
+
+  /**
+   * Danh sách đơn chưa nhập giá NCC (03/11/2026: "làm sao để check được 43 đơn
+   * này là đơn nào"). Chỉ nạp khi bấm mở — đa số lần xem trang không cần.
+   * Cùng ngày + tuyến với con số cảnh báo; KHÔNG theo NCC, vì đơn chưa nhập
+   * giá thường chưa có NCC.
+   */
+  const [moChuaNhap, setMoChuaNhap] = useState(false);
+  const locChuaNhap = { tuNgay, denNgay, quocGiaId: loc.quocGiaId };
+  const { data: dsChuaNhap = [], isFetching: dangTaiChuaNhap } = useQuery({
+    queryKey: ['cong-no-ncc-chua-nhap', locChuaNhap, phienBan],
+    queryFn: () => layDonChuaNhapNcc(locChuaNhap),
+    enabled: xemCongNoNcc && moChuaNhap,
+  });
+
+  const xuatExcelChuaNhap = () => {
+    if (!dsChuaNhap.length) return;
+    downloadDataAsExcel(
+      [
+        ['Mã ĐH', 'OrderNumber', 'Ngày', 'Khách', 'Người nhập đơn', 'Tuyến', 'Website', 'Hàng / link', 'SL', 'Thu khách (VNĐ)', 'Trạng thái'],
+        ...dsChuaNhap.map((r) => [
+          r.ID,
+          r.ordernumber || '',
+          r.ngayMua ? new Date(r.ngayMua) : null,
+          r.username || '',
+          r.usernamesave || '',
+          r.TenQuocGia || '',
+          r.WebsiteName || '',
+          r.linkweb || '',
+          r.soluong ?? null,
+          r.tongtienVND == null ? null : Math.round(r.tongtienVND),
+          r.trangthaiOrder || '',
+        ]),
+      ],
+      `don-chua-nhap-gia-ncc-${tuNgay}-${denNgay}`,
+    );
+  };
 
   const { data: soDu = [] } = useQuery({
     queryKey: ['so-du-ncc', phienBan],
@@ -303,8 +340,71 @@ export default function TrangCongNoNcc() {
 
       {(data?.soDonChuaNhap ?? 0) > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
-          Trong khoảng này còn <b>{soVn(data?.soDonChuaNhap)}</b> đơn chưa ai nhập giá nhà
-          cung cấp, nên con số phải trả ở trên chưa phải toàn bộ.
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              Trong khoảng này còn <b>{soVn(data?.soDonChuaNhap)}</b> đơn chưa ai nhập giá nhà
+              cung cấp, nên con số phải trả ở trên chưa phải toàn bộ.
+            </span>
+            <button
+              type="button"
+              onClick={() => setMoChuaNhap((v) => !v)}
+              className="rounded border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              {moChuaNhap ? 'Ẩn danh sách' : 'Xem các đơn này'}
+            </button>
+          </div>
+          {moChuaNhap && (
+            <div className="mt-2.5 overflow-x-auto rounded-lg border border-amber-200 bg-white text-gray-700">
+              <div className="flex items-center justify-between border-b border-amber-100 px-3 py-2">
+                <span className="text-xs text-gray-500">
+                  {dangTaiChuaNhap ? 'Đang tải…' : `${soVn(dsChuaNhap.length)} đơn — nhập giá NCC ở Danh sách đơn hàng`}
+                </span>
+                <button
+                  type="button"
+                  onClick={xuatExcelChuaNhap}
+                  disabled={!dsChuaNhap.length}
+                  className="rounded border border-gray-300 px-2 py-1 text-xs disabled:opacity-40"
+                >
+                  Xuất Excel
+                </button>
+              </div>
+              <table className="min-w-full divide-y divide-gray-100 text-xs">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {['Mã ĐH', 'OrderNumber', 'Ngày', 'Khách', 'Người nhập đơn', 'Tuyến', 'Hàng / link', 'SL', 'Thu khách', 'Trạng thái'].map((h) => (
+                      <th key={h} className="px-3 py-2 text-left font-semibold text-gray-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {dsChuaNhap.map((r) => (
+                    <tr key={r.ID}>
+                      <td className="px-3 py-1.5">
+{r.ID}</td>
+                      <td className="px-3 py-1.5">{r.ordernumber || '-'}</td>
+                      <td className="px-3 py-1.5">{r.ngayMua ? new Date(r.ngayMua).toLocaleDateString('vi-VN') : '-'}</td>
+                      <td className="px-3 py-1.5">{r.username || '-'}</td>
+                      <td className="px-3 py-1.5">{r.usernamesave || '-'}</td>
+                      <td className="px-3 py-1.5">{r.TenQuocGia || '-'}</td>
+                      {/* linkweb đa phần là chữ ("zara", "Phí ship …"), chỉ là link khi có http */}
+                      <td className="max-w-[16rem] truncate px-3 py-1.5" title={r.linkweb || ''}>
+                        {r.linkweb && /^https?:\/\//i.test(r.linkweb) ? (
+                          <a href={r.linkweb} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                            {r.WebsiteName || r.linkweb}
+                          </a>
+                        ) : (
+                          r.linkweb || r.WebsiteName || '-'
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 text-right">{r.soluong ?? '-'}</td>
+                      <td className="px-3 py-1.5 text-right">{r.tongtienVND == null ? '-' : soVn(r.tongtienVND)}</td>
+                      <td className="px-3 py-1.5">{r.trangthaiOrder || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

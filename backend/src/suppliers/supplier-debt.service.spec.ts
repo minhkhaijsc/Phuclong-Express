@@ -120,4 +120,22 @@ describe('SupplierDebtService', () => {
       expect(cauLenh()).not.toContain(':quocGiaId');
     });
   });
+
+  describe('danh sách đơn chưa nhập (03/11/2026)', () => {
+    it('cùng điều kiện với con số cảnh báo — số dòng phải khớp số đếm', async () => {
+      mockSequelize.query.mockResolvedValueOnce([{ soDon: 0 }]);
+      await service.soDonChuaNhap({ tuNgay: '01/11/2026', denNgay: '03/11/2026', quocGiaId: 3 });
+      await service.dsChuaNhap({ tuNgay: '01/11/2026', denNgay: '03/11/2026', quocGiaId: 3 });
+
+      const where = (sql: string) => sql.slice(sql.indexOf('WHERE'), sql.indexOf('ORDER') > 0 ? sql.indexOf('ORDER') : undefined).replace(/\s+/g, ' ').trim();
+      expect(where(cauLenh(1))).toBe(where(cauLenh(0)));
+      expect(thamSo(1)).toEqual(thamSo(0));
+      expect(cauLenh(1)).toContain('dh.NCC_TongPhaiTra IS NULL');
+    });
+
+    it('lọc NCC không làm rơi đơn chưa nhập (đơn chưa nhập thường chưa có NCC)', async () => {
+      await service.dsChuaNhap({ nccId: 9 });
+      expect(cauLenh()).not.toContain(':nccId');
+    });
+  });
 });

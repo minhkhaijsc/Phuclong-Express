@@ -30,15 +30,7 @@ export class SupplierDebtController {
    */
   @Get()
   async congNo(@Query() q: LocCongNoNcc) {
-    const loc: LocCongNoNcc = {
-      tuNgay: q.tuNgay || undefined,
-      denNgay: q.denNgay || undefined,
-      nccId: q.nccId ? Number(q.nccId) : undefined,
-      quocGiaId: q.quocGiaId ? Number(q.quocGiaId) : undefined,
-      trangThai: q.trangThai === 'con-no' || q.trangThai === 'da-tra' ? q.trangThai : undefined,
-      page: q.page ? Number(q.page) : 1,
-      limit: q.limit ? Number(q.limit) : 50,
-    };
+    const loc = this.docLoc(q);
 
     const [theoNcc, theoTuyen, chiTiet, soDonChuaNhap] = await Promise.all([
       this.service.tongTheoNcc(loc),
@@ -61,6 +53,24 @@ export class SupplierDebtController {
     );
 
     return { tongHop, theoNcc, theoTuyen, chiTiet, soDonChuaNhap };
+  }
+
+  /** Các đơn CHƯA NHẬP giá NCC — mở từ dòng cảnh báo "còn N đơn chưa nhập". */
+  @Get('chua-nhap')
+  async chuaNhap(@Query() q: LocCongNoNcc) {
+    return this.service.dsChuaNhap(this.docLoc(q));
+  }
+
+  private docLoc(q: LocCongNoNcc): LocCongNoNcc {
+    return {
+      tuNgay: q.tuNgay || undefined,
+      denNgay: q.denNgay || undefined,
+      nccId: q.nccId ? Number(q.nccId) : undefined,
+      quocGiaId: q.quocGiaId ? Number(q.quocGiaId) : undefined,
+      trangThai: q.trangThai === 'con-no' || q.trangThai === 'da-tra' ? q.trangThai : undefined,
+      page: q.page ? Number(q.page) : 1,
+      limit: q.limit ? Number(q.limit) : 50,
+    };
   }
 
   // ---------------- THANH TOÁN NCC (23/10/2026) ----------------

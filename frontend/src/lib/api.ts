@@ -3008,6 +3008,31 @@ export const layCongNoNcc = async (loc: {
   return res.data;
 };
 
+/** Một đơn chưa nhập giá NCC — mở từ dòng cảnh báo trên trang Công nợ phải trả NCC. */
+export interface DongChuaNhapNcc {
+  ID: number;
+  ordernumber: string | null;
+  username: string | null;
+  usernamesave: string | null;
+  ngayMua: string | null;
+  TenQuocGia: string | null;
+  WebsiteName: string | null;
+  linkweb: string | null;
+  soluong: number | null;
+  loaitien: string | null;
+  tongtienVND: number | null;
+  trangthaiOrder: string | null;
+}
+
+export const layDonChuaNhapNcc = async (loc: {
+  tuNgay?: string;
+  denNgay?: string;
+  quocGiaId?: number;
+}): Promise<DongChuaNhapNcc[]> => {
+  const res = await apiClient.get<DongChuaNhapNcc[]>('/supplier-debt/chua-nhap', { params: loc });
+  return res.data;
+};
+
 // ---------------- THANH TOÁN NCC (23/10/2026) ----------------
 
 export interface SoDuNcc {
