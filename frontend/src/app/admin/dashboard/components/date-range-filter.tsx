@@ -20,17 +20,31 @@ const toDdMmYyyy = (d: Date): string =>
 export function DateRangeFilter({ fromDate, toDate, onChange, onSearch }: DateRangeFilterProps) {
   const fromRef = useRef<HTMLInputElement>(null);
   const toRef = useRef<HTMLInputElement>(null);
+  /*
+   * Giá trị MỚI NHẤT của hai ô. flatpickr chỉ dựng một lần, nên hàm onChange
+   * của nó giữ mãi giá trị lúc dựng: chọn "Từ" 01/10 rồi chọn "Đến" 31/10 thì
+   * ô "Từ" bị trả về 01/11 (đầu tháng hiện tại) → khoảng 01/11–31/10 rỗng, mọi
+   * chỉ số ra 0 (báo 03/11/2026: "tháng 10 không check được các chỉ số").
+   */
+  const moiNhat = useRef({ fromDate, toDate, onChange });
+  moiNhat.current = { fromDate, toDate, onChange };
 
   useEffect(() => {
     const fpFrom = flatpickr(fromRef.current!, {
       dateFormat: 'd/m/Y',
       defaultDate: fromDate,
-      onChange: (dates) => dates[0] && onChange({ fromDate: toDdMmYyyy(dates[0]), toDate }),
+      onChange: (dates) => {
+        const m = moiNhat.current;
+        if (dates[0]) m.onChange({ fromDate: toDdMmYyyy(dates[0]), toDate: m.toDate });
+      },
     });
     const fpTo = flatpickr(toRef.current!, {
       dateFormat: 'd/m/Y',
       defaultDate: toDate,
-      onChange: (dates) => dates[0] && onChange({ fromDate, toDate: toDdMmYyyy(dates[0]) }),
+      onChange: (dates) => {
+        const m = moiNhat.current;
+        if (dates[0]) m.onChange({ fromDate: m.fromDate, toDate: toDdMmYyyy(dates[0]) });
+      },
     });
     return () => {
       fpFrom.destroy();
