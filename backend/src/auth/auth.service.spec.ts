@@ -96,3 +96,51 @@ describe('AuthService — chặn đăng nhập khi đã đóng mã', () => {
     ).rejects.toThrow('Invalid credentials');
   });
 });
+
+describe('AuthService.register — bắt buộc CSKH phụ trách (03/11/2026)', () => {
+  let service: AuthService;
+  const tao = jest.fn();
+  const mockSequelize: any = {
+    models: {
+      User: class {
+        static findOne = jest.fn().mockResolvedValue(null);
+        static create = (...a: any[]) => tao(...a);
+      },
+    },
+    query: jest.fn(),
+  };
+  const yc = (cskhPhuTrach?: string) =>
+    ({ username: 'HP9999', password: 'x', email: 'a@b.c', hoTen: 'Khách', cskhPhuTrach }) as any;
+
+  beforeEach(async () => {
+    const mod: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        QuyenService,
+        { provide: 'SEQUELIZE', useValue: mockSequelize },
+        { provide: JwtService, useValue: { sign: () => 'the-gia' } },
+        { provide: SystemLogsService, useValue: { create: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    service = mod.get(AuthService);
+  });
+  afterEach(() => jest.clearAllMocks());
+
+  it('bỏ trống CSKH thì không tạo', async () => {
+    await expect(service.register(yc(''))).rejects.toThrow('Chưa chọn CSKH');
+    expect(tao).not.toHaveBeenCalled();
+  });
+
+  it('gõ một mã không phải CSKH đang làm thì không tạo', async () => {
+    mockSequelize.query.mockResolvedValueOnce([{ n: 0 }]);
+    await expect(service.register(yc('KETOANHA'))).rejects.toThrow('không phải CSKH');
+    expect(tao).not.toHaveBeenCalled();
+  });
+
+  it('CSKH hợp lệ thì ghi vào CSKHPhuTrach', async () => {
+    mockSequelize.query.mockResolvedValueOnce([{ n: 1 }]);
+    tao.mockResolvedValue({ get: () => 'x' });
+    await service.register(yc(' CSKHMAILINH ')).catch(() => undefined);
+    expect(tao.mock.calls[0][0].CSKHPhuTrach).toBe('CSKHMAILINH');
+  });
+});

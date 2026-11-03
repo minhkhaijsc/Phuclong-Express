@@ -2,8 +2,10 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  BadRequestException,
   Inject,
 } from '@nestjs/common';
+import { QueryTypes } from 'sequelize';
 import { JwtService } from '@nestjs/jwt';
 import { Sequelize } from 'sequelize-typescript';
 import * as bcrypt from 'bcrypt';
@@ -165,6 +167,24 @@ export class AuthService {
       );
     }
 
+    // CSKH phụ trách: bắt buộc, và phải là CSKH đang làm — cùng danh sách với ô
+    // chọn trên web (`UsersService.danhSachCskh`), để không ai gõ bừa qua API.
+    const cskh = registerDto.cskhPhuTrach?.trim();
+    if (!cskh) {
+      throw new BadRequestException('Chưa chọn CSKH phụ trách. Mã khách mới phải gán CSKH thì mới tạo được.');
+    }
+    const [laCskh] = await this.sequelize.query<{ n: number }>(
+      `SELECT COUNT(*) AS n
+         FROM dbo.AspNetUsers u
+         JOIN dbo.AspNetUserRoles ur ON ur.UserId = u.Id
+         JOIN dbo.AspNetRoles r ON r.Id = ur.RoleId
+        WHERE r.Name = 'CSKH' AND ISNULL(u.TrangThai, '') <> 'dong-ma' AND u.UserName = :cskh`,
+      { replacements: { cskh }, type: QueryTypes.SELECT },
+    );
+    if (!Number(laCskh?.n)) {
+      throw new BadRequestException(`"${cskh}" không phải CSKH đang làm. Chọn CSKH trong danh sách.`);
+    }
+
     // Check if email exists
     const existingEmail = await this.userModel.findOne({
       where: { Email: registerDto.email },
@@ -195,7 +215,7 @@ export class AuthService {
       KhachBuon: registerDto.khachBuon || false,
       LinkTaiKhoanMang: registerDto.linkTaiKhoanMang,
       VungMien: registerDto.vungMien,
-      CSKHPhuTrach: registerDto.cskhPhuTrach || null,
+      CSKHPhuTrach: cskh,
       roles: ['user'],
     });
 

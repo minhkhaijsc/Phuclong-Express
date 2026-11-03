@@ -73,8 +73,8 @@ export default function CreateUserPage() {
   /**
    * Danh sách CSKH cho ô "CSKH phụ trách".
    *
-   * Hỏng thì im lặng để ô thành danh sách rỗng — tạo mã khách là việc gấp, không
-   * được chặn chỉ vì một ô phụ không tải được.
+   * Từ 03/11/2026 ô này BẮT BUỘC, nên tải hỏng thì phải báo ra — danh sách
+   * rỗng mà bắt chọn là kẹt không lối ra.
    */
   const [dsCskh, setDsCskh] = useState<{ username: string; hoTen: string }[]>([]);
   const toiLaAi = useAuthStore((st) => st.user?.username) ?? '';
@@ -89,7 +89,7 @@ export default function CreateUserPage() {
           setFormData((cu) => (cu.cskhPhuTrach ? cu : { ...cu, cskhPhuTrach: toiLaAi }));
         }
       })
-      .catch(() => undefined);
+      .catch(() => setError('Không tải được danh sách CSKH — tải lại trang rồi thử lại.'));
   }, [toiLaAi]);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -110,6 +110,8 @@ export default function CreateUserPage() {
     if (!formData.username.trim()) errors.username = 'Bắt buộc nhập';
     if (!formData.password) errors.password = 'Bắt buộc nhập';
     if (!formData.hoTen.trim()) errors.hoTen = 'Bắt buộc nhập';
+    // Bắt buộc từ 03/11/2026 — máy chủ cũng chặn.
+    if (!formData.cskhPhuTrach) errors.cskhPhuTrach = 'Bắt buộc chọn CSKH phụ trách';
     if (!formData.confirmPassword) errors.confirmPassword = 'Bắt buộc nhập';
     else if (formData.password !== formData.confirmPassword) errors.confirmPassword = 'Mật khẩu không khớp';
     return errors;
@@ -140,7 +142,7 @@ export default function CreateUserPage() {
         khachBuon: formData.khachBuon,
         linkTaiKhoanMang: formData.linkTaiKhoanMang,
         vungMien: formData.vungMien,
-        cskhPhuTrach: formData.cskhPhuTrach || undefined,
+        cskhPhuTrach: formData.cskhPhuTrach,
       });
       setSuccess(true);
       setTimeout(() => { window.location.href = '/admin/users'; }, 1500);
@@ -372,20 +374,23 @@ export default function CreateUserPage() {
                     </select>
                   </div>
                   <div>
-                    <FieldLabel htmlFor="cskhPhuTrach">CSKH phụ trách</FieldLabel>
+                    <FieldLabel htmlFor="cskhPhuTrach" required>CSKH phụ trách</FieldLabel>
                     <select
                       id="cskhPhuTrach"
                       value={formData.cskhPhuTrach}
                       onChange={e => handleChange('cskhPhuTrach', e.target.value)}
-                      className={`${INPUT_BASE} cursor-pointer`}
+                      className={`${fieldErrors.cskhPhuTrach ? INPUT_ERROR : INPUT_BASE} cursor-pointer`}
                     >
-                      <option value="">-- Chưa gán --</option>
+                      <option value="">-- Chọn CSKH --</option>
                       {dsCskh.map(c => (
                         <option key={c.username} value={c.username}>
                           {c.hoTen} ({c.username})
                         </option>
                       ))}
                     </select>
+                    {fieldErrors.cskhPhuTrach && (
+                      <p className="mt-1 text-xs text-red-500">{fieldErrors.cskhPhuTrach}</p>
+                    )}
                   </div>
                 </div>
               </div>

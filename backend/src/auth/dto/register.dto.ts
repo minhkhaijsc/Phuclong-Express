@@ -60,8 +60,10 @@ export class RegisterDto {
 
   /**
    * Tên ĐĂNG NHẬP của CSKH phụ trách mã khách này (vd `CSKHMAILINH`).
-   * Yêu cầu bên khách 15/10/2026. Để trống được: mã tạo vội lúc chưa biết giao
-   * cho ai thì vẫn tạo được, màn danh sách có bộ lọc "chưa gán" để nhặt lại.
+   * Yêu cầu bên khách 15/10/2026. BẮT BUỘC từ 03/11/2026 ("bắt buộc CSKH gán
+   * tên của CSKH vào user thì mới tạo được tài khoản") — trước đó để trống được
+   * nên gần như không mã nào có CSKH, báo cáo theo CSKH trống trơn. Kiểm ở
+   * `AuthService.register` (phải là CSKH đang làm), không chỉ ở web.
    */
   @IsString()
   @IsOptional()
