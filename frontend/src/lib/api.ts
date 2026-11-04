@@ -2521,10 +2521,11 @@ export const getSanLuongKhach = async (
   toDate?: string,
   quocGiaId?: number,
   khach?: string,
-  cskh?: string,
+  cskh?: string[],
 ): Promise<BangSanLuongKhach> => {
   const p = new URLSearchParams(thamSoVanHanh(fromDate, toDate, quocGiaId, khach));
-  if (cskh) p.set('cskh', cskh);
+  // Nhiều CSKH một lúc: "a,b" (mã đăng nhập không có dấu phẩy).
+  if (cskh?.length) p.set('cskh', cskh.join(','));
   const res = await apiClient.get(`/dashboard/san-luong-khach?${p.toString()}`);
   return res.data;
 };

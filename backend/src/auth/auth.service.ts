@@ -16,6 +16,7 @@ import { RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { SystemLogsService } from '../system-logs/system-logs.service';
 import { QuyenService } from './quyen/quyen.service';
+import { ghiLichSuCskhSau } from '../users/lich-su-cskh';
 
 /**
  * Auth Service
@@ -218,6 +219,7 @@ export class AuthService {
       CSKHPhuTrach: cskh,
       roles: ['user'],
     });
+    await ghiLichSuCskhSau(this.sequelize, String(registerDto.username), [registerDto.username]);
 
     await this.systemLogsService.create({
       nguoiTao: user.get('UserName') as string,

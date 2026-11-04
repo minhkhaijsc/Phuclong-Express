@@ -6,6 +6,7 @@ import { SystemLogsService } from '../system-logs/system-logs.service';
 import Excel from 'exceljs';
 import bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { ghiLichSuCskhSau } from './lich-su-cskh';
 
 /**
  * Users Service
@@ -207,6 +208,7 @@ export class UsersService {
     }
 
     if (canGhi.length) {
+      await ghiLichSuCskhSau(this.sequelize, nguoiSua, canGhi.map((g) => g.khach));
       await this.systemLogsService
         .create({
           nguoiTao: nguoiSua,
@@ -269,6 +271,7 @@ export class UsersService {
    */
   async create(userData: Partial<User>, nguoiTao = 'system'): Promise<User> {
     const user = await this.userModel.create(userData as any);
+    await ghiLichSuCskhSau(this.sequelize, nguoiTao, [user.UserName]);
     await this.systemLogsService.create({
       nguoiTao,
       nguon: 'CreateNewUser',
@@ -291,6 +294,9 @@ export class UsersService {
         ? { ...userData, TuoiNo: chuanHoaTuoiNo((userData as { TuoiNo?: unknown }).TuoiNo) }
         : userData;
     const updated = await user.update(duLieu);
+    if ('CSKHPhuTrach' in duLieu) {
+      await ghiLichSuCskhSau(this.sequelize, nguoiTao, [user.UserName]);
+    }
     await this.systemLogsService.create({
       nguoiTao,
       nguon: 'UpdateUser',
@@ -507,6 +513,7 @@ export class UsersService {
       if (!dong) return { successCount: 0, errorCount: 0 };
       const cotSua = this.docCotSua(editableColumns);
       await this.kiemTraImport(dong, mode, cotSua);
+      const daGhi: string[] = [];
 
       for (const d of dong) {
         if (d.error) {
@@ -582,11 +589,13 @@ export class UsersService {
               .catch(() => undefined);
           }
           successCount++;
+          daGhi.push(d.username);
         } catch (err: any) {
           console.error(`Error importing user ${d.username}:`, err?.message ?? err);
           errorCount++;
         }
       }
+      await ghiLichSuCskhSau(this.sequelize, nguoiLam, daGhi);
       return { successCount, errorCount };
     } catch (error) {
       console.error('Error executing import:', error.message);

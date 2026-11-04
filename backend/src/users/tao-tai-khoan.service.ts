@@ -16,6 +16,7 @@ import {
 import { QuyenCuaToi } from '../auth/quyen/quyen.service';
 import { SystemLogsService } from '../system-logs/system-logs.service';
 import { User, UserModel } from './entities/user.entity';
+import { ghiLichSuCskhSau } from './lich-su-cskh';
 
 export type LoaiTaiKhoan = 'khach' | 'nhanVien';
 
@@ -162,6 +163,8 @@ export class TaoTaiKhoanService {
       }
       return u;
     });
+
+    await ghiLichSuCskhSau(this.sequelize, tenNguoiLam, [user.UserName]);
 
     await this.systemLogsService
       .create({

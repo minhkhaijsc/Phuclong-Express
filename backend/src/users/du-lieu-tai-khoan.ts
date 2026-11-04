@@ -50,6 +50,7 @@ export const COT_THAM_CHIEU: readonly CotThamChieu[] = [
   { bang: 'tbChotKy', cot: 'UserName', nhom: 'khach', nhan: 'Dòng chốt kỳ công nợ', canhBaoGop: true },
   { bang: 'DotHang', cot: 'UserName', nhom: 'khach', nhan: 'Đợt hàng' },
   { bang: 'Notifications', cot: 'UserName', nhom: 'khach', nhan: 'Thông báo' },
+  { bang: 'tbLichSuCskh', cot: 'UserName', nhom: 'khach', nhan: 'Lịch sử gán CSKH' },
   { bang: 'DiaChiNhanHang', cot: 'UserName', nhom: 'khach', nhan: 'Địa chỉ nhận hàng' },
   { bang: 'HanMucKhachHang', cot: 'UserName', nhom: 'khach', nhan: 'Hạn mức công nợ' },
   { bang: 'THACMAC', cot: 'username', nhom: 'khach', nhan: 'Thắc mắc' },

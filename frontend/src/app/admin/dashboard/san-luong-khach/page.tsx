@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import { useQuyen } from '@/hooks/use-quyen';
 import { DateRangeFilter } from '../components/date-range-filter';
+import { ChonNhieuCskh } from './chon-nhieu-cskh';
 
 /**
  * BÁO CÁO SẢN LƯỢNG KHÁCH HÀNG — yêu cầu bên khách 15/10/2026.
@@ -59,7 +60,7 @@ export default function TrangSanLuongKhach() {
   const [tuyenId, setTuyenId] = useState(0);
   const [khachGo, setKhachGo] = useState('');
   const [khach, setKhach] = useState('');
-  const [cskh, setCskh] = useState('');
+  const [cskh, setCskh] = useState<string[]>([]);
   const [sap, setSap] = useState<Sap>('tong');
   const [moThieuKg, setMoThieuKg] = useState(false);
 
@@ -77,18 +78,15 @@ export default function TrangSanLuongKhach() {
   });
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['san-luong-khach', applied.fromDate, applied.toDate, tuyenId, khach, cskh],
-    queryFn: () =>
-      getSanLuongKhach(applied.fromDate, applied.toDate, tuyenId, khach || undefined, cskh || undefined),
+    queryKey: ['san-luong-khach', applied.fromDate, applied.toDate, tuyenId, khach, cskh.join(',')],
+    queryFn: () => getSanLuongKhach(applied.fromDate, applied.toDate, tuyenId, khach || undefined, cskh),
     enabled: xemDuoc,
   });
 
-  const tenCskhDangLoc =
-    cskh === CSKH_CHUA_GAN
-      ? 'ChuaGanCSKH'
-      : cskh
-        ? cskh
-        : '';
+  const tenCskhDangLoc = cskh
+    .map((c) => (c === CSKH_CHUA_GAN ? 'ChuaGanCSKH' : c))
+    .slice(0, 3)
+    .join('-') + (cskh.length > 3 ? `-va${cskh.length - 3}CSKHkhac` : '');
 
   /**
    * Sắp xếp ở trình duyệt, không gọi lại máy chủ: cả bảng đã nằm sẵn trong tay
@@ -165,6 +163,8 @@ export default function TrangSanLuongKhach() {
           <h1 className="text-lg font-bold text-gray-900">Báo cáo sản lượng khách hàng</h1>
           <p className="text-xs text-gray-500">
             Mỗi dòng là một khách trên một tuyến. Doanh số tách riêng cước cân và phí mua hộ.
+            CSKH là người phụ trách khách <b>vào ngày phát sinh</b>: khách chuyển CSKH giữa kỳ thì
+            phần trước ngày chuyển vẫn tính cho CSKH cũ.
           </p>
         </div>
         <button
@@ -202,19 +202,7 @@ export default function TrangSanLuongKhach() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">CSKH</label>
-            <select
-              value={cskh}
-              onChange={(e) => setCskh(e.target.value)}
-              className="max-w-[14rem] rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#14264b] focus:outline-none"
-            >
-              <option value="">— Tất cả CSKH —</option>
-              <option value={CSKH_CHUA_GAN}>Chưa gán CSKH</option>
-              {dsCskh.map((c) => (
-                <option key={c.username} value={c.username}>
-                  {c.hoTen && c.hoTen !== c.username ? `${c.hoTen} (${c.username})` : c.username}
-                </option>
-              ))}
-            </select>
+            <ChonNhieuCskh ds={dsCskh} chon={cskh} onChange={setCskh} />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Mã khách hàng</label>
@@ -343,7 +331,12 @@ export default function TrangSanLuongKhach() {
             <tr>
               <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Mã khách hàng</th>
               <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Tên khách hàng</th>
-              <th className="px-4 py-2.5 text-left font-semibold text-gray-500">CSKH</th>
+              <th
+                className="px-4 py-2.5 text-left font-semibold text-gray-500"
+                title="Người phụ trách khách vào ngày phát sinh dòng tiền"
+              >
+                CSKH
+              </th>
               <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Tuyến</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Sản lượng (kg)</th>
               <th className="px-4 py-2.5 text-right font-semibold text-gray-500">Cước cân (VNĐ)</th>
@@ -375,7 +368,7 @@ export default function TrangSanLuongKhach() {
               </tr>
             )}
             {dong.map((d) => (
-              <tr key={`${d.maKh}-${d.tuyenId ?? 'x'}`} className="hover:bg-gray-50">
+              <tr key={`${d.maKh}-${d.tuyenId ?? 'x'}-${d.cskh ?? ''}`} className="hover:bg-gray-50">
                 <td className="px-4 py-2.5 font-medium text-gray-900">{d.maKh}</td>
                 <td className="px-4 py-2.5 text-gray-600">{d.tenKhach || '—'}</td>
                 <td className="px-4 py-2.5 text-gray-600" title={d.cskh || ''}>

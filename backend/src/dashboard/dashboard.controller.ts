@@ -74,12 +74,13 @@ export class DashboardController {
   /** Bảng khách × tuyến. Lọc được theo khoảng ngày, tuyến, và một khách. */
   @Get('san-luong-khach')
   async sanLuongKhach(@Query() q: any) {
+    await this.sanLuongKhachService.dongBoLichSu();
     return this.sanLuongKhachService.bang(
       q.fromDate,
       q.toDate,
       Number(q.quocGiaId) || undefined,
       q.khach,
-      q.cskh,
+      q.cskh, // "a,b" hoặc lặp tham số — lọc nhiều CSKH một lúc
     );
   }
 

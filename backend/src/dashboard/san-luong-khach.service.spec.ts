@@ -1,7 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   CSKH_CHUA_GAN,
+  CSKH_LUC_PHAT_SINH,
   docDongThieuKg,
+  docDsCskh,
   MA_DON_CUOI_NOI_DUNG,
   NHAN_CHUA_RO_TUYEN,
   SanLuongKhachService,
@@ -205,25 +207,77 @@ describe('SanLuongKhachService', () => {
     });
   });
 
-  describe('lọc theo CSKH — yêu cầu 03/11/2026', () => {
-    it('bind mã CSKH vào cả bảng chính lẫn danh sách thiếu kg', async () => {
+  describe('lọc theo CSKH — yêu cầu 03/11 + 04/11/2026', () => {
+    it('lọc nhiều CSKH một lúc, bind tham số, vào cả bảng chính lẫn danh sách thiếu kg', async () => {
       mockSequelize.query.mockResolvedValue([]);
-      await service.bang(undefined, undefined, undefined, undefined, ' CSKHMAILINH ');
+      await service.bang(undefined, undefined, undefined, undefined, ' CSKHMAILINH , CSKHMEN,CSKHMEN');
 
       expect(mockSequelize.query).toHaveBeenCalledTimes(2);
       for (const [sql, opts] of mockSequelize.query.mock.calls) {
-        expect(sql).toContain('u.CSKHPhuTrach');
-        expect(sql).toContain(':cskh');
+        expect(sql).toContain('IN (:dsCskh)');
         expect(sql).not.toContain('CSKHMAILINH');
-        expect(opts.replacements.cskh).toBe('CSKHMAILINH');
-        expect(opts.replacements.chuaGan).toBe(CSKH_CHUA_GAN);
+        expect(opts.replacements.dsCskh).toEqual(['CSKHMAILINH', 'CSKHMEN']);
+        expect(opts.replacements.locCskh).toBe(1);
+        expect(opts.replacements.coChuaGan).toBe(0);
       }
+    });
+
+    it('nhận cả mảng, và "chưa gán" đi cùng CSKH khác', async () => {
+      mockSequelize.query.mockResolvedValue([]);
+      await service.bang(undefined, undefined, undefined, undefined, ['CSKHMEN', CSKH_CHUA_GAN]);
+      const r = mockSequelize.query.mock.calls[0][1].replacements;
+      expect(r.coChuaGan).toBe(1);
+      expect(r.dsCskh).toEqual(['CSKHMEN']);
+    });
+
+    it('chỉ chọn "chưa gán" thì IN không rỗng (rỗng là lỗi cú pháp SQL)', async () => {
+      mockSequelize.query.mockResolvedValue([]);
+      await service.bang(undefined, undefined, undefined, undefined, CSKH_CHUA_GAN);
+      const r = mockSequelize.query.mock.calls[0][1].replacements;
+      expect(r.dsCskh).toEqual(['']);
+      expect(r.coChuaGan).toBe(1);
     });
 
     it('không chọn CSKH thì không lọc', async () => {
       mockSequelize.query.mockResolvedValue([]);
       await service.bang();
-      expect(mockSequelize.query.mock.calls[0][1].replacements.cskh).toBeNull();
+      expect(mockSequelize.query.mock.calls[0][1].replacements.locCskh).toBe(0);
+    });
+  });
+
+  describe('CSKH lúc phát sinh — khách chuyển CSKH giữa kỳ', () => {
+    it('tra CSKH theo NGÀY ghi nợ từ lịch sử, không theo người phụ trách hiện tại', async () => {
+      mockSequelize.query.mockResolvedValue([]);
+      await service.bang();
+      const [sql] = mockSequelize.query.mock.calls[0];
+      expect(sql).toContain(CSKH_LUC_PHAT_SINH);
+      expect(sql).toContain('x.TuNgay <= c.NgayGhiNo');
+      expect(sql).not.toContain('u.CSKHPhuTrach');
+      // Nối hai nhánh phải khớp cả CSKH, NULL hai bên tường minh.
+      expect(sql).toContain('mua.cskh IS NULL AND can.cskh IS NULL');
+      expect(sql).toContain('GROUP BY c.UserName, d.QuocGiaID, ls.CSKH');
+    });
+
+    it('một khách hai CSKH trong kỳ ra hai dòng, mỗi người giữ phần của mình', async () => {
+      mockSequelize.query.mockResolvedValueOnce([
+        dong({ maKh: 'A', cskh: 'CSKHA', cuoc: 100, tong: 100, kg: 1 }),
+        dong({ maKh: 'A', cskh: 'CSKHB', cuoc: 300, tong: 300, kg: 2 }),
+      ]);
+      const kq = await service.bang();
+      expect(kq.dong.map((d) => [d.cskh, d.tong])).toEqual([
+        ['CSKHA', 100],
+        ['CSKHB', 300],
+      ]);
+      expect(kq.tong.soKhach).toBe(1);
+      expect(kq.tong.tong).toBe(400);
+    });
+  });
+
+  describe('docDsCskh', () => {
+    it('cắt, bỏ rỗng, bỏ trùng', () => {
+      expect(docDsCskh(' a, ,b,a ')).toEqual(['a', 'b']);
+      expect(docDsCskh(undefined)).toEqual([]);
+      expect(docDsCskh(['x', ' y '])).toEqual(['x', 'y']);
     });
   });
 

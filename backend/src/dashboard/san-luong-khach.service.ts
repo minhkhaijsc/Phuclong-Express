@@ -12,6 +12,7 @@ import {
   TUYEN_CROSS_APPLY,
   TUYEN_ID,
 } from './san-luong-kg';
+import { BANG_LICH_SU_CSKH, dongBoLichSuCskh } from '../users/lich-su-cskh';
 
 /**
  * BÁO CÁO SẢN LƯỢNG KHÁCH HÀNG — mỗi dòng là một cặp (khách × tuyến).
@@ -50,7 +51,11 @@ export const MA_DON_CUOI_NOI_DUNG = `TRY_CONVERT(int, RIGHT(c.NoiDung, CHARINDEX
 export interface DongSanLuongKhach {
   maKh: string;
   tenKhach: string | null;
-  /** CSKH phụ trách khách (`AspNetUsers.CSKHPhuTrach`, mã đăng nhập) — thêm 03/11/2026. */
+  /**
+   * CSKH phụ trách khách VÀO NGÀY PHÁT SINH dòng tiền (mã đăng nhập), tra từ
+   * `tbLichSuCskh` — từ 04/11/2026. Khách chuyển CSKH giữa kỳ thì ra hai dòng,
+   * mỗi CSKH giữ phần của mình.
+   */
   cskh: string | null;
   /** Họ tên CSKH đó; null nếu mã không còn tài khoản. */
   tenCskh: string | null;
@@ -116,12 +121,29 @@ export const CSKH_CHUA_GAN = '__chua-gan';
 export const NHAN_CHUA_RO_TUYEN = 'Chưa rõ tuyến';
 
 /**
- * Lọc theo CSKH phụ trách của khách (`u` = tài khoản khách). Giá trị
- * `CSKH_CHUA_GAN` lọc ra khách chưa gán ai.
+ * CSKH của dòng công nợ `c` VÀO NGÀY ghi nợ — dòng lịch sử mới nhất có
+ * TuNgay <= NgayGhiNo (cùng ngày thì ID lớn thắng). Không có dòng nào = chưa
+ * gán ai lúc đó. Ra cột `ls.CSKH`.
  */
-const LOC_CSKH = `(:cskh IS NULL
-          OR (:cskh = :chuaGan AND ISNULL(LTRIM(RTRIM(u.CSKHPhuTrach)), '') = '')
-          OR LTRIM(RTRIM(u.CSKHPhuTrach)) = :cskh)`;
+export const CSKH_LUC_PHAT_SINH = `
+  OUTER APPLY (SELECT TOP 1 x.CSKH
+                 FROM dbo.${BANG_LICH_SU_CSKH} x
+                WHERE x.UserName = c.UserName AND x.TuNgay <= c.NgayGhiNo
+                ORDER BY x.TuNgay DESC, x.ID DESC) ls`;
+
+/**
+ * Lọc theo NHIỀU CSKH một lúc (yêu cầu 04/11/2026). `bieuThuc` là cột CSKH
+ * lúc phát sinh; `CSKH_CHUA_GAN` trong danh sách = lấy cả dòng chưa gán ai.
+ */
+const locCskh = (bieuThuc: string) => `(:locCskh = 0
+          OR (:coChuaGan = 1 AND ${bieuThuc} IS NULL)
+          OR ${bieuThuc} IN (:dsCskh))`;
+
+/** "a,b" hoặc ['a','b'] → danh sách mã CSKH đã cắt khoảng trắng, bỏ trùng. */
+export function docDsCskh(v: unknown): string[] {
+  const tho = Array.isArray(v) ? v : String(v ?? '').split(',');
+  return [...new Set(tho.map((x) => String(x ?? '').trim()).filter(Boolean))];
+}
 
 const vnd = (v: number) => Math.round(v).toLocaleString('vi-VN');
 
@@ -188,17 +210,22 @@ export class SanLuongKhachService {
     denNgay?: string,
     quocGiaId?: number,
     khach?: string,
-    cskh?: string,
+    cskh?: string | string[],
   ): Promise<BangSanLuongKhach> {
     const { tu, den } = this.khoang(tuNgay, denNgay);
+    const ds = docDsCskh(cskh);
+    const dsThat = ds.filter((x) => x !== CSKH_CHUA_GAN);
     const p = {
       tu,
       den,
       quocGiaId: quocGiaId && quocGiaId > 0 ? quocGiaId : null,
       khach: khach && khach.trim() ? khach.trim() : null,
-      cskh: cskh && cskh.trim() ? cskh.trim() : null,
-      chuaGan: CSKH_CHUA_GAN,
+      locCskh: ds.length ? 1 : 0,
+      coChuaGan: ds.includes(CSKH_CHUA_GAN) ? 1 : 0,
+      // IN () rỗng là lỗi cú pháp; '' không bao giờ là CSKH (lịch sử lưu NULL).
+      dsCskh: dsThat.length ? dsThat : [''],
     };
+
 
     /*
      * Hai nhánh gộp bằng FULL OUTER JOIN, không phải UNION rồi GROUP lại:
@@ -215,31 +242,36 @@ export class SanLuongKhachService {
       WITH can AS (
         SELECT c.UserName AS maKh,
                ${TUYEN_ID} AS tuyenId,
+               ls.CSKH AS cskh,
                ${TONG_KG} AS kg,
                SUM(ISNULL(c.DR, 0)) AS cuoc,
                ${DEM_KHONG_DOC_DUOC} AS dongThieuKg
-          FROM CONGNO c ${KG_CROSS_APPLY} ${TUYEN_CROSS_APPLY}
+          FROM CONGNO c ${KG_CROSS_APPLY} ${TUYEN_CROSS_APPLY} ${CSKH_LUC_PHAT_SINH}
          WHERE c.DaXoa = 0 AND c.style = ${STYLE_CAN_KG}
            AND c.NgayGhiNo BETWEEN :tu AND :den
            AND (:khach IS NULL OR c.UserName = :khach)
-         GROUP BY c.UserName, ${TUYEN_ID}
+           AND ${locCskh('ls.CSKH')}
+         GROUP BY c.UserName, ${TUYEN_ID}, ls.CSKH
       ),
       mua AS (
         SELECT c.UserName AS maKh,
                d.QuocGiaID AS tuyenId,
+               ls.CSKH AS cskh,
                SUM(ISNULL(c.DR, 0)) AS phiMua
           FROM CONGNO c
          OUTER APPLY (SELECT TOP 1 dh.QuocGiaID
                         FROM DON_HANG dh
                        WHERE dh.id = ${MA_DON_CUOI_NOI_DUNG}) d
+         ${CSKH_LUC_PHAT_SINH}
          WHERE c.DaXoa = 0 AND c.style = ${STYLE_PHI_MUA}
            AND c.NgayGhiNo BETWEEN :tu AND :den
            AND (:khach IS NULL OR c.UserName = :khach)
-         GROUP BY c.UserName, d.QuocGiaID
+           AND ${locCskh('ls.CSKH')}
+         GROUP BY c.UserName, d.QuocGiaID, ls.CSKH
       )
       SELECT COALESCE(can.maKh, mua.maKh) AS maKh,
              u.HoTen AS tenKhach,
-             u.CSKHPhuTrach AS cskh,
+             COALESCE(can.cskh, mua.cskh) AS cskh,
              cs.HoTen AS tenCskh,
              COALESCE(can.tuyenId, mua.tuyenId) AS tuyenId,
              q.TenQuocGia AS tuyen,
@@ -253,11 +285,12 @@ export class SanLuongKhachService {
           ON mua.maKh = can.maKh
          AND (mua.tuyenId = can.tuyenId
               OR (mua.tuyenId IS NULL AND can.tuyenId IS NULL))
+         AND (mua.cskh = can.cskh
+              OR (mua.cskh IS NULL AND can.cskh IS NULL))
         LEFT JOIN tbQuocGia q ON q.QuocGiaID = COALESCE(can.tuyenId, mua.tuyenId)
         LEFT JOIN AspNetUsers u ON u.UserName = COALESCE(can.maKh, mua.maKh)
-        LEFT JOIN AspNetUsers cs ON cs.UserName = u.CSKHPhuTrach
+        LEFT JOIN AspNetUsers cs ON cs.UserName = COALESCE(can.cskh, mua.cskh)
        WHERE (:quocGiaId IS NULL OR COALESCE(can.tuyenId, mua.tuyenId) = :quocGiaId)
-         AND ${LOC_CSKH}
        ORDER BY ISNULL(can.cuoc, 0) + ISNULL(mua.phiMua, 0) DESC`;
 
     /*
@@ -271,7 +304,7 @@ export class SanLuongKhachService {
              c.NoiDung AS noiDung, c.GhiChu AS ghiChu,
              t.tho AS kgTho, c.DR AS tien, ISNULL(c.PhuThu, 0) AS phuThu,
              c.NguoiTao AS nguoiTao
-        FROM CONGNO c ${KG_CROSS_APPLY} ${TUYEN_CROSS_APPLY}
+        FROM CONGNO c ${KG_CROSS_APPLY} ${TUYEN_CROSS_APPLY} ${CSKH_LUC_PHAT_SINH}
         LEFT JOIN tbQuocGia q ON q.QuocGiaID = ${TUYEN_ID}
         LEFT JOIN AspNetUsers u ON u.UserName = c.UserName
        WHERE c.DaXoa = 0 AND c.style = ${STYLE_CAN_KG}
@@ -279,7 +312,7 @@ export class SanLuongKhachService {
          AND c.NgayGhiNo BETWEEN :tu AND :den
          AND (:khach IS NULL OR c.UserName = :khach)
          AND (:quocGiaId IS NULL OR ${TUYEN_ID} = :quocGiaId)
-         AND ${LOC_CSKH}
+         AND ${locCskh('ls.CSKH')}
        ORDER BY c.NgayGhiNo, c.CongNo_ID`;
 
     const [tho, thieuKg] = await Promise.all([
@@ -324,6 +357,16 @@ export class SanLuongKhachService {
   }
 
   /**
+   * Lưới đỡ trước khi đọc báo cáo: đường đổi CSKH nào lỡ không ghi lịch sử thì
+   * bù ngay. Lỗi ở đây không chặn báo cáo — chỉ là lịch sử có thể trễ một nhịp.
+   */
+  async dongBoLichSu(): Promise<void> {
+    await dongBoLichSuCskh(this.sequelize, 'dong-bo-bao-cao').catch((e) =>
+      console.error('[LichSuCskh]', e?.message ?? e),
+    );
+  }
+
+  /**
    * CSKH cho ô lọc: CSKH đang làm, cộng những mã đang được gán cho khách dù đã
    * nghỉ — lọc theo người cũ vẫn phải ra được khách của họ.
    *
@@ -343,6 +386,8 @@ export class SanLuongKhachService {
            SELECT DISTINCT LTRIM(RTRIM(k.CSKHPhuTrach))
              FROM AspNetUsers k
             WHERE ISNULL(LTRIM(RTRIM(k.CSKHPhuTrach)), '') <> ''
+           UNION
+           SELECT DISTINCT h.CSKH FROM dbo.${BANG_LICH_SU_CSKH} h WHERE h.CSKH IS NOT NULL
          ) x
          LEFT JOIN AspNetUsers cs ON cs.UserName = x.username
         GROUP BY x.username
