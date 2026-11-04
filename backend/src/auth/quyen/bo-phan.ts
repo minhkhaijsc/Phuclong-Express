@@ -463,6 +463,16 @@ export const BANG_QUYEN: Record<BoPhan, MoTaBoPhan> = {
   },
 };
 
+/**
+ * Trưởng phòng của những bộ phận này được TẠO TÀI KHOẢN NHÂN VIÊN — nhưng chỉ
+ * nhân viên thường trong chính bộ phận của mình (không cấp, không bộ phận
+ * khác, không Admin). Chặn ở `TaoTaiKhoanService.kiemTra`.
+ *
+ * Yêu cầu bên khách 04/11/2026: "mở quyền tạo tk nhân viên cho TP CSKH".
+ * Lúc mở: CSKHHAIMINH, CSKHTHUPHUONG, TL_HANH.
+ */
+export const BO_PHAN_TP_TAO_NHAN_VIEN: readonly BoPhan[] = [BO_PHAN.CSKH];
+
 /** Cấp nào mở được Dashboard. Admin mở sẵn qua BANG_QUYEN. */
 export const CAP_XEM_DASHBOARD: readonly Cap[] = [CAP.TruongPhong, CAP.GiamDoc];
 

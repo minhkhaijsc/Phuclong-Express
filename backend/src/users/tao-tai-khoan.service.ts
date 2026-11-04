@@ -1,13 +1,17 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
 } from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
+import bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import {
   BANG_QUYEN,
   BO_PHAN,
+  BO_PHAN_TP_TAO_NHAN_VIEN,
   MOI_VAI_TRO,
   NHAN_CAP,
   laBoPhan,
@@ -27,11 +31,17 @@ export interface YeuCauTaoTaiKhoan {
   boPhan?: string[];
   /** Trưởng phòng / Giám đốc, chỉ dùng khi loai = 'nhanVien'. */
   cap?: string[];
+  userName?: string;
+  /** Mật khẩu trơn — băm ở máy chủ, không bao giờ nhận PasswordHash từ ngoài. */
+  matKhau?: string;
+  hoTen?: string;
+  email?: string;
+  soDienThoai?: string;
   [khac: string]: unknown;
 }
 
-/** Những trường thuộc phân quyền, không phải cột của AspNetUsers. */
-const TRUONG_PHAN_QUYEN = ['loai', 'boPhan', 'cap'] as const;
+/** Tên đăng nhập: cùng luật với màn đổi mã khách. */
+const MAU_TEN_DANG_NHAP = /^[A-Za-z0-9._-]{2,50}$/;
 
 @Injectable()
 export class TaoTaiKhoanService {
@@ -70,7 +80,7 @@ export class TaoTaiKhoanService {
     if (!nguoiLam.quyen.includes(can as never)) {
       throw new ForbiddenException(
         loai === 'nhanVien'
-          ? 'Chỉ Admin được tạo tài khoản nhân viên.'
+          ? 'Chỉ Admin hoặc Trưởng phòng CSKH được tạo tài khoản nhân viên.'
           : 'Bạn không có quyền tạo tài khoản khách hàng.',
       );
     }
@@ -110,10 +120,26 @@ export class TaoTaiKhoanService {
       );
     }
 
-    // Chỉ Admin tạo được Admin. CSKH không tới được đây vì thiếu `taoNhanVien`,
-    // nhưng để lại lớp này cho chắc nếu sau có bộ phận khác được mở quyền tạo.
+    // Chỉ Admin tạo được Admin.
     if (boPhan.includes(BO_PHAN.Admin) && !nguoiLam.quyen.includes('quanLyRole' as never)) {
       throw new ForbiddenException('Chỉ Admin được cấp bộ phận Admin cho người khác.');
+    }
+
+    // Không phải Admin (tức Trưởng phòng CSKH, mở 04/11/2026): chỉ tạo nhân
+    // viên THƯỜNG trong chính bộ phận của mình. Cho cấp Trưởng phòng là tự
+    // nhân bản quyền tạo nhân viên; cho bộ phận khác là cấp quyền mình không có.
+    if (!nguoiLam.quyen.includes('quanLyRole' as never)) {
+      const duoc = nguoiLam.boPhan.filter((b) => BO_PHAN_TP_TAO_NHAN_VIEN.includes(b));
+      const ngoai = boPhan.filter((b) => !duoc.includes(b as never));
+      if (ngoai.length > 0) {
+        throw new ForbiddenException(
+          `Bạn chỉ tạo được nhân viên bộ phận ${duoc.join(', ') || '(không có)'}; ` +
+            `không cấp được ${ngoai.join(', ')}.`,
+        );
+      }
+      if (cap.length > 0) {
+        throw new ForbiddenException('Chỉ Admin được cấp Trưởng phòng / Giám đốc.');
+      }
     }
 
     return { loai, vaiTro: [...new Set([...boPhan, ...cap])] };
@@ -132,9 +158,7 @@ export class TaoTaiKhoanService {
     tenNguoiLam: string,
   ): Promise<User> {
     const { loai, vaiTro } = this.kiemTra(yc, nguoiLam);
-
-    const cot: Record<string, unknown> = { ...yc };
-    for (const t of TRUONG_PHAN_QUYEN) delete cot[t];
+    const cot = await this.dungCot(yc);
 
     const user = await this.sequelize.transaction(async (giaoDich) => {
       const u = await this.userModel.create(cot as never, { transaction: giaoDich });
@@ -180,6 +204,54 @@ export class TaoTaiKhoanService {
       .catch((err) => console.error('[SystemLog]', err?.message ?? err));
 
     return user;
+  }
+
+  /**
+   * Dựng các cột AspNetUsers từ yêu cầu — CHỈ những trường được kê ra.
+   *
+   * Bản trước rải nguyên body xuống `userModel.create`, tức người gọi tự đặt
+   * được PasswordHash, TrangThai, CSKHPhuTrach… Đường này chưa có màn nào gọi
+   * cho tới khi mở cho Trưởng phòng CSKH (04/11/2026), nên siết lại trước khi
+   * mở: mật khẩu băm ở đây, còn lại chỉ nhận tên, họ tên, email, SĐT.
+   */
+  async dungCot(yc: YeuCauTaoTaiKhoan): Promise<Record<string, unknown>> {
+    const ten = String(yc.userName ?? '').trim();
+    if (!MAU_TEN_DANG_NHAP.test(ten)) {
+      throw new BadRequestException(
+        'Tên đăng nhập 2–50 ký tự, chỉ gồm chữ không dấu, số và . _ - (không dấu cách).',
+      );
+    }
+    const matKhau = String(yc.matKhau ?? '');
+    if (matKhau.length < 6) throw new BadRequestException('Mật khẩu phải từ 6 ký tự.');
+    const hoTen = String(yc.hoTen ?? '').trim();
+    if (!hoTen) throw new BadRequestException('Chưa nhập họ tên.');
+    const email = String(yc.email ?? '').trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException(`Email "${email}" không hợp lệ.`);
+    }
+
+    const [trung] = (await this.sequelize.query(
+      `SELECT TOP 1 UserName, Email FROM dbo.AspNetUsers
+        WHERE UserName = :ten OR (:email <> '' AND Email = :email)`,
+      { replacements: { ten, email }, type: 'SELECT' as const },
+    )) as unknown as { UserName: string; Email: string | null }[];
+    if (trung) {
+      throw new ConflictException(
+        String(trung.UserName).toLowerCase() === ten.toLowerCase()
+          ? `Tên đăng nhập "${ten}" đã có người dùng. Hãy chọn tên khác.`
+          : `Email "${email}" đã dùng cho tài khoản "${trung.UserName}".`,
+      );
+    }
+
+    return {
+      Id: crypto.randomUUID(),
+      UserName: ten,
+      // Như màn tạo khách: không nhập email thì đặt email giữ chỗ theo tên.
+      Email: email || `${ten}@example.com`,
+      PasswordHash: await bcrypt.hash(matKhau, 10),
+      HoTen: hoTen,
+      PhoneNumber: String(yc.soDienThoai ?? '').trim() || null,
+    };
   }
 
   /**

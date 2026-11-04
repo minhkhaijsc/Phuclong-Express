@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   BANG_QUYEN,
   BO_PHAN,
+  BO_PHAN_TP_TAO_NHAN_VIEN,
   BoPhan,
   CAP,
   CAP_XEM_DASHBOARD,
@@ -119,6 +120,15 @@ export class QuyenService {
     ) {
       quyen.add(QUYEN_LE.xemLienHeMoiKhach);
       quyen.add(QUYEN_LE.phanKhachCskh);
+    }
+
+    // Trưởng phòng CSKH tạo được nhân viên CSKH (04/11/2026). Phạm vi — chỉ
+    // bộ phận của mình, không cấp — chặn ở TaoTaiKhoanService.kiemTra.
+    if (
+      cap.includes(CAP.TruongPhong) &&
+      boPhan.some((b) => BO_PHAN_TP_TAO_NHAN_VIEN.includes(b))
+    ) {
+      quyen.add(QUYEN_LE.taoNhanVien);
     }
 
     // Xem được danh mục là xem được tỷ giá — tỷ giá nằm trong danh mục.

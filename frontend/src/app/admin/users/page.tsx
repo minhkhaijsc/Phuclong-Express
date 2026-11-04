@@ -236,6 +236,15 @@ export default function ListUserPage() {
               Tạo mới
             </Link>
           )}
+          {co('taoNhanVien') && (
+            <Link
+              href="/admin/users/tao-nhan-vien"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#14264b] bg-white px-3 py-2 text-sm font-semibold text-[#14264b] shadow-sm transition-colors hover:bg-slate-50 cursor-pointer"
+            >
+              <FiPlus className="h-4 w-4" />
+              Tạo nhân viên
+            </Link>
+          )}
         </div>
       </div>
 
