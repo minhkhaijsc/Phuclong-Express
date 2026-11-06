@@ -18,9 +18,22 @@ import {
   FiRefreshCw,
   FiTag,
   FiCreditCard,
+  FiBriefcase,
 } from 'react-icons/fi';
 import { getDanhSachCskh, register } from '@/lib/api';
+import apiClient from '@/lib/api-client';
 import { useAuthStore } from '@/hooks/use-auth';
+import { useQuyen } from '@/hooks/use-quyen';
+import { ChonBoPhan, boPhanDuocTao } from './chon-bo-phan';
+
+/**
+ * Loại tài khoản (06/11/2026, bên khách: "tk nhân viên thì k bắt buộc gán
+ * CSKH, thêm giúp e là tk nhân viên/khách hàng để phân biệt"):
+ *   • Khách hàng — `POST /auth/register`, bắt buộc CSKH phụ trách.
+ *   • Nhân viên — `POST /users` loai 'nhanVien': không CSKH, chọn bộ phận/cấp.
+ *     Chỉ Admin hoặc Trưởng phòng CSKH (`taoNhanVien`).
+ */
+type LoaiTaiKhoan = 'khach' | 'nhanVien';
 
 const VIETNAM_CITIES = [
   '', 'An Giang', 'Bà Rịa-Vũng Tàu', 'Bạc Liêu', 'Bắc Kạn', 'Bắc Giang', 'Bắc Ninh',
@@ -53,6 +66,23 @@ function FieldLabel({ htmlFor, children, required }: { htmlFor: string; children
 }
 
 export default function CreateUserPage() {
+  const { co, quyen } = useQuyen();
+  const duocTaoNhanVien = co('taoNhanVien');
+  const laAdmin = co('quanLyRole');
+  const dsBoPhan = boPhanDuocTao(laAdmin, quyen?.boPhan);
+
+  const [loai, setLoai] = useState<LoaiTaiKhoan>('khach');
+  const [boPhan, setBoPhan] = useState<string[]>([]);
+  const [cap, setCap] = useState<string[]>([]);
+  // Trưởng phòng CSKH chỉ có một lựa chọn — chọn sẵn.
+  const boPhanChon = !laAdmin && dsBoPhan.length === 1 ? [dsBoPhan[0].ma] : boPhan;
+  const laNhanVien = loai === 'nhanVien';
+
+  // Link "Tạo nhân viên" ở danh sách User mở thẳng loại Nhân viên.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('loai') === 'nhanVien') setLoai('nhanVien');
+  }, []);
+
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -110,8 +140,14 @@ export default function CreateUserPage() {
     if (!formData.username.trim()) errors.username = 'Bắt buộc nhập';
     if (!formData.password) errors.password = 'Bắt buộc nhập';
     if (!formData.hoTen.trim()) errors.hoTen = 'Bắt buộc nhập';
-    // Bắt buộc từ 03/11/2026 — máy chủ cũng chặn.
-    if (!formData.cskhPhuTrach) errors.cskhPhuTrach = 'Bắt buộc chọn CSKH phụ trách';
+    // Khách: bắt buộc CSKH từ 03/11/2026 — máy chủ cũng chặn. Nhân viên: không
+    // có CSKH, thay bằng bộ phận.
+    if (!laNhanVien && !formData.cskhPhuTrach) errors.cskhPhuTrach = 'Bắt buộc chọn CSKH phụ trách';
+    if (laNhanVien) {
+      if (/\s/.test(formData.username.trim())) errors.username = 'Không có dấu cách';
+      if (formData.password && formData.password.length < 6) errors.password = 'Mật khẩu phải từ 6 ký tự';
+      if (!boPhanChon.length) errors.boPhan = 'Chọn ít nhất một bộ phận';
+    }
     if (!formData.confirmPassword) errors.confirmPassword = 'Bắt buộc nhập';
     else if (formData.password !== formData.confirmPassword) errors.confirmPassword = 'Mật khẩu không khớp';
     return errors;
@@ -130,6 +166,21 @@ export default function CreateUserPage() {
 
     setLoading(true);
     try {
+      if (laNhanVien) {
+        await apiClient.post('/users', {
+          loai: 'nhanVien',
+          boPhan: boPhanChon,
+          cap: laAdmin ? cap : [],
+          userName: formData.username.trim(),
+          matKhau: formData.password,
+          hoTen: formData.hoTen.trim(),
+          email: formData.email.trim(),
+          soDienThoai: formData.phoneNumber.trim(),
+        });
+        setSuccess(true);
+        setTimeout(() => { window.location.href = '/admin/users'; }, 1500);
+        return;
+      }
       await register({
         username: formData.username,
         password: formData.password,
@@ -147,7 +198,8 @@ export default function CreateUserPage() {
       setSuccess(true);
       setTimeout(() => { window.location.href = '/admin/users'; }, 1500);
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'Tạo tài khoản thất bại');
+      const m = err?.response?.data?.message;
+      setError((Array.isArray(m) ? m.join('; ') : m) || err?.message || 'Tạo tài khoản thất bại');
     } finally {
       setLoading(false);
     }
@@ -190,6 +242,43 @@ export default function CreateUserPage() {
           {success ? 'Tạo tài khoản thành công! Đang chuyển hướng...' : error}
         </div>
       )}
+
+      {/* Loại tài khoản */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-2 text-xs font-medium text-slate-500">Loại tài khoản</div>
+        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+          {([
+            ['khach', 'Khách hàng', FiUser],
+            ['nhanVien', 'Nhân viên', FiBriefcase],
+          ] as const).map(([ma, nhan, Icon]) => {
+            const khoa = ma === 'nhanVien' && !duocTaoNhanVien;
+            return (
+              <button
+                key={ma}
+                type="button"
+                disabled={khoa}
+                title={khoa ? 'Chỉ Admin hoặc Trưởng phòng CSKH được tạo tài khoản nhân viên' : undefined}
+                onClick={() => {
+                  setLoai(ma);
+                  setFieldErrors({});
+                  setError('');
+                }}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                  loai === ma ? 'bg-[#14264b] text-white shadow-sm' : 'text-slate-600 hover:bg-white'
+                } disabled:cursor-not-allowed disabled:opacity-40`}
+              >
+                <Icon className="h-4 w-4" />
+                {nhan}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          {laNhanVien
+            ? 'Tài khoản người trong công ty: không gán CSKH, chọn bộ phận để cấp quyền.'
+            : 'Tài khoản khách hàng: bắt buộc chọn CSKH phụ trách.'}
+        </p>
+      </div>
 
       <form onSubmit={handleSubmit} noValidate>
         <div className="grid gap-6 lg:grid-cols-5">
@@ -332,6 +421,20 @@ export default function CreateUserPage() {
                   </div>
                 </div>
 
+                {laNhanVien ? (
+                  <ChonBoPhan
+                    laAdmin={laAdmin}
+                    ds={dsBoPhan}
+                    boPhan={boPhanChon}
+                    cap={cap}
+                    onBoPhan={(v) => {
+                      setBoPhan(v);
+                      setFieldErrors((c) => { const n = { ...c }; delete n.boPhan; return n; });
+                    }}
+                    onCap={setCap}
+                    loi={fieldErrors.boPhan}
+                  />
+                ) : (<>
                 {/* Address */}
                 <div>
                   <FieldLabel htmlFor="diaChi">Địa chỉ</FieldLabel>
@@ -393,13 +496,15 @@ export default function CreateUserPage() {
                     )}
                   </div>
                 </div>
+                </>)}
               </div>
             </div>
           </div>
 
           {/* Right column (2/5) */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Additional info */}
+            {/* Additional info — chỉ khách hàng */}
+            {!laNhanVien && (
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-2.5 border-b border-slate-100 px-6 py-4">
                 <FiTag className="h-4 w-4 text-slate-400" />
@@ -478,6 +583,8 @@ export default function CreateUserPage() {
               </div>
             </div>
 
+            )}
+
             {/* Action buttons */}
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-3">
               <button
@@ -498,7 +605,7 @@ export default function CreateUserPage() {
                 ) : (
                   <>
                     <FiUserPlus className="h-4 w-4" />
-                    Tạo tài khoản
+                    {laNhanVien ? 'Tạo tài khoản nhân viên' : 'Tạo tài khoản khách hàng'}
                   </>
                 )}
               </button>

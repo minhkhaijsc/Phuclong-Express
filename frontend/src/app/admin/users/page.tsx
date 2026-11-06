@@ -238,7 +238,7 @@ export default function ListUserPage() {
           )}
           {co('taoNhanVien') && (
             <Link
-              href="/admin/users/tao-nhan-vien"
+              href="/admin/users/new?loai=nhanVien"
               className="inline-flex items-center gap-1.5 rounded-xl border border-[#14264b] bg-white px-3 py-2 text-sm font-semibold text-[#14264b] shadow-sm transition-colors hover:bg-slate-50 cursor-pointer"
             >
               <FiPlus className="h-4 w-4" />
