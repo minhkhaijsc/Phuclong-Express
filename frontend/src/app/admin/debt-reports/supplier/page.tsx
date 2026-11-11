@@ -171,9 +171,37 @@ export default function TrangCongNoNcc() {
       setThongBao({ loai: 'loi', noiDung: e?.response?.data?.message || 'Không ghi được thanh toán' }),
   });
 
-  const xuatExcel = () => {
-    const rows = data?.chiTiet?.data ?? [];
-    if (!rows.length) return;
+  /**
+   * Xuất TOÀN BỘ đơn trong khoảng đã lọc, không chỉ trang đang xem.
+   *
+   * Trước đây lấy `data.chiTiet.data` — chính là 100 đơn của trang hiện tại, nên
+   * lọc cả tháng (vài trăm đơn) mà file chỉ có 100 dòng (12/11/2026: "xuất excel
+   * chưa xuất được full 1 tháng"). Giờ hỏi lại máy chủ từng lô 5.000 (mức trần
+   * máy chủ cho phép) cho đến khi đủ `total`.
+   */
+  const [dangXuat, setDangXuat] = useState(false);
+  const xuatExcel = async () => {
+    if (!data?.chiTiet?.total) return;
+    setDangXuat(true);
+    try {
+      const LO = 5000;
+      const rows: DongCongNoNcc[] = [];
+      for (let trang = 1; ; trang++) {
+        const kq = await layCongNoNcc({ ...loc, page: trang, limit: LO });
+        const lo = kq?.chiTiet?.data ?? [];
+        rows.push(...lo);
+        if (lo.length < LO || rows.length >= (kq?.chiTiet?.total ?? 0)) break;
+      }
+      if (!rows.length) return;
+      xuatFileExcel(rows);
+    } catch (e: any) {
+      setThongBao({ loai: 'loi', noiDung: e?.response?.data?.message || 'Không xuất được Excel, thử lại.' });
+    } finally {
+      setDangXuat(false);
+    }
+  };
+
+  const xuatFileExcel = (rows: DongCongNoNcc[]) => {
     downloadDataAsExcel(
       [
         [
@@ -298,10 +326,10 @@ export default function TrangCongNoNcc() {
         <button
           type="button"
           onClick={xuatExcel}
-          disabled={!data?.chiTiet?.data?.length}
+          disabled={!data?.chiTiet?.data?.length || dangXuat}
           className="rounded-lg bg-[#14264b] px-3 py-2 text-sm font-medium text-white hover:bg-[#1e3a6e] disabled:opacity-50"
         >
-          Xuất Excel
+          {dangXuat ? 'Đang xuất…' : 'Xuất Excel'}
         </button>
       </div>
 
